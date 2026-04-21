@@ -3,21 +3,21 @@
 
 from __future__ import annotations
 
-import re
 import shutil
-import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from harness.git import changed_py_files, staged_py_files
-from harness.paths import SRC_DIR, TEST_DIR
 from harness.reports.suppressions import print_suppressions_report
-from harness.runner import GREEN, RED, RESET, run
+from harness.runner import RED, RESET, run
+from harness.stages.post_edit import cmd_post_edit
+from harness.stages.pre_commit import cmd_pre_commit
 from harness.tasks.acceptance import cmd_acceptance
 from harness.tasks.arch import cmd_arch
+from harness.tasks.audit import cmd_audit
+from harness.tasks.complexity import cmd_complexity
 from harness.tasks.coverage import cmd_coverage
+from harness.tasks.crap import cmd_crap
 from harness.tasks.fix import cmd_fix
 from harness.tasks.format import cmd_format
 from harness.tasks.format_check import cmd_format_check
@@ -30,111 +30,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 # ── Commands ──────────────────────────────────────────────────────
-
-
-def cmd_crap() -> None:
-    """CRAP = ccn^2 * (1-cov)^3 + ccn per function. Advisory — lizard + coverage XML."""
-    max_crap = float(
-        next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--max=")), "30")
-    )
-    changed_only = "--changed-only" in sys.argv
-
-    # Emit coverage XML quietly; cmd_coverage must have populated .coverage.
-    subprocess.run(
-        ["uv", "run", "coverage", "xml", "-o", "coverage.xml", "-q"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    cov_file = Path("coverage.xml")
-    if not cov_file.exists():
-        print(f"  {RED}✗{RESET} CRAP: coverage XML not found — run `harness coverage` first")
-        sys.exit(1)
-
-    cov_map: dict[str, dict[int, int]] = {}
-    for cls in ET.parse(cov_file).iter("class"):
-        fn = cls.get("filename", "")
-        cov_map[fn] = {
-            int(ln.get("number", "0")): int(ln.get("hits", "0"))
-            for ln in cls.iter("line")
-            if ln.get("number")
-        }
-
-    changed: set[str] | None = None
-    if changed_only:
-        res = subprocess.run(
-            ["git", "diff", "--name-only", "origin/main...HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        changed = {f.strip() for f in res.stdout.splitlines() if f.strip().endswith(".py")}
-
-    lizard_res = subprocess.run(
-        ["uv", "run", "lizard", SRC_DIR],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    line_re = re.compile(r"^\s*(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+(\S+)@(\d+)-(\d+)@(.+)$")
-    offenders: list[tuple[float, int, float, str]] = []
-    for out_line in lizard_res.stdout.splitlines():
-        m = line_re.match(out_line)
-        if not m:
-            continue
-        _, ccn_s, func, start_s, end_s, path = m.groups()
-        if changed is not None and path not in changed:
-            continue
-        ccn = int(ccn_s)
-        start, end = int(start_s), int(end_s)
-        lines = cov_map.get(path) or cov_map.get(path.lstrip("./")) or {}
-        in_range = [n for n in range(start, end + 1) if n in lines]
-        cov = (sum(1 for n in in_range if lines[n] > 0) / len(in_range)) if in_range else 0.0
-        crap = ccn * ccn * (1 - cov) ** 3 + ccn
-        if crap > max_crap:
-            offenders.append((crap, ccn, cov, f"{func}@{start}-{end}@{path}"))
-
-    if not offenders:
-        print(f"  {GREEN}✓{RESET} CRAP: all functions below {max_crap}")
-        return
-    offenders.sort(reverse=True)
-    print(f"  {RED}✗{RESET} CRAP: {len(offenders)} function(s) exceed {max_crap}")
-    for crap, ccn, cov, loc in offenders[:20]:
-        print(f"    CRAP={crap:6.1f}  CCN={ccn:3d}  cov={cov * 100:5.1f}%  {loc}")
-    sys.exit(1)
-
-
-def cmd_audit() -> None:
-    run("Dep audit", ["uv", "run", "--with", "pip-audit", "pip-audit"])
-
-
-def cmd_complexity() -> None:
-    run(
-        "Complexity (lizard)",
-        [
-            "uv",
-            "run",
-            "lizard",
-            SRC_DIR,
-            TEST_DIR,
-            "-C",
-            "15",
-            "-a",
-            "7",
-            "-L",
-            "100",
-            "-i",
-            "0",
-        ],
-    )
-
-
-def cmd_post_edit() -> None:
-    """Format if source files have uncommitted changes (Claude Code hook)."""
-    if not changed_py_files():
-        return
-    run("Fix lint errors", ["uv", "run", "ruff", "check", "--fix", "."], no_exit=True)
-    run("Format code", ["uv", "run", "ruff", "format", "."], no_exit=True)
 
 
 # ── Stages ────────────────────────────────────────────────────────
@@ -164,22 +59,6 @@ def cmd_check() -> None:
         _check_hooks_present()
     finally:
         print_suppressions_report()
-
-
-def cmd_pre_commit() -> None:
-    """Staged checks + tests if source files staged."""
-    files = staged_py_files()
-    if not files:
-        print("No staged Python files — skipping checks")
-        return
-
-    print("\n=== Pre-commit Checks ===\n")
-    cmd_fix(files)
-    cmd_format(files)
-    cmd_typecheck()
-
-    if any(f.startswith(f"{SRC_DIR}/") for f in files):
-        cmd_test()
 
 
 def cmd_ci() -> None:
