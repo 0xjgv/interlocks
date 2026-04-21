@@ -12,6 +12,11 @@ RESET = "\033[0m"
 VERBOSE = "--verbose" in sys.argv
 
 
+def warn_skip(message: str) -> None:
+    """Emit a yellow-ish 'skipped' status line for optional/absent gates."""
+    print(f"  {GREEN}⚠{RESET} {message}")
+
+
 def run(description: str, cmd: list[str], *, no_exit: bool = False) -> None:
     """Run command silently; show output only on failure."""
     if VERBOSE:
