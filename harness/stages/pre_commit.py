@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from harness.git import staged_py_files
+from harness.git import stage, staged_py_files
 from harness.paths import SRC_DIR
 from harness.tasks.fix import cmd_fix
 from harness.tasks.format import cmd_format
@@ -20,6 +20,7 @@ def cmd_pre_commit() -> None:
     print("\n=== Pre-commit Checks ===\n")
     cmd_fix(files)
     cmd_format(files)
+    stage(files)
     cmd_typecheck()
 
     if any(f.startswith(f"{SRC_DIR}/") for f in files):

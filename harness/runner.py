@@ -13,12 +13,23 @@ VERBOSE = "--verbose" in sys.argv
 
 
 def warn_skip(message: str) -> None:
-    """Emit a yellow-ish 'skipped' status line for optional/absent gates."""
+    """Emit a 'skipped' status line for optional/absent gates."""
     print(f"  {GREEN}⚠{RESET} {message}")
 
 
-def run(description: str, cmd: list[str], *, no_exit: bool = False) -> None:
-    """Run command silently; show output only on failure."""
+def fail_skip(message: str) -> None:
+    """Emit a red ✗ and exit 1 for a required-but-missing gate."""
+    print(f"  {RED}✗{RESET} {message}")
+    sys.exit(1)
+
+
+def arg_value(flag: str, default: str) -> str:
+    """Return the value of ``--flag=value`` in sys.argv, else ``default``."""
+    return next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith(flag)), default)
+
+
+def run(description: str, cmd: list[str], *, no_exit: bool = False, quiet: bool = False) -> None:
+    """Run ``cmd`` silently; print ✓/✗ on completion. ``quiet=True`` suppresses ✓."""
     if VERBOSE:
         print(f"  -> {' '.join(cmd)}")
         result = subprocess.run(cmd, check=False)
@@ -30,6 +41,8 @@ def run(description: str, cmd: list[str], *, no_exit: bool = False) -> None:
 
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
+        if quiet:
+            return
         extra = _parse_unittest_summary(result.stderr) if "unittest" in cmd else ""
         print(f"  {GREEN}✓{RESET} {description}{extra}")
     else:

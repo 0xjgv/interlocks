@@ -1,20 +1,15 @@
-"""Tests under coverage with threshold + uncovered listing.
-
-Reads ``--min=N`` from ``sys.argv`` at call time. Preserved verbatim from the original
-cli.py:191 — ``sys.argv`` is process-global, unmodified by ``main()`` dispatch.
-"""
+"""Tests under coverage with threshold + uncovered listing."""
 
 from __future__ import annotations
 
-import sys
-
 from harness.paths import TEST_DIR
-from harness.runner import run
+from harness.runner import arg_value, run
 
 
-def cmd_coverage() -> None:
-    """Run tests under coverage with threshold + uncovered listing."""
-    min_pct = int(next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--min=")), "0"))
+def cmd_coverage(*, min_pct: int | None = None) -> None:
+    """Run tests under coverage and report against ``min_pct`` (default: ``--min=N`` or 0)."""
+    if min_pct is None:
+        min_pct = int(arg_value("--min=", "0"))
     run(
         "Coverage (run)",
         ["uv", "run", "coverage", "run", "-m", "unittest", "discover", "-s", TEST_DIR, "-q"],

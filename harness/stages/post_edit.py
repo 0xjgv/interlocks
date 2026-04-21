@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from harness.git import changed_py_files
-from harness.tasks.fix import cmd_fix
-from harness.tasks.format import cmd_format
+from harness.runner import run
 
 
 def cmd_post_edit() -> None:
     """Format if source files have uncommitted changes (Claude Code hook)."""
-    if not changed_py_files():
+    files = changed_py_files()
+    if not files:
         return
-    cmd_fix(no_exit=True)
-    cmd_format(no_exit=True)
+    cmd = ["uv", "run", "ruff"]
+    run("Fix lint errors", [*cmd, "check", "--fix", *files], no_exit=True, quiet=True)
+    run("Format code", [*cmd, "format", *files], no_exit=True, quiet=True)

@@ -2,5 +2,5 @@
 
 from __future__ import annotations
 
-SRC_DIR = "src"
+SRC_DIR = "harness"
 TEST_DIR = "tests"

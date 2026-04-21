@@ -1,0 +1,9 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "command": "uv run harness post-edit"
+      }
+    ]
+  }
+}

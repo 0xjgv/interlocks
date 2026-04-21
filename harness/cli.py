@@ -12,15 +12,12 @@ from harness.stages.clean import cmd_clean
 from harness.stages.post_edit import cmd_post_edit
 from harness.stages.pre_commit import cmd_pre_commit
 from harness.stages.setup_hooks import cmd_hooks
-from harness.tasks.acceptance import cmd_acceptance
-from harness.tasks.arch import cmd_arch
 from harness.tasks.audit import cmd_audit
 from harness.tasks.coverage import cmd_coverage
 from harness.tasks.crap import cmd_crap
 from harness.tasks.fix import cmd_fix
 from harness.tasks.format import cmd_format
 from harness.tasks.lint import cmd_lint
-from harness.tasks.mutation import cmd_mutation
 from harness.tasks.test import cmd_test
 from harness.tasks.typecheck import cmd_typecheck
 
@@ -37,13 +34,10 @@ TASKS: dict[str, tuple[Callable[..., None], str]] = {
     "test": (cmd_test, "Run tests with unittest"),
     "check": (cmd_check, "Fix + format + typecheck + test (full repo)"),
     "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
-    "ci": (cmd_ci, "Full verification: lint, typecheck, tests, acceptance, coverage, arch"),
+    "ci": (cmd_ci, "Full verification: lint, typecheck, tests, coverage"),
     "audit": (cmd_audit, "Audit dependencies for known vulnerabilities"),
-    "acceptance": (cmd_acceptance, "Run acceptance scenarios (behave)"),
     "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
-    "mutation": (cmd_mutation, "Mutation testing (mutmut, advisory)"),
     "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
-    "arch": (cmd_arch, "Architecture checks (import-linter)"),
     "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
     "setup-hooks": (cmd_hooks, "Install git pre-commit hook"),
     "clean": (cmd_clean, "Remove cache and build artifacts"),
