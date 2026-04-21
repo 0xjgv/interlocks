@@ -12,8 +12,12 @@ wheels/
 .import_linter_cache/
 .pytest_cache/
 .ruff_cache/
+coverage.xml
 .coverage
 htmlcov/
 build/
 dist/
 # <<< harness managed <<<
+
+# AI
+.humanlayer/
