@@ -1,0 +1,19 @@
+# Python-generated files
+.mypy_cache/
+__pycache__/
+*.py[oc]
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# >>> harness managed >>>
+.import_linter_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+# <<< harness managed <<<
