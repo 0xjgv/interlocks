@@ -15,34 +15,16 @@ from harness.git import changed_py_files, staged_py_files
 from harness.paths import SRC_DIR, TEST_DIR
 from harness.reports.suppressions import print_suppressions_report
 from harness.runner import GREEN, RED, RESET, run
+from harness.tasks.fix import cmd_fix
+from harness.tasks.format import cmd_format
+from harness.tasks.format_check import cmd_format_check
+from harness.tasks.lint import cmd_lint
+from harness.tasks.typecheck import cmd_typecheck
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 # ── Commands ──────────────────────────────────────────────────────
-
-
-def cmd_fix(files: list[str] | None = None) -> None:
-    target = files or ["."]
-    run("Fix lint errors", ["uv", "run", "ruff", "check", "--fix", *target])
-
-
-def cmd_format(files: list[str] | None = None) -> None:
-    target = files or ["."]
-    run("Format code", ["uv", "run", "ruff", "format", *target])
-
-
-def cmd_lint(files: list[str] | None = None) -> None:
-    target = files or ["."]
-    run("Lint check", ["uv", "run", "ruff", "check", *target])
-
-
-def cmd_format_check() -> None:
-    run("Format check", ["uv", "run", "ruff", "format", "--check", "."])
-
-
-def cmd_typecheck() -> None:
-    run("Type check", ["uv", "run", "basedpyright", SRC_DIR])
 
 
 def cmd_test() -> None:
