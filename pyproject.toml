@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "basedpyright>=1.39.3",
     "coverage>=7.13.5",
+    "deptry>=0.25.1",
     "lizard>=1.21.6",
     "mutmut>=3.0",
     "pip-audit>=2.7",
@@ -159,3 +160,10 @@ show_missing = true
 [tool.mutmut]
 paths_to_mutate = ["harness/"]
 tests_dir = ["tests/"]
+
+# ── Deptry ─────────────────────────────────────────────────────────
+# These tools ship as CLIs we invoke via subprocess — not imported — so deptry
+# can't see the usage on its own.
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["basedpyright", "coverage", "deptry", "lizard", "mutmut", "pip-audit", "ruff"]

@@ -149,6 +149,7 @@ def test_ci_in_process_queues_all_tasks(
         "Format check",
         "Lint check",
         "Complexity (lizard)",
+        "Deps (deptry)",
         "Type check",
         "Coverage >= 80%",
     ]
