@@ -8,14 +8,15 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from harness.config import HarnessConfig, _load_pyproject, load_config
+from harness.config import HarnessConfig, load_config
+from harness.defaults_path import has_project_config
 from harness.defaults_path import path as defaults_path
 from harness.runner import Task, run, tool, warn_skip
 
 
 def task_arch() -> Task | None:
     cfg = load_config()
-    if _user_has_contracts(cfg):
+    if has_project_config(cfg, "importlinter", sidecars=(".importlinter", "setup.cfg")):
         return Task("Architecture (import-linter)", tool("lint-imports"))
     default_cfg = _write_default_config(cfg)
     if default_cfg is None:
@@ -35,12 +36,6 @@ def cmd_arch() -> None:
         )
         return
     run(task)
-
-
-def _user_has_contracts(cfg: HarnessConfig) -> bool:
-    if "importlinter" in _load_pyproject(cfg.project_root).get("tool", {}):
-        return True
-    return any((cfg.project_root / name).is_file() for name in (".importlinter", "setup.cfg"))
 
 
 def _write_default_config(cfg: HarnessConfig) -> Path | None:

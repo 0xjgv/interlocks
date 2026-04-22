@@ -130,30 +130,40 @@ def test_arch_skips_when_tests_not_a_package(non_package_tests: Path) -> None:
     assert "default needs" in result.stdout
 
 
+def _stub_load_config(
+    monkeypatch: pytest.MonkeyPatch, project_root: Path, src_dir: Path, test_dir: Path
+) -> None:
+    """Point arch's ``load_config`` at a real ``HarnessConfig`` for ``project_root``."""
+    from dataclasses import replace
+
+    from harness.config import clear_cache, load_config
+    from harness.tasks import arch as arch_mod
+
+    clear_cache()
+    cfg = replace(load_config(project_root), src_dir=src_dir, test_dir=test_dir)
+    monkeypatch.setattr(arch_mod, "load_config", lambda: cfg)
+
+
 def test_task_arch_uses_user_contracts_when_declared(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """If pyproject has [tool.importlinter], we invoke lint-imports without --config."""
     from harness.tasks import arch as arch_mod
 
-    fake_cfg_dir = tmp_path / "proj"
-    fake_cfg_dir.mkdir()
-    (fake_cfg_dir / "pyproject.toml").write_text(
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text(
         textwrap.dedent(
             """\
+            [project]
+            name = "x"
             [tool.importlinter]
             root_package = "anything"
             """
         ),
         encoding="utf-8",
     )
-
-    class FakeCfg:
-        project_root = fake_cfg_dir
-        src_dir = fake_cfg_dir / "src"
-        test_dir = fake_cfg_dir / "tests"
-
-    monkeypatch.setattr(arch_mod, "load_config", FakeCfg)
+    _stub_load_config(monkeypatch, proj, proj / "src", proj / "tests")
     task = arch_mod.task_arch()
     assert task is not None
     assert task.description == "Architecture (import-linter)"
@@ -176,12 +186,7 @@ def test_task_arch_synthesizes_default_when_no_contracts(
     tests.mkdir()
     (tests / "__init__.py").write_text("", encoding="utf-8")
 
-    class FakeCfg:
-        project_root = proj
-        src_dir = src
-        test_dir = tests
-
-    monkeypatch.setattr(arch_mod, "load_config", FakeCfg)
+    _stub_load_config(monkeypatch, proj, src, tests)
     task = arch_mod.task_arch()
     assert task is not None
     assert task.description == "Architecture (default: src ↛ tests)"
@@ -205,10 +210,5 @@ def test_task_arch_returns_none_when_tests_not_a_package(
     (src / "__init__.py").write_text("", encoding="utf-8")
     (proj / "tests").mkdir()  # no __init__.py
 
-    class FakeCfg:
-        project_root = proj
-        src_dir = src
-        test_dir = proj / "tests"
-
-    monkeypatch.setattr(arch_mod, "load_config", FakeCfg)
+    _stub_load_config(monkeypatch, proj, src, proj / "tests")
     assert arch_mod.task_arch() is None

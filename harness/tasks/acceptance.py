@@ -10,13 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from harness.config import (
-    HarnessConfig,
-    _load_pyproject,
-    _relative_str,
-    invoker_prefix,
-    load_config,
-)
+from harness.config import HarnessConfig, invoker_prefix, load_config
 from harness.detect import detect_acceptance_runner
 from harness.runner import Task, run, warn_skip
 
@@ -26,7 +20,7 @@ if TYPE_CHECKING:
 
 def task_acceptance() -> Task | None:
     cfg = load_config()
-    runner = detect_acceptance_runner(cfg, _load_pyproject(cfg.project_root))
+    runner = detect_acceptance_runner(cfg)
     features_dir = cfg.features_dir
     features_arg = cfg.features_dir_arg
     if runner is None or features_dir is None or features_arg is None:
@@ -70,7 +64,7 @@ def _pytest_bdd_targets(cfg: HarnessConfig, features_dir: Path, features_arg: st
     dirs = [features_arg]
     step_defs = features_dir.parent / "step_defs"
     if step_defs.is_dir():
-        dirs.append(_relative_str(step_defs, cfg.project_root))
+        dirs.append(cfg.relpath(step_defs))
     return dirs
 
 

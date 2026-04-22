@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import atexit
 from contextlib import ExitStack
+from functools import cache
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-from harness.config import _load_pyproject
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -25,11 +24,13 @@ _extractor = ExitStack()
 atexit.register(_extractor.close)
 
 
+@cache
 def path(name: str) -> Path:
     """Return a real filesystem path to ``harness/defaults/<name>``.
 
     When the package is imported from a zipfile, the file is extracted to a
     temp location; the extraction lives for the remainder of the process.
+    Cached so each bundled file is resolved at most once per process.
     """
     resource = files("harness.defaults") / name
     return Path(_extractor.enter_context(as_file(resource)))
@@ -41,7 +42,7 @@ def has_project_config(cfg: HarnessConfig, section: str, sidecars: Iterable[str]
     Checks for ``[tool.<section>]`` in the project's pyproject.toml, then for
     any of ``sidecars`` (e.g. ``ruff.toml``, ``.ruff.toml``) in the project root.
     """
-    if section in _load_pyproject(cfg.project_root).get("tool", {}):
+    if section in cfg.pyproject.get("tool", {}):
         return True
     return any((cfg.project_root / name).is_file() for name in sidecars)
 

@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO
+from typing import IO, NoReturn
 
 GREEN = "\033[32m"
 RED = "\033[31m"
@@ -72,7 +72,7 @@ def warn_skip(message: str) -> None:
     print(f"  {GREEN}⚠{RESET} {message}")
 
 
-def fail_skip(message: str) -> None:
+def fail_skip(message: str) -> NoReturn:
     """Emit a red ✗ and exit 1 for a required-but-missing gate."""
     print(f"  {RED}✗{RESET} {message}")
     sys.exit(1)

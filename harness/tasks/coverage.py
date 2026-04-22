@@ -8,11 +8,7 @@ from harness.runner import Task, arg_value, run
 
 
 def _coverage_rcfile_args() -> list[str]:
-    """``--rcfile=<bundled>`` when the project owns no coverage config, else ``[]``.
-
-    The ``=`` form is required so ``uv run`` doesn't mistake ``--rcfile`` for one of
-    its own options before passing it through to coverage.
-    """
+    """``['--rcfile=<bundled>']`` when the project owns no coverage config, else ``[]``."""
     cfg = load_config()
     if has_project_config(cfg, "coverage", sidecars=(".coveragerc",)):
         return []
@@ -28,9 +24,7 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
     if min_pct is None:
         min_pct = int(arg_value("--min=", str(cfg.coverage_min)))
     rcfile_args = _coverage_rcfile_args()
-    run_cmd = build_coverage_test_command(cfg)
-    if rcfile_args:
-        run_cmd[run_cmd.index("run") + 1 : run_cmd.index("run") + 1] = rcfile_args
+    run_cmd = build_coverage_test_command(cfg, coverage_args=tuple(rcfile_args))
     report_cmd = [
         *invoker_prefix(cfg),
         "coverage",

@@ -132,28 +132,33 @@ class HarnessConfig:
     run_acceptance_in_check: bool = False
 
     @property
+    def pyproject(self) -> dict[str, Any]:
+        """Parsed ``pyproject.toml`` for this project (cached process-wide)."""
+        return _load_pyproject(self.project_root)
+
+    def relpath(self, path: Path) -> str:
+        """Project-root-relative string form of ``path`` (absolute path if outside)."""
+        try:
+            return str(path.relative_to(self.project_root))
+        except ValueError:
+            return str(path)
+
+    @property
     def src_dir_arg(self) -> str:
         """Project-root-relative string form of ``src_dir`` for CLI arguments."""
-        return _relative_str(self.src_dir, self.project_root)
+        return self.relpath(self.src_dir)
 
     @property
     def test_dir_arg(self) -> str:
         """Project-root-relative string form of ``test_dir`` for CLI arguments."""
-        return _relative_str(self.test_dir, self.project_root)
+        return self.relpath(self.test_dir)
 
     @property
     def features_dir_arg(self) -> str | None:
         """Project-root-relative string form of ``features_dir``, or ``None``."""
         if self.features_dir is None:
             return None
-        return _relative_str(self.features_dir, self.project_root)
-
-
-def _relative_str(path: Path, base: Path) -> str:
-    try:
-        return str(path.relative_to(base))
-    except ValueError:
-        return str(path)
+        return self.relpath(self.features_dir)
 
 
 def invoker_prefix(cfg: HarnessConfig) -> list[str]:
@@ -175,9 +180,11 @@ def build_test_command(cfg: HarnessConfig) -> list[str]:
     return [*invoker_prefix(cfg), *_runner_argv(cfg)]
 
 
-def build_coverage_test_command(cfg: HarnessConfig) -> list[str]:
-    """Build ``coverage run -m <runner> ...`` using the configured invoker."""
-    return [*invoker_prefix(cfg), "coverage", "run", "-m", *_runner_argv(cfg)]
+def build_coverage_test_command(
+    cfg: HarnessConfig, *, coverage_args: tuple[str, ...] = ()
+) -> list[str]:
+    """Build ``coverage run [coverage_args] -m <runner> ...`` using the configured invoker."""
+    return [*invoker_prefix(cfg), "coverage", "run", *coverage_args, "-m", *_runner_argv(cfg)]
 
 
 def load_config(start: Path | None = None) -> HarnessConfig:

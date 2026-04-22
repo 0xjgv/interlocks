@@ -191,22 +191,19 @@ def _behave_layout(features_dir: Path) -> bool:
     return (features_dir / "steps").is_dir() and (features_dir / "environment.py").is_file()
 
 
-def detect_acceptance_runner(
-    cfg: HarnessConfig, pyproject: dict[str, Any]
-) -> AcceptanceRunner | None:
+def detect_acceptance_runner(cfg: HarnessConfig) -> AcceptanceRunner | None:
     """Pick ``pytest-bdd`` | ``behave`` based on explicit override → layout → deps.
 
     Returns ``None`` when nothing should run: ``acceptance_runner = "off"`` or
     no ``features_dir``. Explicit ``[tool.harness] acceptance_runner`` wins.
     """
-    if cfg.acceptance_runner == "off":
-        return None
     if cfg.acceptance_runner is not None:
-        return cfg.acceptance_runner
+        return None if cfg.acceptance_runner == "off" else cfg.acceptance_runner
     if cfg.features_dir is None:
         return None
     if _behave_layout(cfg.features_dir):
         return "behave"
+    pyproject = cfg.pyproject
     if _deps_mention(_BEHAVE_WORD, pyproject) and not _deps_mention(_PYTEST_BDD_WORD, pyproject):
         return "behave"
     return "pytest-bdd"
