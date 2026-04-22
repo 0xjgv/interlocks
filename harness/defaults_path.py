@@ -44,3 +44,22 @@ def has_project_config(cfg: HarnessConfig, section: str, sidecars: Iterable[str]
     if section in _load_pyproject(cfg.project_root).get("tool", {}):
         return True
     return any((cfg.project_root / name).is_file() for name in sidecars)
+
+
+def config_flag_if_absent(
+    cfg: HarnessConfig,
+    *,
+    section: str,
+    filename: str,
+    flag: str,
+    sidecars: Iterable[str] = (),
+) -> list[str]:
+    """Return ``[flag, <bundled-path>]`` when the project owns no config, else ``[]``.
+
+    Each tool takes its config via a different flag (``--config``, ``--rcfile``,
+    ``--project``); callers pass the tool-appropriate one. Safe to splat into a
+    command list regardless of outcome.
+    """
+    if has_project_config(cfg, section, sidecars):
+        return []
+    return [flag, str(path(filename))]

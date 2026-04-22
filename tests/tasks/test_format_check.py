@@ -50,3 +50,17 @@ def test_format_check_unformatted_exits_nonzero(
     with pytest.raises(SystemExit) as excinfo:
         cmd_format_check()
     assert excinfo.value.code != 0
+
+
+def test_format_check_injects_bundled_config_in_bare_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.tasks.format_check import task_format_check
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='bare'\nversion='0.0.0'\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_format_check().cmd
+    assert "--config" in cmd
+    assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"

@@ -62,3 +62,51 @@ def test_lint_violating_in_process(tmp_project: Path, monkeypatch: pytest.Monkey
     with pytest.raises(SystemExit) as exc:
         cmd_lint()
     assert exc.value.code != 0
+
+
+# ─────────────── bundled ruff defaults fallback ─────────────────────
+
+
+_BARE_PYPROJECT = textwrap.dedent("""
+    [project]
+    name = "bare"
+    version = "0.0.0"
+    requires-python = ">=3.13"
+""")
+
+
+def test_lint_injects_bundled_config_when_project_has_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare project with no [tool.ruff]: task_lint must pass --config <bundled>."""
+    from harness.tasks.lint import task_lint
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    cmd = task_lint().cmd
+    assert "--config" in cmd
+    cfg_path = Path(cmd[cmd.index("--config") + 1])
+    assert cfg_path.name == "ruff.toml"
+    assert cfg_path.is_file()
+
+
+def test_lint_omits_config_when_project_has_tool_ruff(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Project with [tool.ruff]: task_lint must NOT pass --config."""
+    from harness.tasks.lint import task_lint
+
+    monkeypatch.chdir(tmp_project)
+    assert "--config" not in task_lint().cmd
+
+
+def test_lint_omits_config_when_project_has_ruff_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Project with ruff.toml sidecar: task_lint must NOT pass --config."""
+    from harness.tasks.lint import task_lint
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert "--config" not in task_lint().cmd

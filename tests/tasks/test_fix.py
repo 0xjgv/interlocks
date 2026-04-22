@@ -68,3 +68,17 @@ def test_fix_no_exit_does_not_raise(tmp_project: Path, monkeypatch: pytest.Monke
     (tmp_project / "sample.py").write_text("x = undefined_name\n", encoding="utf-8")
     monkeypatch.chdir(tmp_project)
     cmd_fix(no_exit=True)  # must not raise SystemExit
+
+
+def test_fix_injects_bundled_config_in_bare_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.tasks.fix import task_fix
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='bare'\nversion='0.0.0'\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_fix().cmd
+    assert "--config" in cmd
+    assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"

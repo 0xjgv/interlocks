@@ -1,0 +1,42 @@
+# Bundled harness ruff defaults.
+# Used by `harness lint|fix|format|format-check` when the target project has
+# no [tool.ruff] in pyproject.toml and no ruff.toml / .ruff.toml sidecar.
+#
+# Project-local configs (per-file-ignores, isort.known-first-party) are
+# intentionally omitted — they belong to the downstream repo.
+
+target-version = "py313"
+line-length = 99
+preview = true
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade (modern Python syntax)
+    "B",    # flake8-bugbear (common bugs)
+    "SIM",  # flake8-simplify (simple > complex)
+    "RUF",  # ruff-specific rules
+    "C4",   # flake8-comprehensions
+    "PTH",  # flake8-use-pathlib
+    "TCH",  # type-checking imports
+    "ARG",  # unused arguments
+    "PL",   # pylint subset
+    "ANN",  # type annotations
+    "ERA",  # flake8-eradicate (commented-out code)
+    "PIE",  # flake8-pie (unnecessary placeholders)
+    "S",    # flake8-bandit (security)
+]
+ignore = [
+    "ANN401",   # dynamically-typed-expressions (Any)
+    "PLR0912",  # too-many-branches
+    "PLR0913",  # too-many-arguments
+    "PLR0914",  # too-many-local-variables
+    "PLR0915",  # too-many-statements
+    "PLR0917",  # too-many-positional-arguments
+    "PLR2004",  # magic-value-comparison (too noisy)
+    "PLR6201",  # use-set-literal
+    "PLR6301",  # method-could-be-function
+]

@@ -65,3 +65,17 @@ def test_format_no_exit_does_not_raise(tmp_project: Path, monkeypatch: pytest.Mo
     (tmp_project / "sample.py").write_text(UNFORMATTED, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
     cmd_format(no_exit=True)  # must not raise SystemExit
+
+
+def test_format_injects_bundled_config_in_bare_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.tasks.format import task_format
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='bare'\nversion='0.0.0'\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_format().cmd
+    assert "--config" in cmd
+    assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
