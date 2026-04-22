@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,26 @@ RED = "\033[31m"
 RESET = "\033[0m"
 VERBOSE = "--verbose" in sys.argv
 
+_BIN = Path(sys.executable).parent
+
+
+def tool(name: str, *args: str) -> list[str]:
+    """Resolve a co-installed console script; fall back to PATH, then bare name."""
+    local = _BIN / name
+    if local.exists():
+        return [str(local), *args]
+    return [shutil.which(name) or name, *args]
+
+
+def python_m(module: str, *args: str) -> list[str]:
+    """Invoke a Python module using the CLI's own interpreter."""
+    return [sys.executable, "-m", module, *args]
+
 
 def generate_coverage_xml() -> Path:
     """Regenerate coverage.xml from .coverage. Returns the path whether or not it exists."""
     subprocess.run(
-        ["uv", "run", "coverage", "xml", "-o", "coverage.xml", "-q"],
+        python_m("coverage", "xml", "-o", "coverage.xml", "-q"),
         capture_output=True,
         text=True,
         check=False,

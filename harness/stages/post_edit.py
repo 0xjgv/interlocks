@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from harness.git import changed_py_files
-from harness.runner import run
+from harness.runner import run, tool
 
 
 def cmd_post_edit() -> None:
@@ -11,6 +11,5 @@ def cmd_post_edit() -> None:
     files = changed_py_files()
     if not files:
         return
-    cmd = ["uv", "run", "ruff"]
-    run("Fix lint errors", [*cmd, "check", "--fix", *files], no_exit=True, quiet=True)
-    run("Format code", [*cmd, "format", *files], no_exit=True, quiet=True)
+    run("Fix lint errors", tool("ruff", "check", "--fix", *files), no_exit=True, quiet=True)
+    run("Format code", tool("ruff", "format", *files), no_exit=True, quiet=True)

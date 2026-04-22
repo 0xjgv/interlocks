@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from harness.git import changed_py_files_vs_main
 from harness.paths import SRC_DIR
-from harness.runner import GREEN, RED, RESET, arg_value, fail_skip, generate_coverage_xml
+from harness.runner import GREEN, RED, RESET, arg_value, fail_skip, generate_coverage_xml, tool
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -70,7 +70,7 @@ def cmd_crap() -> None:
         fail_skip("CRAP: coverage.xml not generated — run `harness coverage` first")
     cov_map = _parse_coverage(cov_file)
     lizard_res = subprocess.run(
-        ["uv", "run", "lizard", SRC_DIR],
+        tool("lizard", SRC_DIR),
         capture_output=True,
         text=True,
         check=False,

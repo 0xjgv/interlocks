@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import shlex
+import sys
 from pathlib import Path
 
 
 def cmd_hooks() -> None:
+    python = shlex.quote(sys.executable)
+
     hook = Path(".git/hooks/pre-commit")
     hook.parent.mkdir(parents=True, exist_ok=True)
-    hook.write_text("#!/bin/sh\nuv run harness pre-commit\n", encoding="utf-8")
+    hook.write_text(f"#!/bin/sh\nexec {python} -m harness.cli pre-commit\n", encoding="utf-8")
     hook.chmod(0o755)
     print("Installed pre-commit hook")
 
@@ -20,7 +24,7 @@ def cmd_hooks() -> None:
     except (FileNotFoundError, json.JSONDecodeError):
         existing = {}
     existing.setdefault("hooks", {}).setdefault("Stop", [])
-    entry = {"command": "uv run harness post-edit"}
+    entry = {"command": f"{python} -m harness.cli post-edit"}
     if entry not in existing["hooks"]["Stop"]:
         existing["hooks"]["Stop"].append(entry)
     settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")

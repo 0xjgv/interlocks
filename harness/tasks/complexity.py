@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 from harness.paths import SRC_DIR, TEST_DIR
-from harness.runner import run
+from harness.runner import run, tool
 
 
 def cmd_complexity() -> None:
     run(
         "Complexity (lizard)",
-        [
-            "uv",
-            "run",
+        tool(
             "lizard",
             SRC_DIR,
             TEST_DIR,
@@ -23,5 +21,5 @@ def cmd_complexity() -> None:
             "100",
             "-i",
             "0",
-        ],
+        ),
     )

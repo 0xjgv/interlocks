@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from harness.paths import SRC_DIR
-from harness.runner import run
+from harness.runner import run, tool
 
 
 def cmd_typecheck() -> None:
-    run("Type check", ["uv", "run", "basedpyright", SRC_DIR])
+    run("Type check", tool("basedpyright", SRC_DIR))

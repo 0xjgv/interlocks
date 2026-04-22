@@ -7,18 +7,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 from harness.git import changed_py_files_vs_main
-from harness.runner import GREEN, RED, RESET, arg_value, generate_coverage_xml, warn_skip
+from harness.runner import GREEN, RED, RESET, arg_value, generate_coverage_xml, python_m, warn_skip
 
-_MUTMUT = ["uv", "run", "--with", "mutmut", "mutmut"]
-
-
-def _mutmut_available() -> bool:
-    return (
-        subprocess.run(
-            [*_MUTMUT, "--version"], capture_output=True, text=True, check=False
-        ).returncode
-        == 0
-    )
+_MUTMUT = python_m("mutmut")
 
 
 def _coverage_line_rate() -> float | None:
@@ -79,10 +70,6 @@ def _print_survivors(survived: list[str], changed: set[str] | None) -> None:
 
 def cmd_mutation() -> None:
     """Mutation score on `harness/`. Advisory unless --min-score is set."""
-    if not _mutmut_available():
-        warn_skip("mutation: mutmut not available (pass --with mutmut via uv)")
-        return
-
     min_cov = float(arg_value("--min-coverage=", "70"))
     rate = _coverage_line_rate()
     if rate is None or rate * 100 < min_cov:

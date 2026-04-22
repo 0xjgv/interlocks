@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from harness.runner import run
+from harness.runner import python_m, run
 
 
 def cmd_audit() -> None:
-    run("Dep audit", ["uv", "run", "--with", "pip-audit", "pip-audit"])
+    run("Dep audit", python_m("pip_audit"))

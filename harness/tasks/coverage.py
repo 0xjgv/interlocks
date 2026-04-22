@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from harness.paths import TEST_DIR
-from harness.runner import arg_value, run
+from harness.runner import arg_value, python_m, run
 
 
 def cmd_coverage(*, min_pct: int | None = None) -> None:
@@ -12,9 +12,9 @@ def cmd_coverage(*, min_pct: int | None = None) -> None:
         min_pct = int(arg_value("--min=", "0"))
     run(
         "Coverage (run)",
-        ["uv", "run", "coverage", "run", "-m", "unittest", "discover", "-s", TEST_DIR, "-q"],
+        python_m("coverage", "run", "-m", "unittest", "discover", "-s", TEST_DIR, "-q"),
     )
     run(
         f"Coverage >= {min_pct}%",
-        ["uv", "run", "coverage", "report", "--show-missing", f"--fail-under={min_pct}"],
+        python_m("coverage", "report", "--show-missing", f"--fail-under={min_pct}"),
     )
