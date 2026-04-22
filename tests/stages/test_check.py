@@ -131,6 +131,11 @@ def test_check_in_process_dispatches_stages(
         lambda tasks: calls.append(("run_tasks", [t.description for t in tasks])),
     )
     monkeypatch.setattr(
+        check_mod,
+        "run",
+        lambda task, **kw: calls.append(("run", task.description, kw)),
+    )
+    monkeypatch.setattr(
         check_mod, "print_suppressions_report", lambda: calls.append("suppressions")
     )
 
@@ -141,6 +146,7 @@ def test_check_in_process_dispatches_stages(
         "fix",
         "format",
         ("run_tasks", ["Type check", "Run tests"]),
+        ("run", "Deps (deptry)", {"no_exit": True}),
         "suppressions",
     ]
     assert "Quality Checks" in capsys.readouterr().out
