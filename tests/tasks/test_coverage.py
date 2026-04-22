@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import textwrap
 from pathlib import Path
 
@@ -80,3 +81,87 @@ def test_coverage_fails_below_threshold(
     with pytest.raises(SystemExit) as exc:
         cmd_coverage(min_pct=80)
     assert exc.value.code not in (0, None)
+
+
+# ─────────────── bundled coveragerc fallback ─────────────────────
+
+_BARE_PYPROJECT = textwrap.dedent("""\
+    [project]
+    name = "bare"
+    version = "0.0.0"
+    requires-python = ">=3.13"
+""")
+
+
+def _rcfile_flag(cmd: list[str]) -> str | None:
+    return next((a for a in cmd if a.startswith("--rcfile=")), None)
+
+
+def test_coverage_injects_bundled_rcfile_in_bare_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No [tool.coverage*] and no .coveragerc: run + report must carry --rcfile=<bundled>."""
+    from harness.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["harness", "coverage"])
+    task = task_coverage()
+    for cmd in (task.cmd, task.pre_cmds[0]):
+        flag = _rcfile_flag(cmd)
+        assert flag is not None
+        assert Path(flag.split("=", 1)[1]).name == "coveragerc"
+
+
+def test_coverage_omits_rcfile_when_project_has_tool_coverage(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.coverage.run] in project pyproject: task must NOT inject --rcfile."""
+    from harness.tasks.coverage import task_coverage
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["harness", "coverage"])
+    task = task_coverage()
+    assert _rcfile_flag(task.cmd) is None
+    assert _rcfile_flag(task.pre_cmds[0]) is None
+
+
+def test_coverage_omits_rcfile_with_coveragerc_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """.coveragerc in project root: task must NOT inject --rcfile."""
+    from harness.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    (tmp_path / ".coveragerc").write_text("[run]\nbranch = True\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["harness", "coverage"])
+    task = task_coverage()
+    assert _rcfile_flag(task.cmd) is None
+    assert _rcfile_flag(task.pre_cmds[0]) is None
+
+
+def test_coverage_default_min_pct_uses_cfg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``task_coverage()`` without args picks up ``cfg.coverage_min`` (default 80)."""
+    from harness.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["harness", "coverage"])
+    assert "--fail-under=80" in task_coverage().cmd
+
+
+def test_coverage_config_override_wires_through(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``[tool.harness] coverage_min = 95`` flows into --fail-under=95."""
+    from harness.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(
+        _BARE_PYPROJECT + "\n[tool.harness]\ncoverage_min = 95\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["harness", "coverage"])
+    assert "--fail-under=95" in task_coverage().cmd

@@ -21,7 +21,7 @@ def cmd_ci() -> None:
         task_complexity(),
         task_deps(),
         task_typecheck(),
-        task_coverage(min_pct=80),
+        task_coverage(),
     ]
     arch = task_arch()
     if arch is not None:
