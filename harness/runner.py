@@ -15,6 +15,9 @@ VERBOSE = "--verbose" in sys.argv
 
 _BIN = Path(sys.executable).parent
 
+_UNITTEST_SUMMARY = re.compile(r"Ran (\d+) tests? in ([\d.]+s)")
+_PYTEST_SUMMARY = re.compile(r"(\d+) passed[^\n]*?\s+in\s+([\d.]+)s")
+
 
 def tool(name: str, *args: str) -> list[str]:
     """Resolve a co-installed console script; fall back to PATH, then bare name."""
@@ -56,7 +59,14 @@ def arg_value(flag: str, default: str) -> str:
     return next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith(flag)), default)
 
 
-def run(description: str, cmd: list[str], *, no_exit: bool = False, quiet: bool = False) -> None:
+def run(
+    description: str,
+    cmd: list[str],
+    *,
+    no_exit: bool = False,
+    quiet: bool = False,
+    test_summary: bool = False,
+) -> None:
     """Run ``cmd`` silently; print ✓/✗ on completion. ``quiet=True`` suppresses ✓."""
     if VERBOSE:
         print(f"  -> {' '.join(cmd)}")
@@ -71,7 +81,7 @@ def run(description: str, cmd: list[str], *, no_exit: bool = False, quiet: bool 
     if result.returncode == 0:
         if quiet:
             return
-        extra = _parse_unittest_summary(result.stderr) if "unittest" in cmd else ""
+        extra = _parse_test_summary(result.stdout + result.stderr) if test_summary else ""
         print(f"  {GREEN}✓{RESET} {description}{extra}")
     else:
         print(f"  {RED}✗{RESET} {description}")
@@ -85,7 +95,12 @@ def run(description: str, cmd: list[str], *, no_exit: bool = False, quiet: bool 
         sys.exit(result.returncode)
 
 
-def _parse_unittest_summary(output: str) -> str:
-    """Extract '(N tests, X.Xs)' from unittest output."""
-    m = re.search(r"Ran (\d+) tests? in ([\d.]+s)", output)
-    return f" ({m.group(1)} tests, {m.group(2)})" if m else ""
+def _parse_test_summary(output: str) -> str:
+    """Extract '(N tests, X.Xs)' from unittest or pytest output."""
+    m = _UNITTEST_SUMMARY.search(output)
+    if m:
+        return f" ({m.group(1)} tests, {m.group(2)})"
+    m = _PYTEST_SUMMARY.search(output)
+    if m:
+        return f" ({m.group(1)} tests, {m.group(2)}s)"
+    return ""

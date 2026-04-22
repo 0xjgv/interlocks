@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/juan/Code/pyharness/.venv/bin/python -m harness.cli post-edit"
+            "command": "/Users/juan/Code/pyharness/.venv/bin/python3 -m harness.cli post-edit"
           }
         ]
       }

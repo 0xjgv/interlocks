@@ -29,28 +29,49 @@ if TYPE_CHECKING:
 def cmd_help() -> None:
     width = max(len(name) for name in TASKS)
     print("Usage: harness <command>")
-    print()
-    for name, (_, description) in TASKS.items():
-        print(f"  {name:<{width}}  {description}")
+    for group_name, group in TASK_GROUPS:
+        print()
+        print(f"{group_name}:")
+        for name, (_, description) in group.items():
+            print(f"  {name:<{width}}  {description}")
 
+
+TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
+    (
+        "Tasks",
+        {
+            "fix": (cmd_fix, "Fix lint errors with ruff"),
+            "format": (cmd_format, "Format code with ruff"),
+            "lint": (cmd_lint, "Lint code with ruff (read-only)"),
+            "typecheck": (cmd_typecheck, "Type-check with basedpyright"),
+            "test": (cmd_test, "Run tests (auto-detects pytest vs unittest)"),
+            "audit": (cmd_audit, "Audit dependencies for known vulnerabilities"),
+            "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
+            "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
+            "mutation": (cmd_mutation, "Mutation testing via mutmut (advisory)"),
+        },
+    ),
+    (
+        "Stages",
+        {
+            "check": (cmd_check, "Fix + format + typecheck + test (full repo)"),
+            "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
+            "ci": (cmd_ci, "Full verification: lint, typecheck, tests, coverage"),
+            "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
+            "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
+            "clean": (cmd_clean, "Remove cache and build artifacts"),
+        },
+    ),
+    (
+        "Other",
+        {
+            "help": (cmd_help, "Show this help message"),
+        },
+    ),
+]
 
 TASKS: dict[str, tuple[Callable[..., None], str]] = {
-    "fix": (cmd_fix, "Fix lint errors with ruff"),
-    "format": (cmd_format, "Format code with ruff"),
-    "lint": (cmd_lint, "Lint code with ruff (read-only)"),
-    "typecheck": (cmd_typecheck, "Type-check with basedpyright"),
-    "test": (cmd_test, "Run tests with unittest"),
-    "check": (cmd_check, "Fix + format + typecheck + test (full repo)"),
-    "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
-    "ci": (cmd_ci, "Full verification: lint, typecheck, tests, coverage"),
-    "audit": (cmd_audit, "Audit dependencies for known vulnerabilities"),
-    "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
-    "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
-    "mutation": (cmd_mutation, "Mutation testing via mutmut (advisory)"),
-    "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
-    "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
-    "clean": (cmd_clean, "Remove cache and build artifacts"),
-    "help": (cmd_help, "Show this help message"),
+    name: entry for _, group in TASK_GROUPS for name, entry in group.items()
 }
 
 
