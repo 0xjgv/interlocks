@@ -131,7 +131,6 @@ _FAKE_ROOT = Path("/proj")
 def _cfg(**overrides: object) -> HarnessConfig:
     defaults = {
         "project_root": _FAKE_ROOT,
-        "pyproject": {},
         "src_dir": _FAKE_ROOT / "mypkg",
         "test_dir": _FAKE_ROOT / "tests",
         "test_runner": "pytest",

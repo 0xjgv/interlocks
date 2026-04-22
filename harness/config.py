@@ -14,6 +14,13 @@ from functools import cache
 from pathlib import Path
 from typing import Any, Literal
 
+from harness.detect import (
+    detect_src_dir,
+    detect_test_dir,
+    detect_test_invoker,
+    detect_test_runner,
+)
+
 TestRunner = Literal["pytest", "unittest"]
 TestInvoker = Literal["python", "uv"]
 
@@ -24,7 +31,11 @@ def find_project_root(start: Path | None = None) -> Path:
     Falls back to the resolved ``start`` if no ``pyproject.toml`` is found on the way
     up to the filesystem root.
     """
-    origin = (start or Path.cwd()).resolve()
+    return _find_project_root_cached((start or Path.cwd()).resolve())
+
+
+@cache
+def _find_project_root_cached(origin: Path) -> Path:
     for candidate in (origin, *origin.parents):
         if (candidate / "pyproject.toml").is_file():
             return candidate
@@ -65,7 +76,6 @@ def _invoker_override(table: dict[str, Any]) -> TestInvoker | None:
 @dataclass(frozen=True)
 class HarnessConfig:
     project_root: Path
-    pyproject: dict[str, Any]
     src_dir: Path
     test_dir: Path
     test_runner: TestRunner
@@ -116,20 +126,11 @@ def build_coverage_test_command(cfg: HarnessConfig) -> list[str]:
 
 def load_config(start: Path | None = None) -> HarnessConfig:
     """Discover the project root and build a ``HarnessConfig``. Cached per project root."""
-    origin = (start or Path.cwd()).resolve()
-    return _load_config_cached(find_project_root(origin))
+    return _load_config_cached(find_project_root(start))
 
 
 @cache
 def _load_config_cached(project_root: Path) -> HarnessConfig:
-    # Deferred: `detect` imports TestRunner/TestInvoker from this module at top level.
-    from harness.detect import (  # noqa: PLC0415
-        detect_src_dir,
-        detect_test_dir,
-        detect_test_invoker,
-        detect_test_runner,
-    )
-
     pyproject = _load_pyproject(project_root)
     table = _harness_table(pyproject)
 
@@ -156,7 +157,6 @@ def _load_config_cached(project_root: Path) -> HarnessConfig:
 
     return HarnessConfig(
         project_root=project_root,
-        pyproject=pyproject,
         src_dir=src_dir,
         test_dir=test_dir,
         test_runner=test_runner,
@@ -166,5 +166,6 @@ def _load_config_cached(project_root: Path) -> HarnessConfig:
 
 
 def clear_cache() -> None:
-    """Clear the cached configuration — used by tests that mutate the project on disk."""
+    """Clear cached configuration — used by tests that mutate the project on disk."""
+    _find_project_root_cached.cache_clear()
     _load_config_cached.cache_clear()

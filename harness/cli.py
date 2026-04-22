@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from typing import TYPE_CHECKING
 
 from harness.config import load_config
@@ -41,7 +42,7 @@ def cmd_help() -> None:
 def _print_detected_block() -> None:
     try:
         cfg = load_config()
-    except OSError:
+    except (OSError, tomllib.TOMLDecodeError):
         return
     print()
     print("Detected:")
