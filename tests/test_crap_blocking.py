@@ -1,4 +1,4 @@
-"""Integration test for `cmd_crap` — CRAP gate over coverage.xml + lizard."""
+"""CRAP enforcement: `enforce_crap` flips advisory ↔ blocking."""
 
 from __future__ import annotations
 
@@ -27,33 +27,28 @@ _TEST_SRC = textwrap.dedent(
     """
 )
 
-_PYPROJECT = textwrap.dedent(
+_PYPROJECT_COV = textwrap.dedent(
     """\
     [project]
-    name = "crap-probe"
+    name = "crap-enforce"
     version = "0.0.1"
     requires-python = ">=3.13"
 
     [tool.coverage.run]
     source = ["harness"]
     branch = true
-
-    [tool.coverage.report]
-    show_missing = true
     """
 )
 
 
 def _run_coverage(cwd: Path) -> None:
-    """Run the project's unittest suite under coverage so `.coverage` exists."""
     cmd = [sys.executable, "-m", "coverage", "run", "-m", "unittest", "discover", "-s", "tests"]
     subprocess.run(cmd, cwd=cwd, check=True)
 
 
 @pytest.fixture
 def tmp_project(tmp_path: Path) -> Path:
-    """Project with `harness/mod.py` + covering test under `tests/`."""
-    (tmp_path / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT_COV, encoding="utf-8")
     pkg = tmp_path / "harness"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
@@ -65,56 +60,47 @@ def tmp_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_crap_passes_on_healthy_project(
-    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """No offenders → no SystemExit regardless of enforce_crap (default True)."""
-    monkeypatch.chdir(tmp_project)
-    monkeypatch.syspath_prepend(str(tmp_project))
-    # Prime .coverage so generate_coverage_xml has something to convert.
-    _run_coverage(tmp_project)
-
-    from harness.tasks.crap import cmd_crap
-
-    cmd_crap()  # trivial inc() is under the ceiling → stays silent on exit
-
-    captured = capsys.readouterr()
-    assert "CRAP" in captured.out
-
-
-def test_crap_default_threshold_from_config(
-    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """`[tool.harness] crap_max = 5.0` surfaces in the 'all below N' success line."""
-    (tmp_project / "pyproject.toml").write_text(
-        _PYPROJECT + "\n[tool.harness]\ncrap_max = 5.0\n", encoding="utf-8"
+def _write_pyproject(project: Path, *, enforce: bool) -> None:
+    (project / "pyproject.toml").write_text(
+        _PYPROJECT_COV
+        + f"\n[tool.harness]\ncrap_max = 0.5\nenforce_crap = {str(enforce).lower()}\n",
+        encoding="utf-8",
     )
-    monkeypatch.chdir(tmp_project)
-    monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["harness", "crap"])  # no --max= override
-    _run_coverage(tmp_project)
-
-    from harness.tasks.crap import cmd_crap
-
-    cmd_crap()
-    captured = capsys.readouterr()
-    assert "5.0" in captured.out
 
 
-def test_crap_cli_max_overrides_config(
+def test_crap_exits_when_enforced(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """`--max=N` on argv wins over `[tool.harness] crap_max`."""
-    (tmp_project / "pyproject.toml").write_text(
-        _PYPROJECT + "\n[tool.harness]\ncrap_max = 5.0\n", encoding="utf-8"
-    )
+    """crap_max = 0.5 < CRAP(inc) = 1 + enforce_crap=true → SystemExit(1)."""
+    _write_pyproject(tmp_project, enforce=True)
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["harness", "crap", "--max=42.5"])
+    monkeypatch.setattr(sys, "argv", ["harness", "crap"])
     _run_coverage(tmp_project)
 
     from harness.tasks.crap import cmd_crap
 
-    cmd_crap()
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_crap()
+    assert excinfo.value.code == 1
+
     captured = capsys.readouterr()
-    assert "42.5" in captured.out
+    assert "CRAP: 1 function(s) exceed 0.5" in captured.out
+
+
+def test_crap_stays_advisory_when_disabled(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Same offender + enforce_crap=false → no SystemExit, message still printed."""
+    _write_pyproject(tmp_project, enforce=False)
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["harness", "crap"])
+    _run_coverage(tmp_project)
+
+    from harness.tasks.crap import cmd_crap
+
+    cmd_crap()  # must not raise
+
+    captured = capsys.readouterr()
+    assert "CRAP: 1 function(s) exceed 0.5" in captured.out

@@ -8,15 +8,16 @@
 
 - After edits: `harness check` — fix, format, typecheck, test, suppression report
 - Pre-commit: `harness pre-commit` — staged files only (auto via git hook)
-- CI: `harness ci` — read-only lint, format check, typecheck, dep hygiene, complexity gate (lizard, CCN 15), tests with coverage
+- CI: `harness ci` — read-only lint, format check, typecheck, dep hygiene, complexity gate (lizard, CCN 15), tests with coverage, blocking CRAP gate (`enforce_crap = false` to opt out; `run_mutation_in_ci = true` to add mutation)
+- Nightly: `harness nightly` — long-running gates (coverage + mutation, blocking on `mutation_min_score`); schedule via cron/GitHub Actions
 - Audit: `harness audit` — audit dependencies for known vulnerabilities (via pip-audit)
 - Deps: `harness deps` — dependency hygiene (unused/missing/transitive) via deptry; auto-passes `--known-first-party` from `src_dir`. Override with `[tool.deptry]` in pyproject.
 - Arch: `harness arch` — architectural contracts via import-linter. Uses `[tool.importlinter]` when present; otherwise runs a default contract forbidding `src_dir` from importing `test_dir`. Skips with a nudge if `test_dir` isn't a Python package.
 - Acceptance: `harness acceptance` — Gherkin scenarios via pytest-bdd (default, shares coverage with `test`). Falls back to behave when `features/steps/` + `features/environment.py` are present or `acceptance_runner = "behave"`. No-ops silently when no `features/` directory exists. `run_acceptance_in_check = true` opts the `check` stage into running it. Blocking in `ci`.
 - Scaffold: `harness init-acceptance` — writes `tests/features/example.feature`, `tests/step_defs/test_example.py`, `tests/step_defs/conftest.py`. Refuses to overwrite.
 - Coverage: `harness coverage --min=0` — coverage.py with threshold + uncovered listing
-- CRAP (advisory): `harness crap --max=30` — complexity × coverage gate
-- Mutation (advisory): `harness mutation --min-coverage=70 --max-runtime=600` — mutmut
+- CRAP: `harness crap --max=30` — complexity × coverage gate (blocking by default; `enforce_crap = false` to stay advisory)
+- Mutation: `harness mutation --min-coverage=70 --max-runtime=600` — mutmut (advisory unless `enforce_mutation = true` or `--min-score=` is set; see `harness nightly`)
 - Setup: `harness setup-hooks` to install git pre-commit hook
 - Auto-format: runs automatically after Claude edits via `Stop` hook (post-edit)
 
@@ -46,6 +47,12 @@ complexity_max_args = 7        # lizard argument count cap
 complexity_max_loc = 100       # lizard LOC cap
 mutation_min_coverage = 70.0   # `mutation` skip when suite coverage is lower
 mutation_max_runtime = 600     # `mutation` seconds before SIGTERM
+mutation_min_score = 80.0      # kill ratio (%) enforced when blocking
+
+# Gate enforcement — flip the "fake-confidence detectors" on/off
+enforce_crap = true            # CRAP exits 1 on offenders (set false to stay advisory)
+run_mutation_in_ci = false     # include mutation in `harness ci`
+enforce_mutation = false       # mutation exits 1 when score < mutation_min_score
 
 # Acceptance (Gherkin) — all optional
 acceptance_runner = "pytest-bdd" # "pytest-bdd" | "behave" | "off" (auto if unset)

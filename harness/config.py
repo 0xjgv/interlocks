@@ -126,6 +126,10 @@ class HarnessConfig:
     complexity_max_args: int = 7
     mutation_min_coverage: float = 70.0
     mutation_max_runtime: int = 600
+    mutation_min_score: float = 80.0
+    enforce_crap: bool = True
+    run_mutation_in_ci: bool = False
+    enforce_mutation: bool = False
     # Acceptance (Gherkin) — all optional; resolved lazily by the task.
     acceptance_runner: AcceptanceRunner | None = None
     features_dir: Path | None = None
@@ -251,7 +255,8 @@ _INT_THRESHOLDS = (
     "complexity_max_args",
     "mutation_max_runtime",
 )
-_FLOAT_THRESHOLDS = ("crap_max", "mutation_min_coverage")
+_FLOAT_THRESHOLDS = ("crap_max", "mutation_min_coverage", "mutation_min_score")
+_BOOL_THRESHOLDS = ("enforce_crap", "run_mutation_in_ci", "enforce_mutation")
 
 
 def _threshold_overrides(table: dict[str, Any]) -> dict[str, Any]:
@@ -267,6 +272,10 @@ def _threshold_overrides(table: dict[str, Any]) -> dict[str, Any]:
             overrides[key] = value
     for key in _FLOAT_THRESHOLDS:
         value = _coerce_float(table.get(key))
+        if value is not None:
+            overrides[key] = value
+    for key in _BOOL_THRESHOLDS:
+        value = _coerce_bool(table.get(key))
         if value is not None:
             overrides[key] = value
     return overrides
@@ -287,6 +296,12 @@ def _coerce_float(raw: object) -> float | None:
         return None
     if isinstance(raw, (int, float)):
         return float(raw)
+    return None
+
+
+def _coerce_bool(raw: object) -> bool | None:
+    if isinstance(raw, bool):
+        return raw
     return None
 
 

@@ -135,17 +135,21 @@ def test_ci_fails_on_violation(tmp_project: Path, dirty_src: str, expected_fragm
 def test_ci_in_process_queues_all_tasks(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Stub run_tasks — just verify cmd_ci composes the expected task list."""
+    """Stub run_tasks + inline gates — verify cmd_ci composes the expected task list
+    plus the sequential post-coverage gates."""
     from harness.stages import ci as ci_mod
 
-    descs: list[str] = []
+    parallel: list[str] = []
+    sequential: list[str] = []
     monkeypatch.setattr(
-        ci_mod, "run_tasks", lambda tasks: descs.extend(t.description for t in tasks)
+        ci_mod, "run_tasks", lambda tasks: parallel.extend(t.description for t in tasks)
     )
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda: sequential.append("Mutation"))
 
     ci_mod.cmd_ci()
 
-    assert descs == [
+    assert parallel == [
         "Format check",
         "Lint check",
         "Complexity (lizard)",
@@ -155,4 +159,37 @@ def test_ci_in_process_queues_all_tasks(
         "Architecture (import-linter)",
         "Acceptance (pytest-bdd)",
     ]
+    assert sequential == ["CRAP"]
     assert "CI Checks" in capsys.readouterr().out
+
+
+def test_ci_in_process_includes_mutation_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """`run_mutation_in_ci = true` → cmd_ci also runs cmd_mutation sequentially."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "ci-mut"
+            version = "0.0.0"
+
+            [tool.harness]
+            run_mutation_in_ci = true
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    from harness.stages import ci as ci_mod
+
+    sequential: list[str] = []
+    monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda: sequential.append("Mutation"))
+
+    ci_mod.cmd_ci()
+    assert sequential == ["CRAP", "Mutation"]

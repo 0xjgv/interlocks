@@ -86,6 +86,10 @@ def test_threshold_defaults_when_absent(tmp_project: Path) -> None:
     assert cfg.complexity_max_args == 7
     assert cfg.mutation_min_coverage == 70.0
     assert cfg.mutation_max_runtime == 600
+    assert cfg.mutation_min_score == 80.0
+    assert cfg.enforce_crap is True
+    assert cfg.run_mutation_in_ci is False
+    assert cfg.enforce_mutation is False
 
 
 def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,6 +109,10 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         complexity_max_args = 5
         mutation_min_coverage = 85.0
         mutation_max_runtime = 300
+        mutation_min_score = 92.5
+        enforce_crap = false
+        run_mutation_in_ci = true
+        enforce_mutation = true
         """,
     )
     monkeypatch.chdir(tmp_path)
@@ -116,6 +124,10 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert cfg.complexity_max_args == 5
     assert cfg.mutation_min_coverage == 85.0
     assert cfg.mutation_max_runtime == 300
+    assert cfg.mutation_min_score == 92.5
+    assert cfg.enforce_crap is False
+    assert cfg.run_mutation_in_ci is True
+    assert cfg.enforce_mutation is True
 
 
 def test_invalid_threshold_types_fall_back_to_defaults(

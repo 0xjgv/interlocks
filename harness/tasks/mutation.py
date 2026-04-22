@@ -1,4 +1,4 @@
-"""Mutation testing via mutmut. Advisory."""
+"""Mutation testing via mutmut."""
 
 from __future__ import annotations
 
@@ -71,11 +71,13 @@ def _print_survivors(survived: list[str], changed: set[str] | None) -> None:
 
 
 def cmd_mutation() -> None:
-    """Mutation score via mutmut (reads ``[tool.mutmut]``). Advisory unless --min-score is set.
+    """Mutation score via mutmut (reads ``[tool.mutmut]``).
 
-    CLI flags ``--min-coverage=`` / ``--max-runtime=`` win; otherwise the thresholds
-    come from ``cfg.mutation_min_coverage`` / ``cfg.mutation_max_runtime``
-    (defaults 70.0 / 600, overridable via ``[tool.harness]``).
+    CLI flags ``--min-coverage=`` / ``--max-runtime=`` / ``--min-score=`` win;
+    otherwise thresholds come from ``cfg.mutation_min_coverage`` /
+    ``cfg.mutation_max_runtime`` / ``cfg.mutation_min_score`` (defaults
+    70.0 / 600 / 80.0, overridable via ``[tool.harness]``). Advisory by default;
+    set ``enforce_mutation = true`` to exit 1 when score < ``mutation_min_score``.
     """
     cfg = load_config()
     min_cov = float(arg_value("--min-coverage=", str(cfg.mutation_min_coverage)))
@@ -90,7 +92,12 @@ def cmd_mutation() -> None:
 
     timeout = int(arg_value("--max-runtime=", str(cfg.mutation_max_runtime)))
     min_score_arg = arg_value("--min-score=", "")
-    min_score = float(min_score_arg) if min_score_arg else None
+    if min_score_arg:
+        min_score: float | None = float(min_score_arg)
+    elif cfg.enforce_mutation:
+        min_score = cfg.mutation_min_score
+    else:
+        min_score = None
     changed = changed_py_files_vs_main() if "--changed-only" in sys.argv else None
 
     completed = _run_mutmut(timeout)

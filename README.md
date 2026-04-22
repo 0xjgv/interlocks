@@ -17,14 +17,15 @@ Run inside any Python project:
 ```
 harness help         # show commands + detected project config
 harness check        # fix + format + typecheck + test
-harness ci           # read-only lint + format check + typecheck + deps + arch + coverage + complexity
+harness ci           # read-only lint + format check + typecheck + deps + arch + coverage + complexity + CRAP
+harness nightly      # long-running gates: coverage + mutation (blocking on score)
 harness pre-commit   # staged-only checks (install via `harness setup-hooks`)
 harness coverage --min=80
 harness audit                        # CVE scan via pip-audit
 harness deps                         # dep hygiene (unused/missing/transitive) via deptry
 harness arch                         # architectural contracts via import-linter (default: src ↛ tests)
-harness crap --max=30                # advisory complexity × coverage gate
-harness mutation --max-runtime=600   # advisory mutation score
+harness crap --max=30                # complexity × coverage gate (blocking; `enforce_crap = false` to opt out)
+harness mutation --max-runtime=600   # mutation score (advisory; see `harness nightly`)
 ```
 
 ## Configuration
@@ -56,7 +57,24 @@ complexity_max_args = 7        # lizard argument count cap
 complexity_max_loc = 100       # lizard LOC cap
 mutation_min_coverage = 70.0   # `harness mutation` skip if suite coverage is lower
 mutation_max_runtime = 600     # `harness mutation` seconds before SIGTERM
+mutation_min_score = 80.0      # kill ratio (%) enforced when mutation is blocking
+
+# Gate enforcement toggles
+enforce_crap = true            # `harness crap` exits 1 on offenders (set false to stay advisory)
+run_mutation_in_ci = false     # include mutation in `harness ci`
+enforce_mutation = false       # `harness mutation` exits 1 when score < mutation_min_score
 ```
+
+### Changelog — blocking CRAP (breaking default)
+
+Prior to this release, `harness crap` only printed offenders; its exit code never reflected failures. It now **exits 1 by default** when any function's CRAP score exceeds `crap_max` (default `30.0`). To keep the old advisory behaviour, add:
+
+```toml
+[tool.harness]
+enforce_crap = false
+```
+
+Mutation remains advisory by default (runtime is unbounded on real codebases). Enable blocking per-PR with `run_mutation_in_ci = true` + `enforce_mutation = true`, or schedule `harness nightly` via cron for a bounded, blocking mutation run.
 
 Run `harness help` to see what was auto-detected and which thresholds are in effect.
 

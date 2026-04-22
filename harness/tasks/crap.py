@@ -1,4 +1,4 @@
-"""CRAP complexity x coverage gate. Advisory."""
+"""CRAP complexity x coverage gate."""
 
 from __future__ import annotations
 
@@ -6,24 +6,43 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from harness.config import load_config
 from harness.git import changed_py_files_vs_main
 from harness.runner import arg_value, fail, fail_skip, generate_coverage_xml, ok, tool
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 _LIZARD_LINE = re.compile(r"^\s*(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+(\S+)@(\d+)-(\d+)@(.+)$")
 
 
+def _source_prefix(root: ET.Element) -> str:
+    """Return a ``cwd``-relative prefix for ``<sources><source>`` (or "")."""
+    for src in root.findall("sources/source"):
+        text = (src.text or "").strip()
+        if not text:
+            continue
+        try:
+            rel = Path(text).resolve().relative_to(Path.cwd().resolve())
+        except ValueError:
+            continue
+        return rel.as_posix()
+    return ""
+
+
 def _parse_coverage(cov_file: Path) -> dict[str, dict[int, int]]:
-    """Return {filename: {lineno: hits}} from a coverage.xml file."""
+    """Return {filename: {lineno: hits}} keyed by cwd-relative paths.
+
+    coverage.xml stores filenames relative to ``<source>`` (e.g. ``cli.py`` when
+    source is ``harness/``). Prefix with the source dir so keys match the
+    ``harness/cli.py`` paths lizard emits.
+    """
+    root = ET.parse(cov_file).getroot()
+    prefix = _source_prefix(root)
     cov_map: dict[str, dict[int, int]] = {}
-    for cls in ET.parse(cov_file).iter("class"):
+    for cls in root.iter("class"):
         fn = cls.get("filename", "")
-        cov_map[fn] = {
+        key = f"{prefix}/{fn}" if prefix and not fn.startswith(prefix + "/") else fn
+        cov_map[key] = {
             int(ln.get("number", "0")): int(ln.get("hits", "0"))
             for ln in cls.iter("line")
             if ln.get("number")
@@ -61,10 +80,11 @@ def _compute_offenders(
 
 
 def cmd_crap() -> None:
-    """CRAP = ccn^2 * (1-cov)^3 + ccn per function. Advisory — lizard + coverage XML.
+    """CRAP = ccn^2 * (1-cov)^3 + ccn per function — lizard + coverage XML.
 
     Threshold precedence: ``--max=N`` on argv > ``cfg.crap_max`` (default 30.0,
-    overridable via ``[tool.harness] crap_max``).
+    overridable via ``[tool.harness] crap_max``). Blocking by default; set
+    ``enforce_crap = false`` to keep it advisory.
     """
     cfg = load_config()
     max_crap = float(arg_value("--max=", str(cfg.crap_max)))
@@ -86,6 +106,9 @@ def cmd_crap() -> None:
         ok(f"CRAP: all functions below {max_crap}")
         return
     offenders.sort(reverse=True)
-    fail(f"CRAP: {len(offenders)} function(s) exceed {max_crap}")
     for crap, ccn, cov, loc in offenders[:20]:
         print(f"    CRAP={crap:6.1f}  CCN={ccn:3d}  cov={cov * 100:5.1f}%  {loc}")
+    message = f"CRAP: {len(offenders)} function(s) exceed {max_crap}"
+    if cfg.enforce_crap:
+        fail_skip(message)
+    fail(message)

@@ -54,3 +54,31 @@ def test_init_acceptance_refuses_to_overwrite(tmp_project: Path) -> None:
     assert result.returncode != 0
     assert existing.read_text(encoding="utf-8") == "# pre-existing\n"
     assert "refusing to overwrite" in result.stdout
+
+
+def test_init_acceptance_in_process_scaffolds(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In-process call — lets coverage.py see the happy path."""
+    monkeypatch.chdir(tmp_project)
+    from harness.tasks.init_acceptance import cmd_init_acceptance
+
+    cmd_init_acceptance()
+    assert (tmp_project / "tests" / "features" / "example.feature").is_file()
+    assert (tmp_project / "tests" / "step_defs" / "test_example.py").is_file()
+    assert (tmp_project / "tests" / "step_defs" / "conftest.py").is_file()
+
+
+def test_init_acceptance_in_process_refuses_overwrite(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """In-process call — exercises the refuse-to-overwrite branch for coverage."""
+    (tmp_project / "tests" / "features").mkdir()
+    existing = tmp_project / "tests" / "features" / "example.feature"
+    existing.write_text("# pre-existing\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    from harness.tasks.init_acceptance import cmd_init_acceptance
+
+    with pytest.raises(SystemExit):
+        cmd_init_acceptance()
+    assert existing.read_text(encoding="utf-8") == "# pre-existing\n"

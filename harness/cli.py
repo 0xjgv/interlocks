@@ -11,6 +11,7 @@ from harness.config import load_config
 from harness.stages.check import cmd_check
 from harness.stages.ci import cmd_ci
 from harness.stages.clean import cmd_clean
+from harness.stages.nightly import cmd_nightly
 from harness.stages.post_edit import cmd_post_edit
 from harness.stages.pre_commit import cmd_pre_commit
 from harness.stages.setup_hooks import cmd_hooks
@@ -70,6 +71,10 @@ def _print_detected_block() -> None:
     print(f"  complexity_max_loc     {cfg.complexity_max_loc}")
     print(f"  mutation_min_coverage  {cfg.mutation_min_coverage}")
     print(f"  mutation_max_runtime   {cfg.mutation_max_runtime}")
+    print(f"  mutation_min_score     {cfg.mutation_min_score}")
+    print(f"  enforce_crap           {cfg.enforce_crap}")
+    print(f"  run_mutation_in_ci     {cfg.run_mutation_in_ci}")
+    print(f"  enforce_mutation       {cfg.enforce_mutation}")
 
 
 TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
@@ -93,8 +98,11 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 "Scaffold tests/features + tests/step_defs (pytest-bdd layout)",
             ),
             "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
-            "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
-            "mutation": (cmd_mutation, "Mutation testing via mutmut (advisory)"),
+            "crap": (cmd_crap, "CRAP complexity x coverage gate"),
+            "mutation": (
+                cmd_mutation,
+                "Mutation testing via mutmut (advisory; see `harness nightly`)",
+            ),
         },
     ),
     (
@@ -102,7 +110,8 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
         {
             "check": (cmd_check, "Fix + format + typecheck + test (full repo)"),
             "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
-            "ci": (cmd_ci, "Full verification: lint, typecheck, tests, coverage"),
+            "ci": (cmd_ci, "Full verification: lint, typecheck, tests, coverage, CRAP"),
+            "nightly": (cmd_nightly, "Long-running gates: coverage + mutation (blocking)"),
             "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
             "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
             "clean": (cmd_clean, "Remove cache and build artifacts"),
