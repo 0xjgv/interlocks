@@ -104,3 +104,39 @@ def test_mutation_runs_and_prints_score(
 
     captured = capsys.readouterr()
     assert "Mutation: score" in captured.out
+
+
+# ─────────────── threshold cascade ─────────────────────
+
+
+def test_mutation_min_coverage_comes_from_config(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """[tool.harness] mutation_min_coverage = 95 → skip message mentions 95.0%."""
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + "\n[tool.harness]\nmutation_min_coverage = 95\n", encoding="utf-8"
+    )
+    # .coverage must exist for _coverage_line_rate to read it; stubbed XML below.
+    (tmp_project / ".coverage").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["harness", "mutation"])
+
+    from harness.tasks.mutation import cmd_mutation
+
+    # With no coverage.xml, the task bails before checking min_cov; to exercise the
+    # threshold read we build a stub coverage.xml with a low line-rate.
+    (tmp_project / "coverage.xml").write_text(
+        '<?xml version="1.0" ?><coverage line-rate="0.5"></coverage>', encoding="utf-8"
+    )
+    # Patch generate_coverage_xml to return the existing stub instead of regenerating.
+    import harness.tasks.mutation as mutation_mod
+
+    monkeypatch.setattr(
+        mutation_mod, "generate_coverage_xml", lambda: tmp_project / "coverage.xml"
+    )
+
+    cmd_mutation()  # advisory — must never SystemExit
+    captured = capsys.readouterr()
+    assert "95" in captured.out  # threshold surfaced in the skip message

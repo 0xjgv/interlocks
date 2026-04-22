@@ -7,6 +7,7 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from harness.config import load_config
 from harness.git import changed_py_files_vs_main
 from harness.runner import arg_value, fail, generate_coverage_xml, ok, python_m, warn_skip
 
@@ -70,8 +71,14 @@ def _print_survivors(survived: list[str], changed: set[str] | None) -> None:
 
 
 def cmd_mutation() -> None:
-    """Mutation score via mutmut (reads ``[tool.mutmut]``). Advisory unless --min-score is set."""
-    min_cov = float(arg_value("--min-coverage=", "70"))
+    """Mutation score via mutmut (reads ``[tool.mutmut]``). Advisory unless --min-score is set.
+
+    CLI flags ``--min-coverage=`` / ``--max-runtime=`` win; otherwise the thresholds
+    come from ``cfg.mutation_min_coverage`` / ``cfg.mutation_max_runtime``
+    (defaults 70.0 / 600, overridable via ``[tool.harness]``).
+    """
+    cfg = load_config()
+    min_cov = float(arg_value("--min-coverage=", str(cfg.mutation_min_coverage)))
     rate = _coverage_line_rate()
     if rate is None:
         warn_skip("mutation: no coverage data — run `harness coverage` first")
@@ -81,7 +88,7 @@ def cmd_mutation() -> None:
         warn_skip(f"mutation: suite coverage {pct:.1f}% < {min_cov}%")
         return
 
-    timeout = int(arg_value("--max-runtime=", "600"))
+    timeout = int(arg_value("--max-runtime=", str(cfg.mutation_max_runtime)))
     min_score_arg = arg_value("--min-score=", "")
     min_score = float(min_score_arg) if min_score_arg else None
     changed = changed_py_files_vs_main() if "--changed-only" in sys.argv else None
