@@ -61,10 +61,14 @@ def _compute_offenders(
 
 
 def cmd_crap() -> None:
-    """CRAP = ccn^2 * (1-cov)^3 + ccn per function. Advisory — lizard + coverage XML."""
-    max_crap = float(arg_value("--max=", "30"))
-    changed = changed_py_files_vs_main() if "--changed-only" in sys.argv else None
+    """CRAP = ccn^2 * (1-cov)^3 + ccn per function. Advisory — lizard + coverage XML.
+
+    Threshold precedence: ``--max=N`` on argv > ``cfg.crap_max`` (default 30.0,
+    overridable via ``[tool.harness] crap_max``).
+    """
     cfg = load_config()
+    max_crap = float(arg_value("--max=", str(cfg.crap_max)))
+    changed = changed_py_files_vs_main() if "--changed-only" in sys.argv else None
 
     cov_file = generate_coverage_xml()
     if not cov_file.exists():

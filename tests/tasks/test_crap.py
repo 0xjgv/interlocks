@@ -79,3 +79,41 @@ def test_crap_advisory_does_not_exit(
 
     captured = capsys.readouterr()
     assert "CRAP" in captured.out
+
+
+def test_crap_default_threshold_from_config(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`[tool.harness] crap_max = 5.0` surfaces in the 'all below N' success line."""
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + "\n[tool.harness]\ncrap_max = 5.0\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["harness", "crap"])  # no --max= override
+    _run_coverage(tmp_project)
+
+    from harness.tasks.crap import cmd_crap
+
+    cmd_crap()
+    captured = capsys.readouterr()
+    assert "5.0" in captured.out
+
+
+def test_crap_cli_max_overrides_config(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--max=N` on argv wins over `[tool.harness] crap_max`."""
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + "\n[tool.harness]\ncrap_max = 5.0\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["harness", "crap", "--max=42.5"])
+    _run_coverage(tmp_project)
+
+    from harness.tasks.crap import cmd_crap
+
+    cmd_crap()
+    captured = capsys.readouterr()
+    assert "42.5" in captured.out
