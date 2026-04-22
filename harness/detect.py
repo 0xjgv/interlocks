@@ -20,10 +20,12 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-    from harness.config import TestInvoker, TestRunner
+    from harness.config import AcceptanceRunner, HarnessConfig, TestInvoker, TestRunner
 
 
 _PYTEST_WORD = re.compile(r"(?<![A-Za-z0-9_-])pytest(?![A-Za-z0-9_-])")
+_PYTEST_BDD_WORD = re.compile(r"(?<![A-Za-z0-9_-])pytest[-_]bdd(?![A-Za-z0-9_-])")
+_BEHAVE_WORD = re.compile(r"(?<![A-Za-z0-9_-])behave(?![A-Za-z0-9_-])")
 
 _TEST_DIR_CANDIDATES = ("tests", "test", "src/tests")
 _SKIP_SRC_DIRS = frozenset({
@@ -63,8 +65,12 @@ def _iter_declared_deps(pyproject: dict[str, Any]) -> Iterator[str]:
         yield from uv_tool.get(key, []) or []
 
 
+def _deps_mention(pattern: re.Pattern[str], pyproject: dict[str, Any]) -> bool:
+    return any(pattern.search(str(dep)) for dep in _iter_declared_deps(pyproject))
+
+
 def _deps_mention_pytest(pyproject: dict[str, Any]) -> bool:
-    return any(_PYTEST_WORD.search(str(dep)) for dep in _iter_declared_deps(pyproject))
+    return _deps_mention(_PYTEST_WORD, pyproject)
 
 
 def detect_test_runner(
@@ -159,3 +165,48 @@ def detect_test_invoker(project_root: Path) -> TestInvoker:
     if (project_root / "uv.lock").is_file():
         return "uv"
     return "python"
+
+
+_FEATURES_DIR_CANDIDATES = ("tests/features", "features")
+
+
+def detect_features_dir(project_root: Path, test_dir: Path) -> Path | None:
+    """Return the canonical Gherkin ``features/`` directory if one exists.
+
+    Search order: ``tests/features/``, ``features/``, ``<test_dir>/features/``.
+    Returns ``None`` when no directory matches — callers treat that as a no-op.
+    """
+    for relative in _FEATURES_DIR_CANDIDATES:
+        candidate = project_root / relative
+        if candidate.is_dir():
+            return candidate.resolve()
+    in_test_dir = test_dir / "features"
+    if in_test_dir.is_dir():
+        return in_test_dir.resolve()
+    return None
+
+
+def _behave_layout(features_dir: Path) -> bool:
+    """Heuristic: behave mandates ``features/steps/`` + ``features/environment.py``."""
+    return (features_dir / "steps").is_dir() and (features_dir / "environment.py").is_file()
+
+
+def detect_acceptance_runner(
+    cfg: HarnessConfig, pyproject: dict[str, Any]
+) -> AcceptanceRunner | None:
+    """Pick ``pytest-bdd`` | ``behave`` based on explicit override → layout → deps.
+
+    Returns ``None`` when nothing should run: ``acceptance_runner = "off"`` or
+    no ``features_dir``. Explicit ``[tool.harness] acceptance_runner`` wins.
+    """
+    if cfg.acceptance_runner == "off":
+        return None
+    if cfg.acceptance_runner is not None:
+        return cfg.acceptance_runner
+    if cfg.features_dir is None:
+        return None
+    if _behave_layout(cfg.features_dir):
+        return "behave"
+    if _deps_mention(_BEHAVE_WORD, pyproject) and not _deps_mention(_PYTEST_BDD_WORD, pyproject):
+        return "behave"
+    return "pytest-bdd"

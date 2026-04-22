@@ -34,6 +34,7 @@ source-include = ["harness/defaults/**"]
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "pytest-bdd>=8.1",
 ]
 
 # ── Harness (self-config; all keys optional — defaults come from auto-detect) ──
@@ -56,6 +57,9 @@ markers = [
 target-version = "py313"
 line-length = 99
 preview = true
+# harness/defaults/ holds bundled data files (templates copied into user
+# projects); they're not pyharness source and ship their own ruff config.
+extend-exclude = ["harness/defaults"]
 
 [tool.ruff.lint]
 select = [
@@ -170,6 +174,11 @@ tests_dir = ["tests/"]
 # ── Deptry ─────────────────────────────────────────────────────────
 # These tools ship as CLIs we invoke via subprocess — not imported — so deptry
 # can't see the usage on its own.
+
+[tool.deptry]
+# Bundled templates ship as data files and import target-project deps
+# (pytest-bdd, etc.) that pyharness itself doesn't ship with.
+extend_exclude = ["harness/defaults"]
 
 [tool.deptry.per_rule_ignores]
 DEP002 = ["basedpyright", "coverage", "deptry", "import-linter", "lizard", "mutmut", "pip-audit", "ruff"]

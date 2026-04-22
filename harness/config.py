@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from harness.detect import (
+    detect_features_dir,
     detect_src_dir,
     detect_test_dir,
     detect_test_invoker,
@@ -24,6 +25,7 @@ from harness.detect import (
 
 TestRunner = Literal["pytest", "unittest"]
 TestInvoker = Literal["python", "uv"]
+AcceptanceRunner = Literal["pytest-bdd", "behave", "off"]
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -43,6 +45,7 @@ def _find_project_root_cached(origin: Path) -> Path:
     return origin
 
 
+@cache
 def _load_pyproject(project_root: Path) -> dict[str, Any]:
     path = project_root / "pyproject.toml"
     if not path.is_file():
@@ -99,6 +102,13 @@ def _invoker_override(table: dict[str, Any]) -> TestInvoker | None:
     return None
 
 
+def _acceptance_runner_override(table: dict[str, Any]) -> AcceptanceRunner | None:
+    value = table.get("acceptance_runner")
+    if value in ("pytest-bdd", "behave", "off"):
+        return value
+    return None
+
+
 @dataclass(frozen=True)
 class HarnessConfig:
     project_root: Path
@@ -116,6 +126,10 @@ class HarnessConfig:
     complexity_max_args: int = 7
     mutation_min_coverage: float = 70.0
     mutation_max_runtime: int = 600
+    # Acceptance (Gherkin) — all optional; resolved lazily by the task.
+    acceptance_runner: AcceptanceRunner | None = None
+    features_dir: Path | None = None
+    run_acceptance_in_check: bool = False
 
     @property
     def src_dir_arg(self) -> str:
@@ -126,6 +140,13 @@ class HarnessConfig:
     def test_dir_arg(self) -> str:
         """Project-root-relative string form of ``test_dir`` for CLI arguments."""
         return _relative_str(self.test_dir, self.project_root)
+
+    @property
+    def features_dir_arg(self) -> str | None:
+        """Project-root-relative string form of ``features_dir``, or ``None``."""
+        if self.features_dir is None:
+            return None
+        return _relative_str(self.features_dir, self.project_root)
 
 
 def _relative_str(path: Path, base: Path) -> str:
@@ -193,6 +214,15 @@ def _load_config_cached(project_root: Path) -> HarnessConfig:
     test_invoker: TestInvoker = invoker_override or detect_test_invoker(project_root)
     thresholds = _threshold_overrides(table)
 
+    acceptance_runner = _acceptance_runner_override(table)
+    features_dir_override = table.get("features_dir")
+    features_dir = (
+        (project_root / features_dir_override).resolve()
+        if isinstance(features_dir_override, str)
+        else detect_features_dir(project_root, test_dir)
+    )
+    run_acceptance_in_check = bool(table.get("run_acceptance_in_check"))
+
     return HarnessConfig(
         project_root=project_root,
         src_dir=src_dir,
@@ -200,6 +230,9 @@ def _load_config_cached(project_root: Path) -> HarnessConfig:
         test_runner=test_runner,
         test_invoker=test_invoker,
         pytest_args=pytest_args,
+        acceptance_runner=acceptance_runner,
+        features_dir=features_dir,
+        run_acceptance_in_check=run_acceptance_in_check,
         **thresholds,
     )
 
@@ -254,3 +287,4 @@ def clear_cache() -> None:
     """Clear cached configuration — used by tests that mutate the project on disk."""
     _find_project_root_cached.cache_clear()
     _load_config_cached.cache_clear()
+    _load_pyproject.cache_clear()

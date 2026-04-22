@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from harness.runner import run_tasks, section
+from harness.tasks.acceptance import task_acceptance
 from harness.tasks.arch import task_arch
 from harness.tasks.complexity import task_complexity
 from harness.tasks.coverage import task_coverage
@@ -23,7 +24,7 @@ def cmd_ci() -> None:
         task_typecheck(),
         task_coverage(),
     ]
-    arch = task_arch()
-    if arch is not None:
-        tasks.append(arch)
+    for optional in (task_arch(), task_acceptance()):
+        if optional is not None:
+            tasks.append(optional)
     run_tasks(tasks)

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from harness.config import load_config
 from harness.reports.suppressions import print_suppressions_report
 from harness.runner import run, run_tasks, section
+from harness.tasks.acceptance import task_acceptance
 from harness.tasks.deps import task_deps
 from harness.tasks.fix import cmd_fix
 from harness.tasks.format import cmd_format
@@ -21,7 +23,12 @@ def cmd_check() -> None:
     try:
         cmd_fix()
         cmd_format()
-        run_tasks([task_typecheck(), task_test()])
+        parallel = [task_typecheck(), task_test()]
+        if load_config().run_acceptance_in_check:
+            acceptance = task_acceptance()
+            if acceptance is not None:
+                parallel.append(acceptance)
+        run_tasks(parallel)
         run(task_deps(), no_exit=True)
     finally:
         print_suppressions_report()

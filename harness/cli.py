@@ -14,6 +14,7 @@ from harness.stages.clean import cmd_clean
 from harness.stages.post_edit import cmd_post_edit
 from harness.stages.pre_commit import cmd_pre_commit
 from harness.stages.setup_hooks import cmd_hooks
+from harness.tasks.acceptance import cmd_acceptance
 from harness.tasks.arch import cmd_arch
 from harness.tasks.audit import cmd_audit
 from harness.tasks.coverage import cmd_coverage
@@ -21,6 +22,7 @@ from harness.tasks.crap import cmd_crap
 from harness.tasks.deps import cmd_deps
 from harness.tasks.fix import cmd_fix
 from harness.tasks.format import cmd_format
+from harness.tasks.init_acceptance import cmd_init_acceptance
 from harness.tasks.lint import cmd_lint
 from harness.tasks.mutation import cmd_mutation
 from harness.tasks.test import cmd_test
@@ -55,6 +57,10 @@ def _print_detected_block() -> None:
     print(f"  test_invoker           {cfg.test_invoker}")
     if cfg.pytest_args:
         print(f"  pytest_args            {list(cfg.pytest_args)}")
+    if cfg.features_dir_arg is not None:
+        print(f"  features_dir           {cfg.features_dir_arg}")
+    if cfg.acceptance_runner is not None:
+        print(f"  acceptance_runner      {cfg.acceptance_runner}")
     print()
     print("Thresholds (override via [tool.harness] or ~/.config/harness/config.toml):")
     print(f"  coverage_min           {cfg.coverage_min}")
@@ -78,6 +84,14 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             "audit": (cmd_audit, "Audit dependencies for known vulnerabilities"),
             "deps": (cmd_deps, "Dep hygiene: unused/missing/transitive (deptry)"),
             "arch": (cmd_arch, "Architectural contracts (import-linter; default: src ↛ tests)"),
+            "acceptance": (
+                cmd_acceptance,
+                "Gherkin acceptance tests (pytest-bdd default; behave auto-detected)",
+            ),
+            "init-acceptance": (
+                cmd_init_acceptance,
+                "Scaffold tests/features + tests/step_defs (pytest-bdd layout)",
+            ),
             "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
             "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
             "mutation": (cmd_mutation, "Mutation testing via mutmut (advisory)"),

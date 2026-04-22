@@ -89,6 +89,9 @@ class Task:
     cmd: list[str]
     pre_cmds: tuple[list[str], ...] = ()
     test_summary: bool = False
+    # Widened by tools whose benign states use non-zero exit codes (e.g. pytest
+    # returns 5 when it collects nothing).
+    allowed_rcs: tuple[int, ...] = (0,)
 
 
 @dataclass
@@ -104,7 +107,7 @@ def run(task: Task, *, no_exit: bool = False) -> None:
     """Run ``task`` silently; print ✓/✗. Exit on failure unless ``no_exit``."""
     result = _execute(task)
     _print_status(result, elapsed_suffix=False)
-    if result.returncode == 0:
+    if result.returncode in task.allowed_rcs:
         return
     _dump_failure(result, titled=False)
     if not no_exit:
@@ -128,7 +131,7 @@ def run_tasks(tasks: list[Task]) -> None:
             result = fut.result()
             results[futures[fut]] = result
             _print_status(result, elapsed_suffix=True)
-    failures = [r for r in results if r is not None and r.returncode != 0]
+    failures = [r for r in results if r is not None and r.returncode not in r.task.allowed_rcs]
     for failed in failures:
         _dump_failure(failed, titled=True)
     if failures:
@@ -195,14 +198,15 @@ def _pump(stream: IO[str] | None, tag: str, sink: io.StringIO) -> None:
 
 def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     task = result.task
+    succeeded = result.returncode in task.allowed_rcs
     suffix = ""
-    if result.returncode == 0 and task.test_summary:
+    if succeeded and task.test_summary:
         suffix = _parse_test_summary(result.stdout + result.stderr)
     if not suffix and elapsed_suffix:
         suffix = f" ({result.elapsed:.1f}s)"
     message = f"{task.description}{suffix}"
     with _PRINT_LOCK:
-        (ok if result.returncode == 0 else fail)(message)
+        (ok if succeeded else fail)(message)
 
 
 def _dump_failure(result: RunResult, *, titled: bool) -> None:

@@ -153,5 +153,6 @@ def test_ci_in_process_queues_all_tasks(
         "Type check",
         "Coverage >= 80%",
         "Architecture (import-linter)",
+        "Acceptance (pytest-bdd)",
     ]
     assert "CI Checks" in capsys.readouterr().out
