@@ -14,6 +14,7 @@ from harness.stages.clean import cmd_clean
 from harness.stages.post_edit import cmd_post_edit
 from harness.stages.pre_commit import cmd_pre_commit
 from harness.stages.setup_hooks import cmd_hooks
+from harness.tasks.arch import cmd_arch
 from harness.tasks.audit import cmd_audit
 from harness.tasks.coverage import cmd_coverage
 from harness.tasks.crap import cmd_crap
@@ -67,6 +68,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             "test": (cmd_test, "Run tests (auto-detects pytest vs unittest)"),
             "audit": (cmd_audit, "Audit dependencies for known vulnerabilities"),
             "deps": (cmd_deps, "Dep hygiene: unused/missing/transitive (deptry)"),
+            "arch": (cmd_arch, "Architectural contracts (import-linter; default: src ↛ tests)"),
             "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
             "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
             "mutation": (cmd_mutation, "Mutation testing via mutmut (advisory)"),

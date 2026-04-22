@@ -11,6 +11,7 @@
 - CI: `harness ci` — read-only lint, format check, typecheck, dep hygiene, complexity gate (lizard, CCN 15), tests with coverage
 - Audit: `harness audit` — audit dependencies for known vulnerabilities (via pip-audit)
 - Deps: `harness deps` — dependency hygiene (unused/missing/transitive) via deptry; auto-passes `--known-first-party` from `src_dir`. Override with `[tool.deptry]` in pyproject.
+- Arch: `harness arch` — architectural contracts via import-linter. Uses `[tool.importlinter]` when present; otherwise runs a default contract forbidding `src_dir` from importing `test_dir`. Skips with a nudge if `test_dir` isn't a Python package.
 - Coverage: `harness coverage --min=0` — coverage.py with threshold + uncovered listing
 - CRAP (advisory): `harness crap --max=30` — complexity × coverage gate
 - Mutation (advisory): `harness mutation --min-coverage=70 --max-runtime=600` — mutmut

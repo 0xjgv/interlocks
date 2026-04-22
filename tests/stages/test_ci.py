@@ -152,5 +152,6 @@ def test_ci_in_process_queues_all_tasks(
         "Deps (deptry)",
         "Type check",
         "Coverage >= 80%",
+        "Architecture (default: src ↛ tests)",
     ]
     assert "CI Checks" in capsys.readouterr().out

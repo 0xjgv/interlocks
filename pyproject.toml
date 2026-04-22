@@ -8,6 +8,7 @@ dependencies = [
     "basedpyright>=1.39.3",
     "coverage>=7.13.5",
     "deptry>=0.25.1",
+    "import-linter>=2.11",
     "lizard>=1.21.6",
     "mutmut>=3.0",
     "pip-audit>=2.7",
@@ -166,4 +167,4 @@ tests_dir = ["tests/"]
 # can't see the usage on its own.
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ["basedpyright", "coverage", "deptry", "lizard", "mutmut", "pip-audit", "ruff"]
+DEP002 = ["basedpyright", "coverage", "deptry", "import-linter", "lizard", "mutmut", "pip-audit", "ruff"]
