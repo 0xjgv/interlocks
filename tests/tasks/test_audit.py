@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess  # noqa: S404 — test harness invokes the CLI
+import subprocess
 import sys
 import textwrap
 from pathlib import Path

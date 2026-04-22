@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess  # noqa: S404
+import subprocess
 import sys
 from pathlib import Path
 
@@ -55,8 +55,8 @@ def test_clean_removes_cache_artifacts(tmp_project: Path) -> None:
 def test_clean_is_idempotent(tmp_project: Path) -> None:
     """Running clean twice should succeed even when nothing is left to remove."""
     cmd = [sys.executable, "-P", "-m", "harness.cli", "clean"]
-    first = subprocess.run(cmd, cwd=tmp_project, capture_output=True, text=True, check=False)  # noqa: S603
-    second = subprocess.run(cmd, cwd=tmp_project, capture_output=True, text=True, check=False)  # noqa: S603
+    first = subprocess.run(cmd, cwd=tmp_project, capture_output=True, text=True, check=False)
+    second = subprocess.run(cmd, cwd=tmp_project, capture_output=True, text=True, check=False)
 
     assert first.returncode == 0
     assert second.returncode == 0

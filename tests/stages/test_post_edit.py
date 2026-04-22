@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess  # noqa: S404 — test drives the harness CLI + git
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,7 +21,7 @@ line-length = 99
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S603, S607 — git on PATH
+    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S607 — git on PATH
 
 
 @pytest.fixture

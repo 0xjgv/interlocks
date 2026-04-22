@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess  # noqa: S404 — test primes .coverage via the coverage CLI
+import subprocess
 import sys
 import textwrap
 from pathlib import Path
@@ -47,7 +47,7 @@ _PYPROJECT = textwrap.dedent(
 def _run_coverage(cwd: Path) -> None:
     """Run the project's unittest suite under coverage so `.coverage` exists."""
     cmd = [sys.executable, "-m", "coverage", "run", "-m", "unittest", "discover", "-s", "tests"]
-    subprocess.run(cmd, cwd=cwd, check=True)  # noqa: S603 — trusted fixed argv
+    subprocess.run(cmd, cwd=cwd, check=True)
 
 
 @pytest.fixture

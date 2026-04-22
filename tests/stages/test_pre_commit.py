@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess  # noqa: S404 — test drives the harness CLI + git
+import subprocess
 import sys
 from pathlib import Path
 
@@ -25,11 +25,11 @@ typeCheckingMode = "standard"
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S603, S607 — git on PATH
+    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S607 — git on PATH
 
 
 def _git_capture(cwd: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)  # noqa: S603, S607 — git on PATH
+    result = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)  # noqa: S607 — git on PATH
     return result.stdout
 
 

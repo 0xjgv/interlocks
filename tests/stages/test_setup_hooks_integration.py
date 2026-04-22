@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess  # noqa: S404 — test drives the harness CLI + git
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,7 +22,7 @@ target-version = "py313"
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S603, S607 — git on PATH
+    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S607 — git on PATH
 
 
 @pytest.fixture
