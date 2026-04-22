@@ -1,6 +1,6 @@
 # pyharness
 
-A zero-config Python quality harness: lint, format, typecheck, test, coverage, audit — all behind `harness <task>`.
+A zero-config Python quality harness: lint, format, typecheck, test, coverage, audit, dep hygiene, architectural contracts — all behind `harness <task>`.
 
 ## Install
 
@@ -8,7 +8,7 @@ A zero-config Python quality harness: lint, format, typecheck, test, coverage, a
 pipx install pyharness   # or: uv tool install pyharness
 ```
 
-All tools (ruff, basedpyright, coverage, lizard, mutmut, pip-audit, pytest) ship with the CLI.
+All tools (ruff, basedpyright, coverage, lizard, mutmut, pip-audit, deptry, import-linter, pytest) ship with the CLI.
 
 ## Usage
 
@@ -17,11 +17,13 @@ Run inside any Python project:
 ```
 harness help         # show commands + detected project config
 harness check        # fix + format + typecheck + test
-harness ci           # read-only lint + format check + typecheck + coverage + complexity
+harness ci           # read-only lint + format check + typecheck + deps + arch + coverage + complexity
 harness pre-commit   # staged-only checks (install via `harness setup-hooks`)
 harness coverage --min=80
-harness audit
-harness crap --max=30           # advisory complexity × coverage gate
+harness audit                        # CVE scan via pip-audit
+harness deps                         # dep hygiene (unused/missing/transitive) via deptry
+harness arch                         # architectural contracts via import-linter (default: src ↛ tests)
+harness crap --max=30                # advisory complexity × coverage gate
 harness mutation --max-runtime=600   # advisory mutation score
 ```
 

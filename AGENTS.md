@@ -7,7 +7,7 @@
 
 ## Build, Test, and Development Commands
 - `uv run harness check` — local post-edit workflow: fix, format, typecheck, test, and suppression report.
-- `uv run harness ci` — read-only CI suite: lint, format check, typecheck, dependency audit, complexity gate, and tests with coverage.
+- `uv run harness ci` — read-only CI suite: lint, format check, typecheck, dep hygiene (deptry), complexity gate, architectural contracts (import-linter, when expressible), and tests with coverage.
 - `uv run harness pre-commit` — run the staged-file checks used by the git hook.
 - `uv run harness setup-hooks` — install the repository git hook.
 - `uv run python -m unittest discover -s tests` — direct test run when iterating on Python code.

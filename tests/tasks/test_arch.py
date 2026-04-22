@@ -82,17 +82,7 @@ def dirty_project(clean_project: Path) -> Path:
 @pytest.fixture
 def non_package_tests(tmp_path: Path) -> Path:
     """tests/ has no __init__.py — default contract can't be built, should skip gracefully."""
-    (tmp_path / "pyproject.toml").write_text(
-        _PYPROJECT
-        + textwrap.dedent(
-            """
-            [tool.harness]
-            src_dir = "arch_probe"
-            test_dir = "tests"
-            """
-        ),
-        encoding="utf-8",
-    )
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT + _PIN_DIRS, encoding="utf-8")
     src = tmp_path / "arch_probe"
     src.mkdir()
     (src / "__init__.py").write_text(_SRC_INIT, encoding="utf-8")

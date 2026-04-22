@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-_CLEAN_PYPROJECT = textwrap.dedent(
+_PYPROJECT_TEMPLATE = textwrap.dedent(
     """\
     [project]
     name = "deps-probe"
     version = "0.0.1"
     requires-python = ">=3.13"
-    dependencies = []
+    dependencies = [{deps}]
 
     [build-system]
     requires = ["setuptools>=61"]
@@ -23,47 +23,28 @@ _CLEAN_PYPROJECT = textwrap.dedent(
     """
 )
 
-_DIRTY_PYPROJECT = textwrap.dedent(
-    """\
-    [project]
-    name = "deps-probe"
-    version = "0.0.1"
-    requires-python = ">=3.13"
-    dependencies = ["requests>=2"]
+_SRC_CORE = "import os\n\nHOME = os.environ.get('HOME', '')\n"
 
-    [build-system]
-    requires = ["setuptools>=61"]
-    build-backend = "setuptools.build_meta"
-    """
-)
 
-_SRC_INIT = '"""Minimal package."""\n'
+def _make_probe(tmp_path: Path, deps: str) -> Path:
+    (tmp_path / "pyproject.toml").write_text(
+        _PYPROJECT_TEMPLATE.format(deps=deps), encoding="utf-8"
+    )
+    pkg = tmp_path / "deps_probe"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text('"""Minimal package."""\n', encoding="utf-8")
+    (pkg / "core.py").write_text(_SRC_CORE, encoding="utf-8")
+    return tmp_path
 
 
 @pytest.fixture
 def clean_project(tmp_path: Path) -> Path:
-    """Package that imports only stdlib — deptry should be happy."""
-    (tmp_path / "pyproject.toml").write_text(_CLEAN_PYPROJECT, encoding="utf-8")
-    pkg = tmp_path / "deps_probe"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text(_SRC_INIT, encoding="utf-8")
-    (pkg / "core.py").write_text(
-        "import os\n\nHOME = os.environ.get('HOME', '')\n", encoding="utf-8"
-    )
-    return tmp_path
+    return _make_probe(tmp_path, deps="")
 
 
 @pytest.fixture
 def dirty_project(tmp_path: Path) -> Path:
-    """Declares `requests` but never imports it — DEP002 unused dependency."""
-    (tmp_path / "pyproject.toml").write_text(_DIRTY_PYPROJECT, encoding="utf-8")
-    pkg = tmp_path / "deps_probe"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text(_SRC_INIT, encoding="utf-8")
-    (pkg / "core.py").write_text(
-        "import os\n\nHOME = os.environ.get('HOME', '')\n", encoding="utf-8"
-    )
-    return tmp_path
+    return _make_probe(tmp_path, deps='"requests>=2"')
 
 
 @pytest.mark.slow
