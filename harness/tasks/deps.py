@@ -13,6 +13,9 @@ def task_deps() -> Task:
 def _deptry_cmd(cfg: HarnessConfig) -> list[str]:
     # --known-first-party: derive from src_dir so intra-project imports aren't flagged
     # as transitive when the package name differs from [project].name in pyproject.
+    # No bundled-config fallback: deptry's `--config` doubles as the project-manifest
+    # pointer (for dep discovery), so pointing it at a shared default breaks detection.
+    # Deptry's built-in defaults apply automatically when the project has no [tool.deptry].
     return tool("deptry", cfg.src_dir_arg, "--known-first-party", cfg.src_dir.name)
 
 
