@@ -25,7 +25,14 @@ from harness.tasks.typecheck import cmd_typecheck
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# ── CLI dispatch ──────────────────────────────────────────────────
+
+def cmd_help() -> None:
+    width = max(len(name) for name in TASKS)
+    print("Usage: harness <command>")
+    print()
+    for name, (_, description) in TASKS.items():
+        print(f"  {name:<{width}}  {description}")
+
 
 TASKS: dict[str, tuple[Callable[..., None], str]] = {
     "fix": (cmd_fix, "Fix lint errors with ruff"),
@@ -43,6 +50,7 @@ TASKS: dict[str, tuple[Callable[..., None], str]] = {
     "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
     "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
     "clean": (cmd_clean, "Remove cache and build artifacts"),
+    "help": (cmd_help, "Show this help message"),
 }
 
 
@@ -50,12 +58,13 @@ def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
 
     if not args:
-        cmd_check()
+        cmd_help()
         return
 
     task_name = args[0]
     if task_name not in TASKS:
-        print(f"Unknown command: {task_name}")
+        print(f"Unknown command: {task_name}", file=sys.stderr)
+        cmd_help()
         sys.exit(1)
 
     TASKS[task_name][0]()
