@@ -130,3 +130,26 @@ def test_ci_fails_on_violation(tmp_project: Path, dirty_src: str, expected_fragm
 
     assert result.returncode != 0
     assert expected_fragment in result.stdout
+
+
+def test_ci_in_process_queues_all_tasks(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Stub run_tasks — just verify cmd_ci composes the expected task list."""
+    from harness.stages import ci as ci_mod
+
+    descs: list[str] = []
+    monkeypatch.setattr(
+        ci_mod, "run_tasks", lambda tasks: descs.extend(t.description for t in tasks)
+    )
+
+    ci_mod.cmd_ci()
+
+    assert descs == [
+        "Format check",
+        "Lint check",
+        "Complexity (lizard)",
+        "Type check",
+        "Coverage >= 80%",
+    ]
+    assert "CI Checks" in capsys.readouterr().out

@@ -116,6 +116,60 @@ def test_check_fixes_trivially_fixable_lint(tmp_project: Path) -> None:
     assert "import os" not in (tmp_project / "harness" / "core.py").read_text(encoding="utf-8")
 
 
+def test_check_in_process_dispatches_stages(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Stub fix/format/run_tasks + suppressions; confirm cmd_check orchestrates them."""
+    from harness.stages import check as check_mod
+
+    calls: list[object] = []
+    monkeypatch.setattr(check_mod, "cmd_fix", lambda: calls.append("fix"))
+    monkeypatch.setattr(check_mod, "cmd_format", lambda: calls.append("format"))
+    monkeypatch.setattr(
+        check_mod,
+        "run_tasks",
+        lambda tasks: calls.append(("run_tasks", [t.description for t in tasks])),
+    )
+    monkeypatch.setattr(
+        check_mod, "print_suppressions_report", lambda: calls.append("suppressions")
+    )
+
+    monkeypatch.chdir(tmp_project)
+    check_mod.cmd_check()
+
+    assert calls == [
+        "fix",
+        "format",
+        ("run_tasks", ["Type check", "Run tests"]),
+        "suppressions",
+    ]
+    assert "Quality Checks" in capsys.readouterr().out
+
+
+def test_check_in_process_runs_suppressions_on_failure(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Suppressions report is in a `finally` — runs even when an inner stage raises."""
+    from harness.stages import check as check_mod
+
+    calls: list[str] = []
+    monkeypatch.setattr(check_mod, "cmd_fix", lambda: calls.append("fix"))
+
+    def boom() -> None:
+        raise SystemExit(2)
+
+    monkeypatch.setattr(check_mod, "cmd_format", boom)
+    monkeypatch.setattr(check_mod, "run_tasks", lambda tasks: calls.append("run_tasks"))
+    monkeypatch.setattr(
+        check_mod, "print_suppressions_report", lambda: calls.append("suppressions")
+    )
+
+    monkeypatch.chdir(tmp_project)
+    with pytest.raises(SystemExit):
+        check_mod.cmd_check()
+    assert calls == ["fix", "suppressions"]
+
+
 def test_check_fails_when_tests_fail(tmp_project: Path) -> None:
     failing = textwrap.dedent(
         '''\

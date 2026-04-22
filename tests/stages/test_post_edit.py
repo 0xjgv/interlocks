@@ -73,6 +73,34 @@ def test_post_edit_noop_when_no_changes(tmp_project: Path) -> None:
     assert clean.read_text(encoding="utf-8") == "x = 1\n"
 
 
+def test_post_edit_noop_in_process(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No changed files -> cmd_post_edit returns immediately without running ruff."""
+    from harness.stages import post_edit as post_edit_mod
+
+    monkeypatch.setattr(post_edit_mod, "changed_py_files", list)
+    calls: list[object] = []
+    monkeypatch.setattr(post_edit_mod, "run", lambda *a, **k: calls.append(None))
+
+    monkeypatch.chdir(tmp_project)
+    post_edit_mod.cmd_post_edit()
+    assert calls == []
+
+
+def test_post_edit_in_process_runs_ruff_on_changed_files(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Changed files -> cmd_post_edit dispatches two run() calls (fix + format)."""
+    from harness.stages import post_edit as post_edit_mod
+
+    monkeypatch.setattr(post_edit_mod, "changed_py_files", lambda: ["harness/mod.py"])
+    tasks_ran: list[str] = []
+    monkeypatch.setattr(post_edit_mod, "run", lambda task, **_: tasks_ran.append(task.description))
+
+    monkeypatch.chdir(tmp_project)
+    post_edit_mod.cmd_post_edit()
+    assert tasks_ran == ["Fix lint errors", "Format code"]
+
+
 def test_post_edit_tolerates_unfixable_lint(tmp_project: Path) -> None:
     # file with lint issues ruff can't auto-fix (undefined name) -> no_exit
     target = tmp_project / "harness" / "bad.py"

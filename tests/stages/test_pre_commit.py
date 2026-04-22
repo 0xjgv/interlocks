@@ -76,3 +76,50 @@ def test_pre_commit_noop_when_nothing_staged(tmp_project: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "No staged Python files" in result.stdout
+
+
+def test_pre_commit_noop_in_process(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from harness.stages import pre_commit as pre_commit_mod
+
+    monkeypatch.setattr(pre_commit_mod, "staged_py_files", list)
+    pre_commit_mod.cmd_pre_commit()
+    assert "No staged Python files" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("staged", "expected_task_descs"),
+    [
+        (["harness/mod.py"], ["Type check", "Run tests"]),
+        (["tests/test_x.py"], ["Type check"]),
+    ],
+    ids=["src-runs-tests", "non-src-skips-tests"],
+)
+def test_pre_commit_in_process_dispatches(
+    monkeypatch: pytest.MonkeyPatch,
+    staged: list[str],
+    expected_task_descs: list[str],
+) -> None:
+    from harness.stages import pre_commit as pre_commit_mod
+
+    calls: list[object] = []
+    monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
+    monkeypatch.setattr(pre_commit_mod, "cmd_fix", lambda files: calls.append(("fix", files)))
+    monkeypatch.setattr(
+        pre_commit_mod, "cmd_format", lambda files: calls.append(("format", files))
+    )
+    monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
+    monkeypatch.setattr(
+        pre_commit_mod,
+        "run_tasks",
+        lambda tasks: calls.append(("run_tasks", [t.description for t in tasks])),
+    )
+
+    pre_commit_mod.cmd_pre_commit()
+    assert calls == [
+        ("fix", staged),
+        ("format", staged),
+        ("stage", staged),
+        ("run_tasks", expected_task_descs),
+    ]

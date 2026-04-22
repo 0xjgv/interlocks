@@ -51,3 +51,21 @@ def test_test_cli(tmp_project: Path, source: str, expected_rc: int) -> None:
         check=False,
     )
     assert result.returncode == expected_rc
+
+
+def test_test_passing_in_process(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.tasks.test import cmd_test
+
+    (tmp_project / "tests" / "test_sample.py").write_text(PASSING, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    cmd_test()  # no SystemExit on passing suite
+
+
+def test_test_failing_in_process(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from harness.tasks.test import cmd_test
+
+    (tmp_project / "tests" / "test_sample.py").write_text(FAILING, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    with pytest.raises(SystemExit) as exc:
+        cmd_test()
+    assert exc.value.code != 0

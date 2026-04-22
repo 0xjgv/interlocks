@@ -46,3 +46,21 @@ def test_audit_clean_deps_passes(tmp_project: Path) -> None:
     assert result.returncode == 0 or "No known vulnerabilities" in output, (
         f"audit failed unexpectedly: rc={result.returncode}\n{output}"
     )
+
+
+def test_audit_invokes_pip_audit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fast in-process check: cmd_audit builds a Task wrapping pip-audit and calls run()."""
+    from harness.runner import Task
+    from harness.tasks import audit as audit_mod
+
+    captured: dict[str, Task] = {}
+
+    def fake_run(task: Task, **_: object) -> None:
+        captured["task"] = task
+
+    monkeypatch.setattr(audit_mod, "run", fake_run)
+    audit_mod.cmd_audit()
+
+    task = captured["task"]
+    assert task.description == "Dep audit"
+    assert "pip_audit" in task.cmd

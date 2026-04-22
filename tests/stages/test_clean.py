@@ -61,3 +61,27 @@ def test_clean_is_idempotent(tmp_project: Path) -> None:
     assert first.returncode == 0
     assert second.returncode == 0
     assert "Ruff clean" in second.stdout
+
+
+def test_clean_in_process_removes_artifacts(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.stages import clean as clean_mod
+
+    monkeypatch.chdir(tmp_project)
+    # Stub the ruff subprocess — we only care about the filesystem cleanup path.
+    monkeypatch.setattr(clean_mod, "run", lambda *a, **k: None)
+    clean_mod.cmd_clean()
+
+    for name in (
+        ".ruff_cache",
+        "__pycache__",
+        "htmlcov",
+        "build",
+        "dist",
+        ".mutmut-cache",
+        ".coverage",
+        "mutmut-junit.xml",
+    ):
+        assert not (tmp_project / name).exists(), f"{name} still present"
+    assert not (tmp_project / "pkg" / "__pycache__").exists()
