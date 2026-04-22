@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from harness.runner import run, section, tool
+from harness.runner import Task, run, section, tool
 
 
 def cmd_clean() -> None:
@@ -28,4 +28,4 @@ def cmd_clean() -> None:
             p.unlink()
     for p in Path().rglob("__pycache__"):
         shutil.rmtree(p)
-    run("Ruff clean", tool("ruff", "clean"))
+    run(Task("Ruff clean", tool("ruff", "clean")))

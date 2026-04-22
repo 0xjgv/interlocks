@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from harness.git import changed_py_files_vs_main
 from harness.runner import arg_value, fail, generate_coverage_xml, ok, python_m, warn_skip
@@ -14,12 +15,12 @@ _MUTMUT = python_m("mutmut")
 
 def _coverage_line_rate() -> float | None:
     """Overall coverage.xml line-rate (0..1), or None if unreadable."""
-    cov_file = generate_coverage_xml()
-    if not cov_file.exists():
+    if not Path(".coverage").exists():
         return None
+    cov_file = generate_coverage_xml()
     try:
         root = ET.parse(cov_file).getroot()
-    except ET.ParseError:
+    except (ET.ParseError, FileNotFoundError):
         return None
     rate = root.get("line-rate")
     return float(rate) if rate is not None else None
@@ -72,8 +73,12 @@ def cmd_mutation() -> None:
     """Mutation score on `harness/`. Advisory unless --min-score is set."""
     min_cov = float(arg_value("--min-coverage=", "70"))
     rate = _coverage_line_rate()
-    if rate is None or rate * 100 < min_cov:
-        warn_skip(f"mutation: suite coverage < {min_cov}% — run `harness coverage` first")
+    if rate is None:
+        warn_skip("mutation: no coverage data — run `harness coverage` first")
+        return
+    pct = rate * 100
+    if pct < min_cov:
+        warn_skip(f"mutation: suite coverage {pct:.1f}% < {min_cov}%")
         return
 
     timeout = int(arg_value("--max-runtime=", "600"))

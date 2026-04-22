@@ -1,12 +1,18 @@
-"""Subprocess funnel + output formatting. Stdlib-only."""
+"""Subprocess funnel + parallel executor. Stdlib-only."""
 
 from __future__ import annotations
 
+import io
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 GREEN = "\033[32m"
 RED = "\033[31m"
@@ -17,6 +23,8 @@ _BIN = Path(sys.executable).parent
 
 _UNITTEST_SUMMARY = re.compile(r"Ran (\d+) tests? in ([\d.]+s)")
 _PYTEST_SUMMARY = re.compile(r"(\d+) passed[^\n]*?\s+in\s+([\d.]+)s")
+
+_PRINT_LOCK = threading.Lock()
 
 
 def tool(name: str, *args: str) -> list[str]:
@@ -74,37 +82,139 @@ def arg_value(flag: str, default: str) -> str:
     return next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith(flag)), default)
 
 
-def run(
-    description: str,
-    cmd: list[str],
-    *,
-    no_exit: bool = False,
-    test_summary: bool = False,
-) -> None:
-    """Run ``cmd`` silently; print ✓/✗ on completion."""
-    if VERBOSE:
-        print(f"  -> {' '.join(cmd)}")
-        result = subprocess.run(cmd, check=False)
-        if result.returncode != 0:
-            if no_exit:
-                return
-            sys.exit(result.returncode)
-        return
+@dataclass(frozen=True)
+class Task:
+    description: str
+    cmd: list[str]
+    pre_cmds: tuple[list[str], ...] = ()
+    test_summary: bool = False
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+@dataclass
+class RunResult:
+    task: Task
+    returncode: int
+    stdout: str
+    stderr: str
+    elapsed: float
+
+
+def run(task: Task, *, no_exit: bool = False) -> None:
+    """Run ``task`` silently; print ✓/✗. Exit on failure unless ``no_exit``."""
+    result = _execute(task)
+    _print_status(result, elapsed_suffix=False)
     if result.returncode == 0:
-        extra = _parse_test_summary(result.stdout + result.stderr) if test_summary else ""
-        print(f"  {GREEN}✓{RESET} {description}{extra}")
-    else:
-        print(f"  {RED}✗{RESET} {description}")
-        print(f"{RED}Command failed: {' '.join(cmd)}{RESET}")
+        return
+    _dump_failure(result, titled=False)
+    if not no_exit:
+        sys.exit(result.returncode)
+
+
+def run_tasks(tasks: list[Task]) -> None:
+    """Run ``tasks`` in parallel; stream ✓/✗ in completion order.
+
+    All tasks run to completion. On any failure, captured output is dumped
+    after the status block, and we ``sys.exit`` with the *first-in-task-list*
+    failure's returncode (deterministic; matches sequential semantics).
+    """
+    if not tasks:
+        return
+    results: list[RunResult | None] = [None] * len(tasks)
+    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        futures = {executor.submit(_execute, t): idx for idx, t in enumerate(tasks)}
+        for fut in as_completed(futures):
+            result = fut.result()
+            results[futures[fut]] = result
+            _print_status(result, elapsed_suffix=True)
+    failures = [r for r in results if r is not None and r.returncode != 0]
+    for failed in failures:
+        _dump_failure(failed, titled=True)
+    if failures:
+        sys.exit(failures[0].returncode)
+
+
+def _execute(task: Task) -> RunResult:
+    """Run each command in ``task``, stopping at the first non-zero."""
+    start = time.monotonic()
+    stdout_parts: list[str] = []
+    stderr_parts: list[str] = []
+    rc = 0
+    for cmd in (*task.pre_cmds, task.cmd):
+        rc, out, err = _run_one(cmd, task.description)
+        stdout_parts.append(out)
+        stderr_parts.append(err)
+        if rc != 0:
+            break
+    return RunResult(
+        task, rc, "".join(stdout_parts), "".join(stderr_parts), time.monotonic() - start
+    )
+
+
+def _run_one(cmd: list[str], tag: str) -> tuple[int, str, str]:
+    if VERBOSE:
+        return _run_one_streamed(cmd, tag)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return result.returncode, result.stdout, result.stderr
+
+
+def _run_one_streamed(cmd: list[str], tag: str) -> tuple[int, str, str]:
+    with _PRINT_LOCK:
+        print(f"  -> [{tag}] {' '.join(cmd)}")
+    with subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    ) as proc:
+        out_buf = io.StringIO()
+        err_buf = io.StringIO()
+        threads = [
+            threading.Thread(target=_pump, args=(proc.stdout, tag, out_buf), daemon=True),
+            threading.Thread(target=_pump, args=(proc.stderr, tag, err_buf), daemon=True),
+        ]
+        for t in threads:
+            t.start()
+        rc = proc.wait()
+        for t in threads:
+            t.join()
+        return rc, out_buf.getvalue(), err_buf.getvalue()
+
+
+def _pump(stream: IO[str] | None, tag: str, sink: io.StringIO) -> None:
+    if stream is None:
+        return
+    for line in iter(stream.readline, ""):
+        with _PRINT_LOCK:
+            sys.stdout.write(f"[{tag}] {line}")
+            sys.stdout.flush()
+        sink.write(line)
+
+
+def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
+    task = result.task
+    suffix = ""
+    if result.returncode == 0 and task.test_summary:
+        suffix = _parse_test_summary(result.stdout + result.stderr)
+    if not suffix and elapsed_suffix:
+        suffix = f" ({result.elapsed:.1f}s)"
+    message = f"{task.description}{suffix}"
+    with _PRINT_LOCK:
+        (ok if result.returncode == 0 else fail)(message)
+
+
+def _dump_failure(result: RunResult, *, titled: bool) -> None:
+    if VERBOSE:
+        return  # already streamed while running
+    task = result.task
+    with _PRINT_LOCK:
+        if titled:
+            print(f"\n--- {task.description} output ---")
+        print(f"{RED}Command failed: {' '.join(task.cmd)}{RESET}")
         if result.stdout:
             print(result.stdout, end="")
         if result.stderr:
             print(result.stderr, end="")
-        if no_exit:
-            return
-        sys.exit(result.returncode)
 
 
 def _parse_test_summary(output: str) -> str:

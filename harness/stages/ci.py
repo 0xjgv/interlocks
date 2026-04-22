@@ -1,20 +1,22 @@
-"""CI stage — full verification pipeline."""
+"""CI stage — full verification pipeline (all read-only gates in parallel)."""
 
 from __future__ import annotations
 
-from harness.runner import section
-from harness.tasks.complexity import cmd_complexity
-from harness.tasks.coverage import cmd_coverage
-from harness.tasks.format_check import cmd_format_check
-from harness.tasks.lint import cmd_lint
-from harness.tasks.typecheck import cmd_typecheck
+from harness.runner import run_tasks, section
+from harness.tasks.complexity import task_complexity
+from harness.tasks.coverage import task_coverage
+from harness.tasks.format_check import task_format_check
+from harness.tasks.lint import task_lint
+from harness.tasks.typecheck import task_typecheck
 
 
 def cmd_ci() -> None:
-    """Full verification: format_check, lint, complexity, typecheck, coverage."""
+    """Full verification: format_check, lint, complexity, typecheck, coverage — all parallel."""
     section("CI Checks")
-    cmd_format_check()
-    cmd_lint()
-    cmd_complexity()
-    cmd_typecheck()
-    cmd_coverage(min_pct=80)
+    run_tasks([
+        task_format_check(),
+        task_lint(),
+        task_complexity(),
+        task_typecheck(),
+        task_coverage(min_pct=80),
+    ])

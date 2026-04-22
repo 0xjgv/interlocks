@@ -1,22 +1,21 @@
-"""Check stage — fix, format, typecheck, test; print suppressions report in finally."""
+"""Check stage — fix, format, then {typecheck, test} in parallel; suppressions in finally."""
 
 from __future__ import annotations
 
 from harness.reports.suppressions import print_suppressions_report
-from harness.runner import section
+from harness.runner import run_tasks, section
 from harness.tasks.fix import cmd_fix
 from harness.tasks.format import cmd_format
-from harness.tasks.test import cmd_test
-from harness.tasks.typecheck import cmd_typecheck
+from harness.tasks.test import task_test
+from harness.tasks.typecheck import task_typecheck
 
 
 def cmd_check() -> None:
-    """Fix, format, typecheck, and test the full repo."""
+    """Fix, format (serial — both mutate files), then typecheck + test in parallel."""
     section("Quality Checks")
     try:
         cmd_fix()
         cmd_format()
-        cmd_typecheck()
-        cmd_test()
+        run_tasks([task_typecheck(), task_test()])
     finally:
         print_suppressions_report()
