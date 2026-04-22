@@ -168,3 +168,22 @@ tests_dir = ["tests/"]
 
 [tool.deptry.per_rule_ignores]
 DEP002 = ["basedpyright", "coverage", "deptry", "import-linter", "lizard", "mutmut", "pip-audit", "ruff"]
+
+# ── Import-Linter ──────────────────────────────────────────────────
+# Declaring explicit contracts overrides the default (src ↛ tests) that
+# `harness arch` synthesizes otherwise.
+
+[tool.importlinter]
+root_packages = ["harness", "tests"]
+
+[[tool.importlinter.contracts]]
+name = "Production does not import tests"
+type = "forbidden"
+source_modules = ["harness"]
+forbidden_modules = ["tests"]
+
+[[tool.importlinter.contracts]]
+name = "Tasks are primitives — stages compose them, not the other way"
+type = "forbidden"
+source_modules = ["harness.tasks"]
+forbidden_modules = ["harness.stages"]
