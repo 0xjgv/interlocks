@@ -26,6 +26,7 @@ from harness.detect import (
 TestRunner = Literal["pytest", "unittest"]
 TestInvoker = Literal["python", "uv"]
 AcceptanceRunner = Literal["pytest-bdd", "behave", "off"]
+MutationCIMode = Literal["off", "incremental", "full"]
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -109,6 +110,13 @@ def _acceptance_runner_override(table: dict[str, Any]) -> AcceptanceRunner | Non
     return None
 
 
+def _mutation_ci_mode_override(table: dict[str, Any]) -> MutationCIMode | None:
+    value = table.get("mutation_ci_mode")
+    if value in ("off", "incremental", "full"):
+        return value
+    return None
+
+
 @dataclass(frozen=True)
 class HarnessConfig:
     project_root: Path
@@ -130,6 +138,9 @@ class HarnessConfig:
     enforce_crap: bool = True
     run_mutation_in_ci: bool = False
     enforce_mutation: bool = False
+    # Dormant — consumed by a future `harness mutation --since=<ref>` feature.
+    mutation_ci_mode: MutationCIMode = "off"
+    mutation_since_ref: str = "origin/main"
     # Acceptance (Gherkin) — all optional; resolved lazily by the task.
     acceptance_runner: AcceptanceRunner | None = None
     features_dir: Path | None = None
@@ -234,6 +245,10 @@ def _load_config_cached(project_root: Path) -> HarnessConfig:
     )
     run_acceptance_in_check = bool(table.get("run_acceptance_in_check"))
 
+    mutation_ci_mode = _mutation_ci_mode_override(table) or "off"
+    since_ref_raw = table.get("mutation_since_ref")
+    mutation_since_ref = since_ref_raw if isinstance(since_ref_raw, str) else "origin/main"
+
     return HarnessConfig(
         project_root=project_root,
         src_dir=src_dir,
@@ -244,6 +259,8 @@ def _load_config_cached(project_root: Path) -> HarnessConfig:
         acceptance_runner=acceptance_runner,
         features_dir=features_dir,
         run_acceptance_in_check=run_acceptance_in_check,
+        mutation_ci_mode=mutation_ci_mode,
+        mutation_since_ref=mutation_since_ref,
         **thresholds,
     )
 
