@@ -41,7 +41,7 @@ TASKS: dict[str, tuple[Callable[..., None], str]] = {
     "crap": (cmd_crap, "CRAP complexity x coverage gate (advisory)"),
     "mutation": (cmd_mutation, "Mutation testing via mutmut (advisory)"),
     "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
-    "setup-hooks": (cmd_hooks, "Install git pre-commit hook"),
+    "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
     "clean": (cmd_clean, "Remove cache and build artifacts"),
 }
 
