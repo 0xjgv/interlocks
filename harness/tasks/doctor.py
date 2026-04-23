@@ -117,10 +117,9 @@ def _print_summary(warnings: list[str], failures: list[str]) -> None:
         print(f"  fail {len(failures)}")
         for msg in failures:
             print(f"    - {msg}")
-        return
     if warnings:
         print(f"  warn {len(warnings)}")
         for msg in warnings:
             print(f"    - {msg}")
-        return
-    print("  ok")
+    if not failures and not warnings:
+        print("  ok")
