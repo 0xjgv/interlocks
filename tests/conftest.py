@@ -102,9 +102,9 @@ def make_tmp_project(tmp_path: Path) -> TmpProjectFactory:
             _DEFAULT_PYPROJECT if pyproject is None else pyproject, encoding="utf-8"
         )
         _write_tree(root, _DEFAULT_SRC_FILES if src_files is None else src_files)
-        tests_root = root / "tests"
-        tests_root.mkdir(exist_ok=True)
-        _write_tree(tests_root, _DEFAULT_TEST_FILES if test_files is None else test_files)
+        tests_to_write = _DEFAULT_TEST_FILES if test_files is None else test_files
+        if tests_to_write:
+            _write_tree(root / "tests", tests_to_write)
         return root
 
     return factory
