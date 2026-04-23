@@ -47,6 +47,10 @@ test_runner = "pytest"
 test_invoker = "python"
 pytest_args = ["-q"]
 
+# Mutation gate (nightly). 67.9% baseline 2026-04-23; ratchet up as tests close
+# gaps in harness.tasks / harness.detect / harness.stages.
+mutation_min_score = 65.0
+
 # ── Ruff (lint + format) ────────────────────────────────────────────
 
 [tool.pytest.ini_options]

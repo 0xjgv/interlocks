@@ -9,7 +9,15 @@ from pathlib import Path
 
 from harness.config import load_config
 from harness.git import changed_py_files_vs_main
-from harness.runner import arg_value, fail, generate_coverage_xml, ok, python_m, warn_skip
+from harness.runner import (
+    arg_value,
+    capture,
+    fail,
+    generate_coverage_xml,
+    ok,
+    python_m,
+    warn_skip,
+)
 
 
 def _coverage_line_rate() -> float | None:
@@ -106,12 +114,7 @@ def cmd_mutation() -> None:
     mutmut = python_m("mutmut")
     completed = _run_mutmut(mutmut, timeout)
 
-    res = subprocess.run(
-        [*mutmut, "results", "--all=true"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    res = capture([*mutmut, "results", "--all=true"])
     by_status = _parse_results(res.stdout)
 
     killed = len(by_status.get("killed", []))

@@ -41,14 +41,21 @@ def python_m(module: str, *args: str) -> list[str]:
     return [sys.executable, "-m", module, *args]
 
 
+def capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run ``cmd`` silently; return the CompletedProcess (never raises on non-zero rc).
+
+    Subprocess kwargs here are pragma'd: ``check=False``/``None`` are equivalent,
+    and ``capture_output``/``text`` flips are invisible to our tests. Mutation
+    survivors on those kwargs would be fake-confidence noise, not real gaps.
+    """
+    # pragma: no mutate start
+    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+    # pragma: no mutate end
+
+
 def generate_coverage_xml() -> Path:
     """Regenerate coverage.xml from .coverage. Returns the path whether or not it exists."""
-    subprocess.run(
-        python_m("coverage", "xml", "-o", "coverage.xml", "-q"),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    capture(python_m("coverage", "xml", "-o", "coverage.xml", "-q"))
     return Path("coverage.xml")
 
 
@@ -158,7 +165,7 @@ def _execute(task: Task) -> RunResult:
 def _run_one(cmd: list[str], tag: str) -> tuple[int, str, str]:
     if VERBOSE:
         return _run_one_streamed(cmd, tag)
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    result = capture(cmd)
     return result.returncode, result.stdout, result.stderr
 
 

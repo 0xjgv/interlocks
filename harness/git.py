@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
-
 from harness.config import load_config
+from harness.runner import capture
 
 
 def _src_test_prefixes() -> tuple[str, ...]:
@@ -18,12 +17,7 @@ def _src_test_prefixes() -> tuple[str, ...]:
 
 def staged_py_files() -> list[str]:
     """Return staged .py files under the project's src/test dirs, excluding deletions."""
-    result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=d", "--relative"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = capture(["git", "diff", "--cached", "--name-only", "--diff-filter=d", "--relative"])
     prefixes = _src_test_prefixes()
     return [
         f
@@ -34,12 +28,7 @@ def staged_py_files() -> list[str]:
 
 def changed_py_files() -> list[str]:
     """Return .py files with uncommitted changes under the project's src/test dirs."""
-    result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = capture(["git", "status", "--porcelain"])
     prefixes = _src_test_prefixes()
     return [
         line[3:]
@@ -54,12 +43,7 @@ def changed_py_files_vs(ref: str) -> set[str]:
     Filtered by the project's configured src/test dirs, matching the
     behaviour of ``staged_py_files`` and ``changed_py_files``.
     """
-    res = subprocess.run(
-        ["git", "diff", "--name-only", "--find-renames=90%", f"{ref}...HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    res = capture(["git", "diff", "--name-only", "--find-renames=90%", f"{ref}...HEAD"])
     prefixes = _src_test_prefixes()
     return {f for f in res.stdout.splitlines() if f.endswith(".py") and f.startswith(prefixes)}
 
@@ -73,4 +57,4 @@ def stage(files: list[str]) -> None:
     """Stage the given files (no-op if list is empty)."""
     if not files:
         return
-    subprocess.run(["git", "add", *files], check=False)
+    capture(["git", "add", *files])

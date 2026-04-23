@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import re
-import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from harness.config import load_config
 from harness.git import changed_py_files_vs_main
-from harness.runner import arg_value, fail, fail_skip, generate_coverage_xml, ok, tool
+from harness.runner import (
+    arg_value,
+    capture,
+    fail,
+    fail_skip,
+    generate_coverage_xml,
+    ok,
+    tool,
+)
 
 _LIZARD_LINE = re.compile(r"^\s*(\d+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+(\S+)@(\d+)-(\d+)@(.+)$")
 
@@ -94,12 +101,7 @@ def cmd_crap() -> None:
     if not cov_file.exists():
         fail_skip("CRAP: coverage.xml not generated — run `harness coverage` first")
     cov_map = _parse_coverage(cov_file)
-    lizard_res = subprocess.run(
-        tool("lizard", cfg.src_dir_arg),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    lizard_res = capture(tool("lizard", cfg.src_dir_arg))
     offenders = _compute_offenders(lizard_res.stdout, cov_map, changed, max_crap)
 
     if not offenders:
