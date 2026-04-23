@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import TmpProjectFactory
+
 PYPROJECT = """\
 [project]
 name = "tmp-proj"
@@ -26,12 +28,12 @@ def _git(cwd: Path, *args: str) -> None:
 
 
 @pytest.fixture
-def tmp_project(tmp_path: Path) -> Path:
-    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
-    _git(tmp_path, "init", "-q")
-    _git(tmp_path, "config", "user.email", "t@e.co")
-    _git(tmp_path, "config", "user.name", "t")
-    return tmp_path
+def tmp_project(make_tmp_project: TmpProjectFactory) -> Path:
+    root = make_tmp_project(pyproject=PYPROJECT, src_files={}, test_files={})
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "t@e.co")
+    _git(root, "config", "user.name", "t")
+    return root
 
 
 def _run_setup_hooks(cwd: Path) -> subprocess.CompletedProcess[str]:

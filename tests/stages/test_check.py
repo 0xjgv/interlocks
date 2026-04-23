@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import TmpProjectFactory
+
 _PYPROJECT = textwrap.dedent(
     """\
     [project]
@@ -59,17 +61,18 @@ _TEST_SRC = textwrap.dedent(
 
 
 @pytest.fixture
-def tmp_project(tmp_path: Path) -> Path:
-    (tmp_path / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
-    pkg = tmp_path / "harness"
-    pkg.mkdir()
-    (pkg / "__init__.py").write_text(_INIT_SRC, encoding="utf-8")
-    (pkg / "core.py").write_text(_CLEAN_SRC, encoding="utf-8")
-    tests = tmp_path / "tests"
-    tests.mkdir()
-    (tests / "__init__.py").write_text("", encoding="utf-8")
-    (tests / "test_add.py").write_text(_TEST_SRC, encoding="utf-8")
-    return tmp_path
+def tmp_project(make_tmp_project: TmpProjectFactory) -> Path:
+    return make_tmp_project(
+        pyproject=_PYPROJECT,
+        src_files={
+            "harness/__init__.py": _INIT_SRC,
+            "harness/core.py": _CLEAN_SRC,
+        },
+        test_files={
+            "__init__.py": "",
+            "test_add.py": _TEST_SRC,
+        },
+    )
 
 
 def _run_check(cwd: Path) -> subprocess.CompletedProcess[str]:
