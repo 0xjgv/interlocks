@@ -37,7 +37,7 @@ def test_nightly_injects_min_score_from_config(
 
     nightly_mod.cmd_nightly()
 
-    assert f"--min-score={load_config().mutation_min_score}" in sys.argv
+    assert sys.argv == ["harness", "nightly", f"--min-score={load_config().mutation_min_score}"]
 
 
 def test_nightly_preserves_user_supplied_min_score(
@@ -48,5 +48,4 @@ def test_nightly_preserves_user_supplied_min_score(
 
     nightly_mod.cmd_nightly()
 
-    min_score_flags = [a for a in sys.argv if a.startswith("--min-score=")]
-    assert min_score_flags == ["--min-score=42.5"]
+    assert sys.argv == ["harness", "nightly", "--min-score=42.5"]
