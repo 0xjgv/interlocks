@@ -20,6 +20,13 @@ export const Route = createRootRoute({
         links: [
             { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
             { rel: 'stylesheet', href: appCss },
+            {
+                rel: 'preload',
+                as: 'font',
+                type: 'font/woff2',
+                href: '/fonts/InterVariable.woff2',
+                crossOrigin: '',
+            },
             { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
             { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: '' },
             {

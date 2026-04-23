@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { EditorialPage } from '../../components/markdown';
 import { pageContent } from '@/content/docs';
+import { site } from '@/lib/site';
 
 export const Route = createFileRoute('/docs/')({
     component: DocsPage,
@@ -23,6 +24,8 @@ function DocsPage() {
             sections={pageContent.sections}
             hero={pageContent.hero}
             logo="/pyharness-logo.svg"
+            brand={site.brand}
+            repoUrl={site.repoUrl}
         />
     );
 }

@@ -1558,6 +1558,8 @@ export type EditorialSection = {
 export function EditorialPage({
     toc,
     logo,
+    brand,
+    repoUrl,
     sidebar,
     headerLinks,
     children,
@@ -1568,6 +1570,8 @@ export function EditorialPage({
 }: {
     toc: FlatTocItem[];
     logo?: string;
+    brand: string;
+    repoUrl: string;
     sidebar?: React.ReactNode;
     headerLinks?: HeaderLink[];
     children?: React.ReactNode;
@@ -1601,7 +1605,7 @@ export function EditorialPage({
                                 color: 'var(--text-primary)',
                             }}
                         >
-                            pyharness
+                            {brand}
                         </span>
                     </a>
 
@@ -1640,7 +1644,7 @@ export function EditorialPage({
                         </a>
                         {/* GitHub button */}
                         <a
-                            href="https://github.com/0xjgv/pyharness"
+                            href={repoUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="no-underline flex items-center gap-1.5 px-3 py-1 rounded-md text-(length:--type-toc-size) font-[475] [font-family:var(--font-primary)] transition-colors duration-150"
