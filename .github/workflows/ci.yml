@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  harness-ci:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install project
+        run: uv sync
+
+      - name: Run harness ci
+        run: uv run harness ci
+
+      - name: Wheel install smoke test
+        if: hashFiles('tests/test_wheel_install.py') != ''
+        run: uv run pytest -m slow tests/test_wheel_install.py
