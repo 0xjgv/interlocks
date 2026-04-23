@@ -27,5 +27,7 @@ def cmd_pre_commit() -> None:
     src_prefix = f"{cfg.src_dir_arg}/"
     tasks = [task_typecheck()]
     if any(f.startswith(src_prefix) for f in files):
-        tasks.append(task_test())
+        test_task = task_test()
+        if test_task is not None:
+            tasks.append(test_task)
     run_tasks(tasks)

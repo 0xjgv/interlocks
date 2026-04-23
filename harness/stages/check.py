@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from harness.config import load_config
 from harness.reports.suppressions import print_suppressions_report
-from harness.runner import run, run_tasks, section
+from harness.runner import run, run_tasks, section, warn_skip
 from harness.tasks.acceptance import task_acceptance
 from harness.tasks.deps import task_deps
 from harness.tasks.fix import cmd_fix
@@ -23,7 +23,12 @@ def cmd_check() -> None:
     try:
         cmd_fix()
         cmd_format()
-        parallel = [task_typecheck(), task_test()]
+        parallel = [task_typecheck()]
+        test_task = task_test()
+        if test_task is None:
+            warn_skip("test: no test dir detected — run `harness init` to scaffold tests/")
+        else:
+            parallel.append(test_task)
         if load_config().run_acceptance_in_check:
             acceptance = task_acceptance()
             if acceptance is not None:
