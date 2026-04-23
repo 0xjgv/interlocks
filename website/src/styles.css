@@ -39,13 +39,11 @@
     --sidebar-ring: oklch(0.871 0.006 286.286);
 
     /* ===== Editorial design tokens (from playwriter) ===== */
-    --font-primary:
-        'Inter var', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    --font-primary: 'Newsreader', Georgia, 'Times New Roman', serif;
     --font-secondary: 'Newsreader', Georgia, 'Times New Roman', serif;
     --font-code:
-        'JetBrainsMono NF Mono', 'JetBrains Mono', 'SF Mono', 'SFMono-Regular', 'Consolas',
-        'Liberation Mono', Menlo, Courier, monospace;
+        'IBM Plex Mono', 'SF Mono', 'SFMono-Regular', 'Consolas', 'Liberation Mono', Menlo, Courier,
+        monospace;
 
     /* Editorial type scale */
     --type-body-size: 14px;

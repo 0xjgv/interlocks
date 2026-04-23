@@ -2,7 +2,7 @@
  * Editorial page styles.
  *
  * Key design decisions:
- * - Inter variable font at weight 460 (between normal and medium)
+ * - Newsreader serif at weight 460 (between normal and medium)
  * - Near-black text (#111) not pure black, with 40% opacity for secondary
  * - Narrow 550px content column for optimal reading
  * - Negative letter-spacing on headings for tight, refined feel
@@ -18,33 +18,10 @@
  * --link-accent, --page-border.
  */
 
-/* ========================================================================
-   Inter — variable font (v4.1). Only roman (no italic) to keep payload
-   small (~350 KB woff2). Covers all weights 100-900.
-   Source: github.com/rsms/inter
-   ======================================================================== */
-
-@font-face {
-    font-family: 'Inter var';
-    font-style: normal;
-    font-weight: 100 900;
-    font-display: swap;
-    src: url('/fonts/InterVariable.woff2') format('woff2');
-}
-
-/* ========================================================================
-   JetBrainsMono Nerd Font Mono — patched with box-drawing glyphs that
-   tile perfectly (no gaps). Only load regular 400 to keep payload small.
-   Source: github.com/ryanoasis/nerd-fonts
-   ======================================================================== */
-
-@font-face {
-    font-family: 'JetBrainsMono NF Mono';
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-    src: url('/fonts/JetBrainsMonoNerdFontMono-Regular.ttf') format('truetype');
-}
+/* Fonts ship via Google Fonts <link> in __root.tsx:
+   - Newsreader (primary + secondary — serif body)
+   - IBM Plex Mono (code)
+   No @font-face needed. */
 
 /* ========================================================================
    Selection

@@ -4,13 +4,13 @@ import appCss from '../styles.css?url';
 
 export const Route = createRootRoute({
     head: () => ({
-        title: 'pyharness — zero-config Python quality harness',
         meta: [
             { charSet: 'utf-8' },
             {
                 name: 'viewport',
                 content: 'width=device-width, initial-scale=1',
             },
+            { title: 'pyharness — zero-config Python quality harness' },
             {
                 name: 'description',
                 content:
@@ -24,7 +24,7 @@ export const Route = createRootRoute({
             { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: '' },
             {
                 rel: 'stylesheet',
-                href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=JetBrains+Mono:wght@400;500;700&display=swap',
+                href: 'https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=IBM+Plex+Mono:wght@400;500;700&display=swap',
             },
         ],
     }),

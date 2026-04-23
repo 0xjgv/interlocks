@@ -1595,12 +1595,13 @@ export function EditorialPage({
                     >
                         <span
                             style={{
-                                fontFamily: "'Bubblegum Sans', cursive",
+                                fontFamily: 'var(--font-primary)',
                                 fontSize: '22px',
+                                fontWeight: 700,
                                 color: 'var(--text-primary)',
                             }}
                         >
-                            Sigcli
+                            pyharness
                         </span>
                     </a>
 
@@ -1639,7 +1640,7 @@ export function EditorialPage({
                         </a>
                         {/* GitHub button */}
                         <a
-                            href="https://github.com/sigcli/sigcli"
+                            href="https://github.com/0xjgv/pyharness"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="no-underline flex items-center gap-1.5 px-3 py-1 rounded-md text-(length:--type-toc-size) font-[475] [font-family:var(--font-primary)] transition-colors duration-150"

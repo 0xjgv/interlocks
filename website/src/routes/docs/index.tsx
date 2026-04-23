@@ -5,8 +5,8 @@ import { pageContent } from '@/content/docs';
 export const Route = createFileRoute('/docs/')({
     component: DocsPage,
     head: () => ({
-        title: pageContent.meta.title,
         meta: [
+            { title: pageContent.meta.title },
             { name: 'description', content: pageContent.meta.description },
         ],
         links: [
