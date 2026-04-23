@@ -48,15 +48,25 @@ def changed_py_files() -> list[str]:
     ]
 
 
-def changed_py_files_vs_main() -> set[str]:
-    """Return .py files changed vs origin/main on the current branch."""
+def changed_py_files_vs(ref: str) -> set[str]:
+    """Return .py files changed vs ``ref`` on the current branch (renames followed).
+
+    Filtered by the project's configured src/test dirs, matching the
+    behaviour of ``staged_py_files`` and ``changed_py_files``.
+    """
     res = subprocess.run(
-        ["git", "diff", "--name-only", "origin/main...HEAD"],
+        ["git", "diff", "--name-only", "--find-renames=90%", f"{ref}...HEAD"],
         capture_output=True,
         text=True,
         check=False,
     )
-    return {f.strip() for f in res.stdout.splitlines() if f.strip().endswith(".py")}
+    prefixes = _src_test_prefixes()
+    return {f for f in res.stdout.splitlines() if f.endswith(".py") and f.startswith(prefixes)}
+
+
+def changed_py_files_vs_main() -> set[str]:
+    """Return .py files changed vs origin/main on the current branch."""
+    return changed_py_files_vs("origin/main")
 
 
 def stage(files: list[str]) -> None:
