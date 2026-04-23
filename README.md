@@ -1,38 +1,78 @@
 # pyharness
 
-A zero-config Python quality harness: lint, format, typecheck, test, coverage, acceptance, audit, dep hygiene, architecture, complexity, CRAP, mutation — all behind `harness <task>`.
+Ship one tool company-wide. Shared thresholds (CRAP + mutation gates), staged pipelines (`check` / `pre-commit` / `ci` / `nightly`), pre-wired tool defaults. Stop re-plumbing ruff + basedpyright + pytest + coverage + mutmut + deptry + import-linter + pip-audit + lizard in every repo.
 
-Every tool (ruff, basedpyright, coverage, pytest, pytest-bdd, lizard, mutmut, pip-audit, deptry, import-linter) ships with the CLI. No extra `pip install` dance.
+Built for platform / devex teams who need every Python service in the org to pass the same gates with the same config surface — without copy-pasting `[tool.ruff]` and pinning six dev-dependencies in each repo.
 
-## 60-second quickstart
+## Why not just `pip install ruff basedpyright pytest coverage mutmut deptry import-linter lizard pip-audit`?
 
+Because installing the tools is the easy part. The hard parts are what pyharness exists to do:
+
+### Shared thresholds — one `[tool.harness]` table is the source of truth
+
+Every gate (coverage, CRAP, mutation, complexity) reads the same table. Bump `coverage_min` once, every project that upgrades pyharness inherits it. Ship `crap_max` and `mutation_min_score` as org defaults via the bundled wheel or `~/.config/harness/config.toml`; projects override only when they must.
+
+```toml
+[tool.harness]
+coverage_min = 80
+crap_max = 30.0
+complexity_max_ccn = 15
+mutation_min_score = 80.0
+enforce_crap = true
 ```
-pipx install pyharness      # or: uv tool install pyharness
-cd your-python-project
-harness help                # see detected paths + resolved thresholds
-harness check               # fix + format + typecheck + test
-harness setup-hooks         # git pre-commit + Claude Code post-edit hook
-```
 
-Nothing to configure. Paths, test runner, and invoker auto-detect from `pyproject.toml`. Override any of them with `[tool.harness]` when you need to.
+No more drift between a team's `.coveragerc`, `pyproject`'s `[tool.coverage.report] fail_under`, and the CI script's `--fail-under=` flag.
 
-## Stages
-
-High-level entry points. Use these; reach for individual tasks only when debugging.
+### Staged gates — one tool, four pipelines, no per-repo bash
 
 | Stage | When | What runs |
 |-------|------|-----------|
-| `harness check` | After edits (dev loop) | fix → format → parallel(typecheck, test, acceptance¹) → deps (advisory) |
+| `harness check` | Dev inner loop | fix → format → parallel(typecheck, test, acceptance¹) → deps (advisory) |
 | `harness pre-commit` | Git pre-commit hook | fix + format on staged files, re-stage, typecheck, test (only if `src_dir/` touched) |
 | `harness ci` | On every PR | parallel(format-check, lint, complexity, deps, typecheck, coverage, arch², acceptance²) → CRAP (blocking) → mutation (if `run_mutation_in_ci`) |
 | `harness nightly` | Cron / scheduled | coverage → mutation (**always blocking** on `mutation_min_score`) |
-| `harness post-edit` | Claude Code `Stop` hook | ruff fix + format on files you just touched (silent no-op otherwise) |
 
 ¹ opt in with `run_acceptance_in_check = true`. ² skips silently if not configured / no features dir.
 
-`harness nightly` overrides `enforce_mutation` — by design it always fails the run when the score drops. That's the point of nightly.
+Your CI workflow becomes one line: `uv run harness ci`. Your pre-commit hook becomes one line: `harness pre-commit`. Your nightly cron becomes one line: `harness nightly`. The logic lives inside pyharness, upgrades with pyharness. `harness nightly` overrides `enforce_mutation` — by design it always fails the run when the score drops. That's the point of nightly.
 
-## Tasks
+### Self-dogfooded public-surface contracts
+
+pyharness's own CLI contract is guarded by its own acceptance suite (`tests/features/harness_cli.feature` + `tests/step_defs/`) running via pytest-bdd. Breaking changes to `harness <task>` behaviour fail `harness ci` on this very repo before they ship — the same mechanism you'd use to guard your platform's CLIs.
+
+### Bundled tool defaults — sensible configs ship in the wheel
+
+When your project has no `[tool.ruff]` / `pyrightconfig.json` / `.coveragerc` / `.importlinter`, harness injects its bundled default so `harness lint`, `harness typecheck`, `harness coverage`, `harness arch` all work in a brand-new repo with zero setup. Projects that need custom rules declare their own config and harness steps aside.
+
+| Task | Detected via | Bundled fallback |
+|------|-------------|------------------|
+| `lint` / `fix` / `format` / `format-check` | `[tool.ruff]` or `ruff.toml` / `.ruff.toml` | `harness/defaults/ruff.toml` |
+| `typecheck` | `[tool.basedpyright]` or `pyrightconfig.{json,toml}` | `harness/defaults/pyrightconfig.json` |
+| `coverage` | `[tool.coverage.*]` or `.coveragerc` | `harness/defaults/coveragerc` |
+| `arch` | `[tool.importlinter]` or `.importlinter` / `setup.cfg` | `harness/defaults/importlinter_template.ini` (default: `src ↛ tests`) |
+
+## Install
+
+```
+pipx install pyharness       # or: uv tool install pyharness
+```
+
+Every underlying tool (ruff, basedpyright, coverage, pytest, pytest-bdd, lizard, mutmut, pip-audit, deptry, import-linter) ships with the CLI. No extra `pip install` dance in your project.
+
+## Quickstart
+
+```
+cd your-python-project
+harness help                 # see detected paths + resolved thresholds
+harness check                # fix + format + typecheck + test
+harness setup-hooks          # git pre-commit + Claude Code post-edit hook
+```
+
+Nothing to configure. Paths, test runner, and invoker auto-detect from `pyproject.toml`. Override any of them under `[tool.harness]` when you need to.
+
+## Reference
+
+### Tasks
 
 Individual commands. Each reads config + CLI flags. Most call through a shared runner so output is consistent.
 
@@ -59,7 +99,7 @@ Individual commands. Each reads config + CLI flags. Most call through a shared r
 - `clean` — remove caches, build artifacts, mutation state
 - `help` — show detected paths + active thresholds
 
-## Acceptance tests (Gherkin)
+### Acceptance tests (Gherkin)
 
 Drop `.feature` files under `tests/features/` and step definitions under `tests/step_defs/`; `harness acceptance` runs them via pytest-bdd and shares coverage with `test`. Or run `harness init-acceptance` for a working example.
 
@@ -71,7 +111,7 @@ Runner detection order:
 
 Acceptance always runs in `harness ci` when a features dir exists. It's opt-in for `harness check` via `run_acceptance_in_check = true`.
 
-## Configuration
+### Configuration
 
 Nothing is required. `harness` walks up from CWD to the nearest `pyproject.toml` (pytest-style rootdir) and auto-detects:
 
@@ -123,7 +163,7 @@ Highest wins:
 3. **User-global `~/.config/harness/config.toml`** (respects `$XDG_CONFIG_HOME`) — same keys, no `[tool.harness]` wrapper
 4. **Bundled defaults** — values above, plus tool configs under `harness/defaults/` when the project has none
 
-Example `~/.config/harness/config.toml`:
+Example `~/.config/harness/config.toml` (org-wide baseline for every dev):
 
 ```toml
 coverage_min = 85
@@ -145,7 +185,7 @@ When the target project has no config for a given tool, harness injects its bund
 
 Run `harness help` to see what was detected and which thresholds are in effect.
 
-## Hooks
+### Hooks
 
 ```
 harness setup-hooks
