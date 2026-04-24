@@ -4,13 +4,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pyharness — One Python quality loop. Zero config.</title>
+  <title>Pyharness — Standardize Python quality checks across every repo.</title>
   <meta name="description"
-    content="Pyharness bundles ruff, basedpyright, pytest, pytest-bdd, coverage, mutmut, deptry, import-linter, pip-audit, and lizard behind one CLI. Install with pipx, run `harness check`, wire CI with one GitHub Action step." />
+    content="Pyharness gives Python teams one opinionated command surface for local checks and CI. Run it with uvx or pipx, standardize linting, type checks, tests, coverage, dependency hygiene, and more." />
   <meta property="og:title"
-    content="Pyharness — One Python quality loop. Zero config." />
+    content="Pyharness — Standardize Python quality checks across every repo." />
   <meta property="og:description"
-    content="Ruff, basedpyright, pytest, coverage, mutmut, deptry, import-linter, pip-audit, lizard — behind one CLI. Auto-detected paths. Preset thresholds. One GitHub Action for CI." />
+    content="One harness for linting, type checks, tests, coverage, dependency hygiene, and CI confidence. Try it instantly with uvx or pipx." />
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Ctext x='8' y='12' font-family='monospace' font-size='11' font-weight='700' fill='%23e6e600' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -426,12 +426,11 @@
 
     <section class="hero">
       <div class="hero-inner">
-        <h1>One Python quality loop. Zero config.</h1>
-        <p class="trust">Ruff, basedpyright, pytest, pytest-bdd, coverage, mutmut, deptry,
-          import-linter, pip-audit, and lizard &mdash; behind one CLI. Auto-detected paths.
-          Bundled tool defaults. One command after edits, one action in CI.</p>
+        <h1>Standardize Python quality checks across every repo.</h1>
+        <p class="trust">One harness for linting, type checks, tests, coverage, dependency
+          hygiene, and CI confidence.</p>
         <div class="copy-wrap" style="justify-content: center; margin-top: var(--s);">
-          <div class="install-cmd"><code id="install-cmd">pipx install pyharness</code></div>
+          <div class="install-cmd"><code id="install-cmd">uvx --from pyharness harness doctor</code></div>
           <button class="copy-btn" data-copy="install-cmd" aria-label="Copy install command">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="4" y="4" width="9" height="10" stroke="currentColor" stroke-width="1.3" />
@@ -439,7 +438,7 @@
             </svg>
           </button>
         </div>
-        <p class="install-alt">or <code>uv tool install pyharness</code></p>
+        <p class="install-alt">or <code>pipx run --spec pyharness harness doctor</code></p>
         <a class="cta-primary" href="#stages">Run your first check &rarr;</a>
       </div>
     </section>
