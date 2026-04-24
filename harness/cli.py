@@ -57,12 +57,13 @@ def cmd_help() -> None:
     ui.section("Usage")
     print("  Usage: harness <command>")
     ui.section("Commands")
-    width = max(len(name) for name in TASKS)
+    width = max(len(name) for name in TASKS) + 2
     for group_name, group in TASK_GROUPS:
         print()
         print(f"{group_name}:")
         for name, (_, description) in group.items():
-            print(f"  {name:<{width}}  {description}")
+            tag = f"[{name}]"
+            print(f"  {tag:<{width}}  {description}")
     _print_detected_block(cfg)
     ui.command_footer(start)
 

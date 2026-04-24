@@ -88,7 +88,7 @@ def test_crap_exits_when_enforced(
     assert excinfo.value.code == 1
 
     captured = capsys.readouterr()
-    assert "CRAP: 1 function(s) exceed 0.5" in captured.out
+    assert "1 function(s) exceed" in captured.out
 
 
 def test_crap_stays_advisory_when_disabled(
@@ -106,7 +106,7 @@ def test_crap_stays_advisory_when_disabled(
     cmd_crap()  # must not raise
 
     captured = capsys.readouterr()
-    assert "CRAP: 1 function(s) exceed 0.5" in captured.out
+    assert "1 function(s) exceed" in captured.out
 
 
 def test_cached_crap_advisory_skips_without_coverage(

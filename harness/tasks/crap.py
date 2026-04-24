@@ -6,24 +6,27 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from harness import ui
 from harness.config import load_config
 from harness.git import changed_py_files_vs_main
 from harness.metrics import compute_crap_rows, iter_py_files, lizard_functions, parse_coverage
-from harness.runner import (
-    arg_value,
-    fail,
-    fail_skip,
-    generate_coverage_xml,
-    ok,
-    warn_skip,
-)
+from harness.runner import arg_value, generate_coverage_xml
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from harness.config import HarnessConfig
+    from harness.metrics import CrapRow
 
 _CRAP_ADVISORY_LIMIT = 5
+
+
+def _print_offender(row: CrapRow) -> None:
+    print(
+        f"    CRAP={row.crap:6.1f}  CCN={row.ccn:3d}  "
+        f"cov={row.coverage * 100:5.1f}%  "
+        f"{row.name}@{row.start}-{row.end}@{row.path}"
+    )
 
 
 def cmd_crap() -> None:
@@ -38,42 +41,46 @@ def cmd_crap() -> None:
     changed = changed_py_files_vs_main() if "--changed-only" in sys.argv else None
 
     cov_file = generate_coverage_xml()
+    command = f"CRAP --max={max_crap}"
     if not cov_file.exists():
-        fail_skip("CRAP: coverage.xml not generated — run `harness coverage` first")
+        ui.row(
+            "crap",
+            command,
+            "skipped",
+            detail="coverage.xml missing — run `harness coverage`",
+            state="warn",
+        )
+        sys.exit(1)
     cov_map = parse_coverage(cov_file)
     fns = lizard_functions(cfg.src_dir_arg)
     offenders = compute_crap_rows(fns, cov_map, max_crap=max_crap, changed=changed)
 
     if not offenders:
-        ok(f"CRAP: all functions below {max_crap}")
+        ui.row("crap", command, "ok", state="ok")
         return
     offenders.sort(key=lambda r: r.crap, reverse=True)
+    ui.row("crap", command, f"{len(offenders)} function(s) exceed", state="fail")
     for row in offenders[:20]:
-        print(
-            f"    CRAP={row.crap:6.1f}  CCN={row.ccn:3d}  "
-            f"cov={row.coverage * 100:5.1f}%  "
-            f"{row.name}@{row.start}-{row.end}@{row.path}"
-        )
-    message = f"CRAP: {len(offenders)} function(s) exceed {max_crap}"
+        _print_offender(row)
     if cfg.enforce_crap:
-        fail_skip(message)
-    fail(message)
+        sys.exit(1)
 
 
 def cmd_crap_cached_advisory() -> None:
     """Print fast advisory CRAP output from fresh cached coverage, or a skip hint."""
     cfg = load_config()
+    command = f"CRAP --max={cfg.crap_max} (cached)"
     cov_cache = Path(".coverage")
     if not cov_cache.exists():
-        warn_skip("CRAP skipped: no coverage cache; run `harness coverage` to enable it")
+        ui.row("crap", command, "skipped", detail="no coverage cache", state="warn")
         return
     if _coverage_cache_is_stale(cov_cache, cfg):
-        warn_skip("CRAP skipped: coverage cache is stale; run `harness coverage` to refresh it")
+        ui.row("crap", command, "skipped", detail="coverage cache is stale", state="warn")
         return
 
     cov_file = generate_coverage_xml()
     if not cov_file.exists():
-        warn_skip("CRAP skipped: coverage.xml not generated; run `harness coverage` to refresh it")
+        ui.row("crap", command, "skipped", detail="coverage.xml missing", state="warn")
         return
 
     cov_map = parse_coverage(cov_file)
@@ -82,17 +89,14 @@ def cmd_crap_cached_advisory() -> None:
     )
     offenders.sort(key=lambda r: r.crap, reverse=True)
     if not offenders:
-        ok(f"CRAP: all functions below {cfg.crap_max} (cached coverage)")
+        ui.row("crap", command, "ok", state="ok")
         return
+    fail_command = f"CRAP --max={cfg.crap_max} (cached advisory)"
+    ui.row("crap", fail_command, f"{len(offenders)} function(s) exceed", state="fail")
     for row in offenders[:_CRAP_ADVISORY_LIMIT]:
-        print(
-            f"    CRAP={row.crap:6.1f}  CCN={row.ccn:3d}  "
-            f"cov={row.coverage * 100:5.1f}%  "
-            f"{row.name}@{row.start}-{row.end}@{row.path}"
-        )
+        _print_offender(row)
     if len(offenders) > _CRAP_ADVISORY_LIMIT:
         print(f"    … {len(offenders) - _CRAP_ADVISORY_LIMIT} more")
-    fail(f"CRAP: {len(offenders)} function(s) exceed {cfg.crap_max} (cached advisory)")
 
 
 def _coverage_cache_is_stale(cov_cache: Path, cfg: HarnessConfig) -> bool:

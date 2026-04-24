@@ -27,9 +27,9 @@ def _run_harness(subcmd: str) -> str:
 
 @then(parsers.parse('the output lists the command "{name}"'))
 def _lists_command(cli_output: str, name: str) -> None:
-    # `harness help` prints "  <name>  <description>" — match the name token.
-    assert f"  {name} " in cli_output or f"  {name}\n" in cli_output, (
-        f"expected {name!r} in help output; got:\n{cli_output}"
+    tag = f"[{name}]"
+    assert f"  {tag} " in cli_output or f"  {tag}\n" in cli_output, (
+        f"expected {tag!r} in help output; got:\n{cli_output}"
     )
 
 

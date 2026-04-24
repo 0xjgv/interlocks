@@ -80,6 +80,7 @@ def test_crap_passes_on_healthy_project(
 
     captured = capsys.readouterr()
     assert "CRAP" in captured.out
+    assert "[crap]" in captured.out
 
 
 def test_crap_default_threshold_from_config(
