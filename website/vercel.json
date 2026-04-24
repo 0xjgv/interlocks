@@ -1,5 +1,0 @@
-{
-    "version": 2,
-    "installCommand": "bun install --frozen-lockfile",
-    "buildCommand": "bun run build"
-}

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pyharness — One Python quality loop. Zero config.</title>
+  <meta name="description"
+    content="Pyharness bundles ruff, basedpyright, pytest, pytest-bdd, coverage, mutmut, deptry, import-linter, pip-audit, and lizard behind one CLI. Install with pipx, run `harness check`, wire CI with one GitHub Action step." />
+  <meta property="og:title"
+    content="Pyharness — One Python quality loop. Zero config." />
+  <meta property="og:description"
+    content="Ruff, basedpyright, pytest, coverage, mutmut, deptry, import-linter, pip-audit, lizard — behind one CLI. Auto-detected paths. Preset thresholds. One GitHub Action for CI." />
+  <link rel="icon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Ctext x='8' y='12' font-family='monospace' font-size='11' font-weight='700' fill='%23e6e600' text-anchor='middle'%3EP%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Quantico:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Quantico:ital,wght@0,700;1,700&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #000000;
+      --bg-panel: #0a0a0a;
+      --fg: #ffffff;
+      --muted: #888888;
+      --border: rgb(51 51 51 / 0.75);
+      --bw: 1px;
+      --accent: #e6e600;
+      --accent-red: #ff0000;
+      /* All padding, margin, and gap use this single step */
+      --s: 15px;
+      --font-logo: "Quantico", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "IBM Plex Mono", SFMono-Regular, "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+      --font-prose: "IBM Plex Sans", "Quantico", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-weight: 400;
+      font-size: 1rem;
+      line-height: 1.55;
+      background: var(--bg);
+      color: var(--fg);
+      overflow-x: hidden;
+    }
+
+    .wrap {
+      padding: calc(var(--s) * 2) calc(var(--s) * 2) 0;
+      position: relative;
+      max-width: 55rem;
+      margin: 0 auto;
+      z-index: 1;
+    }
+
+    .top {
+      padding: var(--s);
+      border-bottom: var(--bw) solid var(--border);
+      background: var(--bg);
+      position: sticky;
+      z-index: 10;
+      top: 0;
+    }
+
+    .top-inner {
+      max-width: 52rem;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      font-size: 1rem;
+      letter-spacing: 0.12em;
+      font-family: var(--font-logo);
+      display: flex;
+      align-items: center;
+      gap: calc(var(--s) * 0.5);
+    }
+
+    .logo img {
+      height: 1.5em;
+      filter: invert(1);
+    }
+
+    .cta-primary {
+      background: var(--fg);
+      color: var(--bg);
+      padding: calc(var(--s) * 0.5) var(--s);
+      text-decoration: none;
+      font-size: 0.78rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-family: var(--font-logo);
+    }
+
+    .cta-primary:hover {
+      opacity: 0.9;
+    }
+
+    .hero {
+      padding: calc(var(--s) * 3) var(--s) var(--s);
+      font-family: var(--font-logo);
+      text-align: center;
+      margin-bottom: 0;
+    }
+
+    .hero h1 {
+      font-size: clamp(1.4rem, 4vw, 2.2rem);
+      font-weight: 700;
+      line-height: 1.25;
+      margin: 0 0 var(--s) 0;
+    }
+
+    .hero-inner {
+      padding: calc(var(--s) * 3) calc(var(--s) * 2);
+    }
+
+    .hero .install-cmd {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s);
+      background: var(--bg-panel);
+      border: var(--bw) solid var(--border);
+      padding: calc(var(--s) * 0.5) var(--s);
+      margin: 0 0 var(--s) 0;
+      font-family: var(--font-mono);
+    }
+
+    .hero .install-alt {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0 0 var(--s) 0;
+    }
+
+    .hero .trust {
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      color: var(--accent);
+    }
+
+    .hero .cta-primary {
+      display: inline-block;
+      margin-block: var(--s) calc(var(--s) * 2);
+    }
+
+    .terminal-demo {
+      margin: calc(var(--s) * 2) 0 0 0;
+    }
+
+    .section-title {
+      font-family: var(--font-prose);
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      margin: var(--s);
+      text-transform: uppercase;
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      padding: var(--s);
+    }
+
+    .panel>*:first-child {
+      margin-top: 0;
+    }
+
+    .panel>*:last-child {
+      margin-bottom: 0;
+    }
+
+    .panel>*+* {
+      margin-top: var(--s);
+    }
+
+    .panel p {
+      margin: 0;
+    }
+
+    .prose {
+      font-family: var(--font-prose);
+      color: var(--fg);
+      padding: var(--s);
+    }
+
+    .prose li {
+      margin: var(--s);
+    }
+
+    pre.block {
+      margin: var(--s);
+      padding: calc(var(--s) * 2);
+      overflow-x: auto;
+      background: var(--bg);
+      border: var(--bw) solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      line-height: 1.45;
+      white-space: pre;
+    }
+
+    code {
+      font-family: var(--font-mono);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .accent {
+      color: var(--accent);
+    }
+
+    .copy-wrap {
+      display: flex;
+      align-items: center;
+      gap: var(--s);
+    }
+
+    .copy-btn {
+      flex-shrink: 0;
+      background: transparent;
+      border: var(--bw) solid var(--border);
+      color: var(--fg);
+      padding: var(--s);
+      cursor: pointer;
+      line-height: 0;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--muted);
+      color: var(--accent);
+    }
+
+    .catch-story {
+      font-family: var(--font-prose);
+      line-height: 1.65;
+      font-size: 0.94rem;
+    }
+
+    .catch-story strong {
+      color: var(--fg);
+    }
+
+    .catch-story p {
+      color: var(--muted);
+    }
+
+    .catch-story .verdict-line {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 0.875rem;
+    }
+
+    .catch-story a {
+      color: var(--fg);
+      text-decoration: underline;
+      text-underline-offset: var(--s);
+    }
+
+    .catch-story a:hover {
+      color: var(--accent);
+    }
+
+    .catch-story code {
+      color: var(--fg);
+      background: var(--bg);
+      padding: 0 4px;
+      border: var(--bw) solid var(--border);
+      font-size: 0.85em;
+    }
+
+    .section-cta {
+      display: inline-block;
+      color: var(--fg);
+      text-decoration: underline;
+      text-underline-offset: var(--s);
+      font-size: 0.94rem;
+      padding: var(--s) 0 0 0;
+    }
+
+    .section-cta:hover {
+      color: var(--accent);
+    }
+
+    .stages-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-prose);
+    }
+
+    .stages-list li {
+      padding: var(--s) 0;
+      border-top: var(--bw) solid var(--border);
+    }
+
+    .stages-list li:first-child {
+      border-top: 0;
+    }
+
+    .stages-list .stage-name {
+      display: inline-block;
+      font-family: var(--font-mono);
+      color: var(--accent);
+      font-size: 0.9rem;
+      margin-right: var(--s);
+    }
+
+    .stages-list .stage-when {
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-family: var(--font-mono);
+    }
+
+    .stages-list .stage-what {
+      display: block;
+      color: var(--fg);
+      font-size: 0.92rem;
+      margin-top: calc(var(--s) * 0.4);
+      line-height: 1.5;
+    }
+
+    .wordmark-fade {
+      overflow: hidden;
+      padding-top: var(--s);
+      margin-bottom: -3px;
+      -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent);
+      mask-image: linear-gradient(to bottom, black 30%, transparent);
+    }
+
+    .wordmark-fade p {
+      margin: 0;
+      text-align: center;
+      font-size: 21vw;
+      line-height: 0.75;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: rgba(136, 136, 136, 0.25);
+      font-family: var(--font-logo);
+    }
+
+    footer.site {
+      padding: var(--s);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: var(--s);
+      font-size: 0.84rem;
+      color: var(--muted);
+    }
+
+    footer.site a {
+      color: var(--muted);
+      text-decoration: underline;
+      text-underline-offset: var(--s);
+    }
+
+    footer.site a:hover {
+      color: var(--fg);
+    }
+
+    .grid-rails {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: calc(var(--s) * 2);
+      z-index: 0;
+      pointer-events: none;
+      display: none;
+      border-left: var(--bw) solid var(--border);
+      border-right: var(--bw) solid var(--border);
+    }
+
+    @media (min-width: 40rem) {
+      .grid-rails {
+        display: block;
+      }
+    }
+
+    .section-divider {
+      padding: calc(var(--s) * 2) 0;
+      position: relative;
+      height: 1px;
+    }
+
+    .section-divider::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100vw;
+      height: 1px;
+      background: var(--border);
+    }
+  </style>
+</head>
+
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="logo">PYHARNESS</div>
+      <a href="https://github.com/0xjgv/pyharness" class="cta-primary">View on GitHub &rarr;</a>
+    </div>
+  </header>
+  <div class="wrap">
+    <div class="grid-rails" aria-hidden="true"></div>
+
+    <!-- 1. Hero + Install -->
+
+    <section class="hero">
+      <div class="hero-inner">
+        <h1>One Python quality loop. Zero config.</h1>
+        <p class="trust">Ruff, basedpyright, pytest, pytest-bdd, coverage, mutmut, deptry,
+          import-linter, pip-audit, and lizard &mdash; behind one CLI. Auto-detected paths.
+          Bundled tool defaults. One command after edits, one action in CI.</p>
+        <div class="copy-wrap" style="justify-content: center; margin-top: var(--s);">
+          <div class="install-cmd"><code id="install-cmd">pipx install pyharness</code></div>
+          <button class="copy-btn" data-copy="install-cmd" aria-label="Copy install command">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="4" width="9" height="10" stroke="currentColor" stroke-width="1.3" />
+              <path d="M11 2H3V12" stroke="currentColor" stroke-width="1.3" />
+            </svg>
+          </button>
+        </div>
+        <p class="install-alt">or <code>uv tool install pyharness</code></p>
+        <a class="cta-primary" href="#stages">Run your first check &rarr;</a>
+      </div>
+    </section>
+
+    <div class="section-divider" aria-hidden="true"></div>
+
+    <!-- 2. Terminal demo: `harness check` -->
+
+    <h2 class="section-title">`harness check` &mdash; the local edit loop</h2>
+    <div class="terminal-demo">
+      <pre class="block">$ harness check
+pyharness v1.0.0  ·  preset=baseline  ·  runner=pytest  ·  invoker=uv
+
+── Quality Checks ──────────────────────────────────────────
+  [fix]         ruff check --fix                      ok
+  [format]      ruff format                           ok (2 files reformatted)
+
+── Parallel ────────────────────────────────────────────────
+  [typecheck]   basedpyright                          0 errors, 0 warnings
+  [test]        pytest -q                             184 passed in 3.2s
+                                                      coverage 87.4%
+
+── Advisory ────────────────────────────────────────────────
+  [deps]        deptry                                ok
+  [crap]        cached (crap_max=30.0)                ok · 0 offenders
+
+── Suppressions ────────────────────────────────────────────
+  ruff : noqa              0
+  basedpyright : ignore    1   harness/runner.py:42
+  pytest.skip              2
+
+Completed in 7.4s</pre>
+    </div>
+
+    <div class="section-divider" aria-hidden="true"></div>
+
+    <!-- 3. Stages -->
+
+    <h2 class="section-title" id="stages">Stages &mdash; when to run what</h2>
+    <div class="panel">
+      <p class="muted" style="font-family: var(--font-prose); font-size: 0.9rem;">
+        Seven stages, one CLI. Each has a narrow job and a stable contract so hooks,
+        CI, and schedulers call the same commands you run locally.
+      </p>
+      <ul class="stages-list">
+        <li>
+          <span class="stage-name">harness check</span>
+          <span class="stage-when">&mdash; after edits, before pushing</span>
+          <span class="stage-what">fix &rarr; format &rarr; parallel(typecheck, test, acceptance when opted in) &rarr; deps advisory &rarr; cached CRAP &rarr; suppressions report.</span>
+        </li>
+        <li>
+          <span class="stage-name">harness pre-commit</span>
+          <span class="stage-when">&mdash; git pre-commit hook</span>
+          <span class="stage-what">fix and format staged Python files, re-stage, typecheck, run tests when source changed. Skip with <code>git commit --no-verify</code>.</span>
+        </li>
+        <li>
+          <span class="stage-name">harness ci</span>
+          <span class="stage-when">&mdash; pull requests and protected branches</span>
+          <span class="stage-what">format-check, lint, complexity (lizard, CCN 15), deps, typecheck, coverage, arch, acceptance &rarr; blocking CRAP &rarr; optional mutation.</span>
+        </li>
+        <li>
+          <span class="stage-name">harness nightly</span>
+          <span class="stage-when">&mdash; scheduled job</span>
+          <span class="stage-what">coverage then mutation, always blocking on <code>mutation_min_score</code>. Wire via cron or a GitHub Actions schedule.</span>
+        </li>
+        <li>
+          <span class="stage-name">harness post-edit</span>
+          <span class="stage-when">&mdash; editor / agent hook</span>
+          <span class="stage-what">advisory ruff fix and format on changed Python files. Installed as a Claude Code Stop hook by <code>setup-hooks</code>.</span>
+        </li>
+        <li>
+          <span class="stage-name">harness doctor</span>
+          <span class="stage-when">&mdash; first command in a new repo</span>
+          <span class="stage-what">static readiness check: detected paths, runner, invoker, active preset, resolved thresholds, blockers, and shortest next steps. Never runs tests or network.</span>
+        </li>
+        <li>
+          <span class="stage-name">harness clean</span>
+          <span class="stage-when">&mdash; local cleanup</span>
+          <span class="stage-what">removes caches, build artifacts, coverage output, mutation state, and <code>__pycache__/</code>.</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="section-divider" aria-hidden="true"></div>
+
+    <!-- 4. In practice -->
+
+    <h2 class="section-title">In practice</h2>
+    <div class="panel catch-story">
+      <p><strong>Monday morning.</strong> New Python repo, fresh from <code>git init</code>.
+        No <code>pyproject.toml</code> gate configured, no CI pipeline, no agreed thresholds.
+        The team wants a baseline by EOD.</p>
+      <p>You run <code>pipx install pyharness</code> and <code>harness doctor</code>. It prints
+        detected source and test directories, the active preset, resolved thresholds, and the
+        two commands you need next. You commit a three-line GitHub workflow that calls
+        <code>0xjgv/pyharness@v1</code>. Locally, <code>harness check</code> runs the same
+        gates CI will run, minus the heavy ones.</p>
+      <p>By the afternoon, the first PR lands. CI enforces lint, typecheck, tests, coverage,
+        CRAP, deps, arch, and acceptance &mdash; all from the reusable action. Nobody edited
+        eleven tool configs.</p>
+      <p class="verdict-line">Result: green CI in one PR. Config: zero.</p>
+      <a class="section-cta" href="https://github.com/0xjgv/pyharness">Read the docs on GitHub &rarr;</a>
+    </div>
+
+    <div class="section-divider" aria-hidden="true"></div>
+
+    <!-- Footer -->
+
+    <footer class="site">
+      <span>PYHARNESS v1.0.0 &middot; MIT</span>
+      <span>Forged with &#9874;&#65039;</span>
+      <a href="https://github.com/0xjgv/pyharness">GitHub</a>
+    </footer>
+    <div class="section-divider" aria-hidden="true"></div>
+  </div>
+  <div class="wordmark-fade" aria-hidden="true">
+    <p>PYHARNESS</p>
+  </div>
+
+  <script>
+    (function () {
+      document.querySelectorAll(".copy-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-copy");
+          var el = id ? document.getElementById(id) : null;
+          if (!el) return;
+          var text = el.textContent || "";
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text);
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+
+</html>
