@@ -60,7 +60,7 @@ def test_clean_is_idempotent(tmp_project: Path) -> None:
 
     assert first.returncode == 0
     assert second.returncode == 0
-    assert "Ruff clean" in second.stdout
+    assert "[clean]" in second.stdout
 
 
 def test_clean_in_process_removes_artifacts(

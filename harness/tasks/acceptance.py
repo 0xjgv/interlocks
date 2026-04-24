@@ -52,6 +52,8 @@ def _pytest_bdd_task(cfg: HarnessConfig, features_dir: Path, features_arg: str) 
         cmd,
         test_summary=True,
         allowed_rcs=(0, 5),
+        label="acceptance",
+        display="pytest-bdd",
     )
 
 
@@ -70,4 +72,4 @@ def _pytest_bdd_targets(cfg: HarnessConfig, features_dir: Path, features_arg: st
 
 def _behave_task(cfg: HarnessConfig, features_arg: str) -> Task:
     cmd = [*invoker_prefix(cfg), "behave", features_arg]
-    return Task("Acceptance (behave)", cmd)
+    return Task("Acceptance (behave)", cmd, label="acceptance", display="behave")

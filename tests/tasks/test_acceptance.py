@@ -98,7 +98,7 @@ def test_acceptance_passes_on_valid_scenario(tmp_project: Path) -> None:
     _scaffold_feature(tmp_project, _PASSING_FEATURE)
     result = _run_cli(tmp_project, "acceptance")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
-    assert "Acceptance (pytest-bdd)" in result.stdout
+    assert "[acceptance]" in result.stdout
 
 
 @pytest.mark.slow

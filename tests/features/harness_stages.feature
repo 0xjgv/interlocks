@@ -11,8 +11,8 @@ Feature: Harness stage commands on a minimal inline project
     When I run "harness check" in the tmp project
     Then the stage exits 0
     And the stage output contains "Quality Checks"
-    And the stage output contains "Fix lint errors"
-    And the stage output contains "Run tests"
+    And the stage output contains "[fix]"
+    And the stage output contains "[test]"
 
   Scenario: `harness pre-commit` no-ops when nothing is staged
     When I run "harness pre-commit" in the tmp project
@@ -23,12 +23,12 @@ Feature: Harness stage commands on a minimal inline project
     When I run "harness ci" in the tmp project
     Then the stage exits 0
     And the stage output contains "CI Checks"
-    And the stage output contains "Lint check"
-    And the stage output contains "Coverage"
+    And the stage output contains "[lint]"
+    And the stage output contains "[coverage]"
 
   Scenario: `harness nightly` runs coverage + mutation (bounded runtime)
     When I run "harness nightly" in the tmp project
     Then the stage exits 0
     And the stage output contains "Nightly"
-    And the stage output contains "Coverage"
+    And the stage output contains "[coverage]"
     And the stage output contains "Mutation"

@@ -7,7 +7,12 @@ from harness.runner import Task, run, tool
 
 
 def task_deps() -> Task:
-    return Task("Deps (deptry)", _deptry_cmd(load_config()))
+    return Task(
+        "Deps (deptry)",
+        _deptry_cmd(load_config()),
+        label="deps",
+        display="deptry",
+    )
 
 
 def _deptry_cmd(cfg: HarnessConfig) -> list[str]:

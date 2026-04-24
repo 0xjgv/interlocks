@@ -60,9 +60,14 @@ def test_cmd_help_prints_active_preset_and_resolved_values(
         clear_cache()
 
     out = capsys.readouterr().out
-    assert "preset                strict" in out
-    assert "coverage_min           91" in out
-    assert "run_mutation_in_ci     True" in out
+    import re
+
+    def _row(key: str, value: str) -> re.Pattern[str]:
+        return re.compile(rf"^\s*{re.escape(key)}\s+{re.escape(value)}\s*$", re.MULTILINE)
+
+    assert _row("preset", "strict").search(out), out
+    assert _row("coverage_min", "91").search(out), out
+    assert _row("run_mutation_in_ci", "True").search(out), out
 
 
 def test_main_no_args_prints_help(

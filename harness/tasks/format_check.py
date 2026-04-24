@@ -7,7 +7,12 @@ from harness.tasks._ruff import ruff_config_args
 
 
 def task_format_check() -> Task:
-    return Task("Format check", tool("ruff", "format", "--check", *ruff_config_args(), "."))
+    return Task(
+        "Format check",
+        tool("ruff", "format", "--check", *ruff_config_args(), "."),
+        label="format",
+        display="ruff format --check",
+    )
 
 
 def cmd_format_check() -> None:

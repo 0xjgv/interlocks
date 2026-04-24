@@ -15,7 +15,13 @@ def task_test() -> Task | None:
     cfg = load_config()
     if not cfg.test_dir.is_dir():
         return None
-    return Task("Run tests", build_test_command(cfg), test_summary=True)
+    return Task(
+        "Run tests",
+        build_test_command(cfg),
+        test_summary=True,
+        label="test",
+        display=f"{cfg.test_runner} {cfg.test_dir_arg}",
+    )
 
 
 def cmd_test() -> None:

@@ -38,6 +38,8 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
         report_cmd,
         pre_cmds=(run_cmd,),
         test_summary=True,
+        label="coverage",
+        display=f"coverage report --fail-under={min_pct}",
     )
 
 

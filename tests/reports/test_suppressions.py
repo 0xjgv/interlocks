@@ -109,7 +109,7 @@ def test_print_report_empty(
 
     print_suppressions_report()
     out = capsys.readouterr().out
-    assert "Suppressions" in out
+    assert "── Suppressions " in out
     assert "Suppressions: 0 total" in out
 
 

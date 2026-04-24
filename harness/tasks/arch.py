@@ -17,13 +17,20 @@ from harness.runner import Task, run, tool, warn_skip
 def task_arch() -> Task | None:
     cfg = load_config()
     if has_project_config(cfg, "importlinter", sidecars=(".importlinter", "setup.cfg")):
-        return Task("Architecture (import-linter)", tool("lint-imports"))
+        return Task(
+            "Architecture (import-linter)",
+            tool("lint-imports"),
+            label="arch",
+            display="lint-imports",
+        )
     default_cfg = _write_default_config(cfg)
     if default_cfg is None:
         return None
     return Task(
         "Architecture (default: src ↛ tests)",
         tool("lint-imports", "--config", str(default_cfg)),
+        label="arch",
+        display="lint-imports (default: src ↛ tests)",
     )
 
 

@@ -20,7 +20,12 @@ def _typecheck_project_args() -> list[str]:
 
 def task_typecheck() -> Task:
     cfg = load_config()
-    return Task("Type check", tool("basedpyright", *_typecheck_project_args(), cfg.src_dir_arg))
+    return Task(
+        "Type check",
+        tool("basedpyright", *_typecheck_project_args(), cfg.src_dir_arg),
+        label="typecheck",
+        display=f"basedpyright {cfg.src_dir_arg}",
+    )
 
 
 def cmd_typecheck() -> None:

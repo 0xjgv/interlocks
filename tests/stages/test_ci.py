@@ -112,9 +112,11 @@ def test_ci_passes_on_clean_project(tmp_project: Path) -> None:
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     out = result.stdout
-    for marker in ("CI Checks", "Format check", "Lint check", "Complexity", "Type check"):
+    markers = ("pyharness v", "CI Checks", "[format]", "[lint]", "[complexity]", "[typecheck]")
+    for marker in markers:
         assert marker in out, f"missing marker {marker!r}\n{out}"
-    assert "Coverage" in out
+    assert "[coverage]" in out
+    assert "Completed in" in out
     assert (tmp_project / ".coverage").exists()
 
 

@@ -109,9 +109,14 @@ def test_doctor_reports_configured_preset(
         clear_cache()
 
     out = capsys.readouterr().out
-    assert "preset                 baseline (project-configured)" in out
-    assert "coverage_min           70 (preset-derived)" in out
-    assert "enforce_crap           False (preset-derived)" in out
+    import re
+
+    def _row(key: str, value: str) -> re.Pattern[str]:
+        return re.compile(rf"^\s*{re.escape(key)}\s+{re.escape(value)}\s*$", re.MULTILINE)
+
+    assert _row("preset", "baseline (project-configured)").search(out), out
+    assert _row("coverage_min", "70 (preset-derived)").search(out), out
+    assert _row("enforce_crap", "False (preset-derived)").search(out), out
 
 
 def test_doctor_reports_unsupported_preset_as_blocker(

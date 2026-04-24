@@ -7,6 +7,7 @@ import sys
 import tomllib
 from typing import TYPE_CHECKING
 
+from harness import ui
 from harness.config import load_config
 from harness.runner import preflight
 from harness.stages.check import cmd_check
@@ -56,36 +57,40 @@ def _print_detected_block() -> None:
         return
     print()
     print("Detected:")
-    print(f"  preset                {cfg.preset or '(none)'}")
-    print(f"  project_root           {cfg.project_root}")
-    print(f"  src_dir                {cfg.src_dir_arg}")
-    print(f"  test_dir               {cfg.test_dir_arg}")
-    print(f"  test_runner            {cfg.test_runner}")
-    print(f"  test_invoker           {cfg.test_invoker}")
+    detected: list[tuple[str, str]] = [
+        ("preset", cfg.preset or "(none)"),
+        ("project_root", str(cfg.project_root)),
+        ("src_dir", cfg.src_dir_arg),
+        ("test_dir", cfg.test_dir_arg),
+        ("test_runner", cfg.test_runner),
+        ("test_invoker", cfg.test_invoker),
+    ]
     if cfg.pytest_args:
-        print(f"  pytest_args            {list(cfg.pytest_args)}")
+        detected.append(("pytest_args", str(list(cfg.pytest_args))))
     if cfg.features_dir_arg is not None:
-        print(f"  features_dir           {cfg.features_dir_arg}")
+        detected.append(("features_dir", cfg.features_dir_arg))
     if cfg.acceptance_runner is not None:
-        print(f"  acceptance_runner      {cfg.acceptance_runner}")
+        detected.append(("acceptance_runner", cfg.acceptance_runner))
+    ui.kv_block(detected)
     if cfg.unsupported_presets:
         print()
         print("Config warnings:")
-        for preset in cfg.unsupported_presets:
-            print(f"  unsupported preset     {preset}")
+        ui.kv_block([("unsupported preset", p) for p in cfg.unsupported_presets])
     print()
     print("Thresholds (override via [tool.harness] or ~/.config/harness/config.toml):")
-    print(f"  coverage_min           {cfg.coverage_min}")
-    print(f"  crap_max               {cfg.crap_max}")
-    print(f"  complexity_max_ccn     {cfg.complexity_max_ccn}")
-    print(f"  complexity_max_args    {cfg.complexity_max_args}")
-    print(f"  complexity_max_loc     {cfg.complexity_max_loc}")
-    print(f"  mutation_min_coverage  {cfg.mutation_min_coverage}")
-    print(f"  mutation_max_runtime   {cfg.mutation_max_runtime}")
-    print(f"  mutation_min_score     {cfg.mutation_min_score}")
-    print(f"  enforce_crap           {cfg.enforce_crap}")
-    print(f"  run_mutation_in_ci     {cfg.run_mutation_in_ci}")
-    print(f"  enforce_mutation       {cfg.enforce_mutation}")
+    ui.kv_block([
+        ("coverage_min", str(cfg.coverage_min)),
+        ("crap_max", str(cfg.crap_max)),
+        ("complexity_max_ccn", str(cfg.complexity_max_ccn)),
+        ("complexity_max_args", str(cfg.complexity_max_args)),
+        ("complexity_max_loc", str(cfg.complexity_max_loc)),
+        ("mutation_min_coverage", str(cfg.mutation_min_coverage)),
+        ("mutation_max_runtime", str(cfg.mutation_max_runtime)),
+        ("mutation_min_score", str(cfg.mutation_min_score)),
+        ("enforce_crap", str(cfg.enforce_crap)),
+        ("run_mutation_in_ci", str(cfg.run_mutation_in_ci)),
+        ("enforce_mutation", str(cfg.enforce_mutation)),
+    ])
 
 
 TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [

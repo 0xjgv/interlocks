@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from harness import ui
 from harness.config import load_config
 
 if TYPE_CHECKING:
@@ -59,7 +60,7 @@ def print_suppressions_report() -> None:
     """Print a report-only summary of suppressions found in source."""
     results = _scan_suppressions()
     total = sum(len(v) for v in results.values())
-    print("\n=== Suppressions ===\n")
+    ui.section("Suppressions")
     print(f"Suppressions: {total} total")
     if total == 0:
         return

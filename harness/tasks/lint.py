@@ -8,7 +8,12 @@ from harness.tasks._ruff import ruff_config_args
 
 def task_lint(files: list[str] | None = None) -> Task:
     target = files or ["."]
-    return Task("Lint check", tool("ruff", "check", *ruff_config_args(), *target))
+    return Task(
+        "Lint check",
+        tool("ruff", "check", *ruff_config_args(), *target),
+        label="lint",
+        display="ruff check",
+    )
 
 
 def cmd_lint(files: list[str] | None = None) -> None:

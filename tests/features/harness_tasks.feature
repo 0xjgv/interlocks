@@ -18,13 +18,13 @@ Feature: Harness task commands run against a real tmp project
     Given a tmp project with layout "arch"
     When I run "harness arch" in that project
     Then the exit code is 0
-    And the output contains "Architecture"
+    And the output contains "[arch]"
 
   Scenario: coverage passes when a trivial test exercises the module
     Given a tmp project with layout "coverage"
     When I run "harness coverage --min=0" in that project
     Then the exit code is 0
-    And the output contains "Coverage"
+    And the output contains "[coverage]"
 
   Scenario: crap passes when no function exceeds the threshold
     Given a tmp project with layout "crap"

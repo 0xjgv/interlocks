@@ -90,12 +90,16 @@ def test_check_passes_on_clean_project(tmp_project: Path) -> None:
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     out = result.stdout
+    assert "pyharness v" in out
     assert "Quality Checks" in out
-    assert "Fix lint errors" in out
-    assert "Format code" in out
-    assert "Type check" in out
-    assert "Run tests" in out
+    assert "Parallel" in out
+    assert "Advisory" in out
+    assert "[fix]" in out
+    assert "[format]" in out
+    assert "[typecheck]" in out
+    assert "[test]" in out
     assert "Suppressions" in out
+    assert "Completed in" in out
 
 
 def test_check_fixes_trivially_fixable_lint(tmp_project: Path) -> None:
@@ -154,7 +158,11 @@ def test_check_in_process_dispatches_stages(
         "cached-crap",
         "suppressions",
     ]
-    assert "Quality Checks" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Quality Checks" in out
+    assert "Parallel" in out
+    assert "Advisory" in out
+    assert "Completed in" in out
 
 
 def test_check_in_process_runs_suppressions_on_failure(

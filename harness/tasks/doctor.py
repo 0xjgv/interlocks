@@ -12,6 +12,7 @@ import sys
 import tomllib
 from typing import TYPE_CHECKING
 
+from harness import ui
 from harness.config import find_project_root, load_config
 from harness.detect import expected_target_interpreter
 
@@ -125,22 +126,30 @@ def _collect_tool_warnings(
 def _print_configuration(
     project_root: Path, cfg: HarnessConfig | None, pyproject_path: Path
 ) -> None:
-    print(f"  project_root           {project_root} (auto-detected)")
+    pairs: list[tuple[str, str]] = [("project_root", f"{project_root} (auto-detected)")]
     if pyproject_path.is_file():
-        print(f"  pyproject.toml         {pyproject_path} (auto-detected)")
+        pairs.append(("pyproject.toml", f"{pyproject_path} (auto-detected)"))
     else:
-        print("  pyproject.toml         (missing)")
+        pairs.append(("pyproject.toml", "(missing)"))
     if cfg is None:
+        ui.kv_block(pairs)
         return
-    _print_cfg_value(cfg, "preset", cfg.preset or "(none)")
-    _print_cfg_value(cfg, "src_dir", cfg.src_dir_arg)
-    _print_cfg_value(cfg, "test_dir", cfg.test_dir_arg)
-    _print_cfg_value(cfg, "test_runner", cfg.test_runner)
-    _print_cfg_value(cfg, "test_invoker", cfg.test_invoker)
+    pairs.extend(_cfg_pair(cfg, key, value) for key, value in _cfg_rows(cfg))
+    ui.kv_block(pairs)
+
+
+def _cfg_rows(cfg: HarnessConfig) -> list[tuple[str, object]]:
     features = cfg.features_dir_arg if cfg.features_dir_arg is not None else "(none)"
-    _print_cfg_value(cfg, "features_dir", features)
     acceptance = cfg.acceptance_runner if cfg.acceptance_runner is not None else "(auto)"
-    _print_cfg_value(cfg, "acceptance_runner", acceptance)
+    rows: list[tuple[str, object]] = [
+        ("preset", cfg.preset or "(none)"),
+        ("src_dir", cfg.src_dir_arg),
+        ("test_dir", cfg.test_dir_arg),
+        ("test_runner", cfg.test_runner),
+        ("test_invoker", cfg.test_invoker),
+        ("features_dir", features),
+        ("acceptance_runner", acceptance),
+    ]
     for key in (
         "coverage_min",
         "crap_max",
@@ -150,12 +159,13 @@ def _print_configuration(
         "mutation_ci_mode",
         "run_acceptance_in_check",
     ):
-        _print_cfg_value(cfg, key, getattr(cfg, key))
+        rows.append((key, getattr(cfg, key)))
+    return rows
 
 
-def _print_cfg_value(cfg: HarnessConfig, key: str, value: object) -> None:
+def _cfg_pair(cfg: HarnessConfig, key: str, value: object) -> tuple[str, str]:
     source = cfg.value_sources.get(key, "unknown")
-    print(f"  {key:<22} {value} ({source})")
+    return (key, f"{value} ({source})")
 
 
 def _print_messages(messages: list[str], *, empty: str) -> None:

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import time
+
+from harness import ui
 from harness.config import load_config
-from harness.runner import run_tasks, section
+from harness.runner import run_tasks
 from harness.tasks.acceptance import task_acceptance
 from harness.tasks.arch import task_arch
 from harness.tasks.complexity import task_complexity
@@ -19,7 +22,10 @@ from harness.tasks.typecheck import task_typecheck
 def cmd_ci() -> None:
     """Full verification: format_check, lint, complexity, deps, arch, typecheck, coverage,
     CRAP, (optionally) mutation."""
-    section("CI Checks")
+    start = time.monotonic()
+    cfg = load_config()
+    ui.banner(cfg)
+    ui.section("CI Checks")
     tasks = [
         task_format_check(),
         task_lint(),
@@ -33,6 +39,8 @@ def cmd_ci() -> None:
             tasks.append(optional)
     run_tasks(tasks)
     # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
+    ui.section("Gates")
     cmd_crap()
-    if load_config().run_mutation_in_ci:
+    if cfg.run_mutation_in_ci:
         cmd_mutation()
+    ui.stage_footer(time.monotonic() - start)

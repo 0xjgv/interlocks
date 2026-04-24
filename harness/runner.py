@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, NoReturn
 
+from harness import ui
 from harness.config import HarnessConfigError, load_config, require_pyproject
 
+# Re-exported for historical callers (e.g. tasks/stats.py).
 GREEN = "\033[32m"
 RED = "\033[31m"
 YELLOW = "\033[33m"
@@ -66,28 +68,28 @@ def generate_coverage_xml() -> Path:
 
 
 def section(name: str) -> None:
-    """Emit a blank-padded ``=== name ===`` stage header."""
-    print(f"\n=== {name} ===\n")
+    """Emit a stage or sub-stage header."""
+    ui.section(name)
 
 
 def ok(message: str) -> None:
-    """Emit a success line for a completed action."""
-    print(f"  {GREEN}✓{RESET} {message}")
+    """Emit a success line for a free-form message."""
+    print(f"  {_glyph('✓', GREEN)} {message}")
 
 
 def fail(message: str) -> None:
     """Emit a failure line without exiting (advisory gates)."""
-    print(f"  {RED}✗{RESET} {message}")
+    print(f"  {_glyph('✗', RED)} {message}")
 
 
 def warn_skip(message: str) -> None:
     """Emit a 'skipped' status line for optional/absent gates."""
-    print(f"  {GREEN}⚠{RESET} {message}")
+    print(f"  {_glyph('⚠', YELLOW)} {message}")
 
 
 def fail_skip(message: str) -> NoReturn:
     """Emit a red ✗ and exit 1 for a required-but-missing gate."""
-    print(f"  {RED}✗{RESET} {message}")
+    print(f"  {_glyph('✗', RED)} {message}")
     sys.exit(1)
 
 
@@ -123,6 +125,12 @@ class Task:
     # Widened by tools whose benign states use non-zero exit codes (e.g. pytest
     # returns 5 when it collects nothing).
     allowed_rcs: tuple[int, ...] = (0,)
+    # Short bracketed tag for row display, e.g. `[fix]`. Falls back to the first
+    # word of ``description`` lowercased.
+    label: str | None = None
+    # Compact command string shown in the row's middle column. Falls back to a
+    # basename-stripped rendering of ``cmd``.
+    display: str | None = None
 
 
 @dataclass
@@ -135,7 +143,7 @@ class RunResult:
 
 
 def run(task: Task, *, no_exit: bool = False) -> None:
-    """Run ``task`` silently; print ✓/✗. Exit on failure unless ``no_exit``."""
+    """Run ``task`` silently; print a status row. Exit on failure unless ``no_exit``."""
     result = _execute(task)
     _print_status(result, elapsed_suffix=False)
     if result.returncode in task.allowed_rcs:
@@ -146,7 +154,7 @@ def run(task: Task, *, no_exit: bool = False) -> None:
 
 
 def run_tasks(tasks: list[Task]) -> None:
-    """Run ``tasks`` in parallel; stream ✓/✗ in completion order.
+    """Run ``tasks`` in parallel; stream status rows in completion order.
 
     All tasks run to completion. On any failure, captured output is dumped
     after the status block, and we ``sys.exit`` with the *first-in-task-list*
@@ -229,15 +237,48 @@ def _pump(stream: IO[str] | None, tag: str, sink: io.StringIO) -> None:
 
 def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     task = result.task
-    succeeded = result.returncode in task.allowed_rcs
-    suffix = ""
-    if succeeded and task.test_summary:
-        suffix = _parse_test_summary(result.stdout + result.stderr)
-    if not suffix and elapsed_suffix:
-        suffix = f" ({result.elapsed:.1f}s)"
-    message = f"{task.description}{suffix}"
+    label = task.label or _default_label(task.description)
+    command = task.display or _default_display(task.cmd)
+    status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
     with _PRINT_LOCK:
-        (ok if succeeded else fail)(message)
+        ui.row(label, command, status, detail=detail, state=state)
+
+
+def _status(result: RunResult, *, elapsed_suffix: bool) -> tuple[str, str | None, ui.State]:
+    task = result.task
+    if result.returncode not in task.allowed_rcs:
+        return ("failed", None, "fail")
+    if task.test_summary:
+        summary = _parse_test_summary(result.stdout + result.stderr)
+        if summary:
+            return (summary, None, "ok")
+    if elapsed_suffix:
+        return ("ok", f"{result.elapsed:.1f}s", "ok")
+    return ("ok", None, "ok")
+
+
+def _default_label(description: str) -> str:
+    """First word of ``description`` lowercased (e.g. `Fix lint errors` → `fix`)."""
+    head = description.split(" ", 1)[0]
+    return head.lower().rstrip(":")
+
+
+def _default_display(cmd: list[str]) -> str:
+    """Compact one-line rendering of ``cmd``: basename + key flags, no absolute paths."""
+    if not cmd:
+        return ""
+    head = Path(cmd[0]).name or cmd[0]
+    python_names = {"python", "python3", Path(sys.executable).name}
+    if head in python_names and len(cmd) >= 3 and cmd[1] == "-m":
+        head = f"python -m {cmd[2]}"
+        rest = cmd[3:]
+    else:
+        rest = cmd[1:]
+    # Drop config-path flags that carry absolute paths — noise in the demo row.
+    cleaned = [a for a in rest if not a.startswith(("--config=", "--project=", "--rcfile="))]
+    # Collapse whitespace so inline scripts and embedded newlines don't tear the row.
+    joined = " ".join([head, *cleaned]).strip()
+    return re.sub(r"\s+", " ", joined)
 
 
 def _dump_failure(result: RunResult, *, titled: bool) -> None:
@@ -247,7 +288,7 @@ def _dump_failure(result: RunResult, *, titled: bool) -> None:
     with _PRINT_LOCK:
         if titled:
             print(f"\n--- {task.description} output ---")
-        print(f"{RED}Command failed: {' '.join(task.cmd)}{RESET}")
+        print(f"{_c(RED)}Command failed: {' '.join(task.cmd)}{_c(RESET)}")
         if result.stdout:
             print(result.stdout, end="")
         if result.stderr:
@@ -255,11 +296,23 @@ def _dump_failure(result: RunResult, *, titled: bool) -> None:
 
 
 def _parse_test_summary(output: str) -> str:
-    """Extract '(N tests, X.Xs)' from unittest or pytest output."""
+    """Extract a short test summary from unittest or pytest output."""
     m = _UNITTEST_SUMMARY.search(output)
     if m:
-        return f" ({m.group(1)} tests, {m.group(2)})"
+        return f"{m.group(1)} tests in {m.group(2)}"
     m = _PYTEST_SUMMARY.search(output)
     if m:
-        return f" ({m.group(1)} tests, {m.group(2)}s)"
+        return f"{m.group(1)} passed in {m.group(2)}s"
     return ""
+
+
+def _glyph(char: str, color: str) -> str:
+    """Color-wrap a single status glyph, honoring NO_COLOR / non-TTY."""
+    if not ui.use_color():
+        return char
+    return f"{color}{char}{RESET}"
+
+
+def _c(code: str) -> str:
+    """ANSI code or empty string depending on color availability."""
+    return code if ui.use_color() else ""

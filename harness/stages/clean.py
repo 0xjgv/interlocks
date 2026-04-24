@@ -5,12 +5,13 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from harness.runner import Task, run, section, tool
+from harness import ui
+from harness.runner import Task, run, tool
 
 
 def cmd_clean() -> None:
     """Remove cache and build artifacts."""
-    section("Cleaning Up")
+    ui.section("Cleaning Up")
     for name in [
         ".ruff_cache",
         "build",
@@ -28,4 +29,4 @@ def cmd_clean() -> None:
             p.unlink()
     for p in Path().rglob("__pycache__"):
         shutil.rmtree(p)
-    run(Task("Ruff clean", tool("ruff", "clean")))
+    run(Task("Ruff clean", tool("ruff", "clean"), label="clean", display="ruff clean"))

@@ -30,15 +30,21 @@ def _python_task(description: str, code: str, *, test_summary: bool = False) -> 
     return Task(description, [sys.executable, "-c", code], test_summary=test_summary)
 
 
+def _row_has(out: str, label: str, status: str) -> bool:
+    """Return True when a row line contains both ``[label]`` and the right-hand ``status``."""
+    tag = f"[{label}]"
+    return any(tag in line and status in line for line in out.splitlines())
+
+
 def test_run_tasks_all_pass_streams_ok_and_no_exit(capsys: pytest.CaptureFixture[str]) -> None:
     run_tasks([
         _python_task("Alpha", "print('a')"),
         _python_task("Bravo", "print('b')"),
     ])
     out = _strip(capsys.readouterr().out)
-    assert "✓ Alpha" in out
-    assert "✓ Bravo" in out
-    assert "✗" not in out
+    assert _row_has(out, "alpha", "ok")
+    assert _row_has(out, "bravo", "ok")
+    assert "failed" not in out
 
 
 def test_run_tasks_single_failure_exits_with_subprocess_returncode(
@@ -52,8 +58,8 @@ def test_run_tasks_single_failure_exits_with_subprocess_returncode(
         run_tasks(tasks)
     assert exc.value.code == 7
     out = _strip(capsys.readouterr().out)
-    assert "✓ Good" in out
-    assert "✗ Bad" in out
+    assert _row_has(out, "good", "ok")
+    assert _row_has(out, "bad", "failed")
     assert "Bad output" in out
     assert "boom" in out
 
@@ -75,7 +81,7 @@ def test_run_tasks_multi_failure_uses_first_in_list_returncode(tmp_path: Path) -
 def test_run_tasks_streams_in_completion_order(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Fast task should emit its ✓ line before the slow task's ✓ line."""
+    """Fast task should emit its row before the slow task's row."""
     marker = tmp_path / "fast_done"
     slow_code = _WAIT_FOR_MARKER.format(path=str(marker))
     fast_code = _SIGNAL_MARKER.format(path=str(marker))
@@ -85,21 +91,21 @@ def test_run_tasks_streams_in_completion_order(
     ]
     run_tasks(tasks)
     out = _strip(capsys.readouterr().out)
-    fast_pos = out.find("✓ Fast")
-    slow_pos = out.find("✓ Slow")
+    fast_pos = out.find("[fast]")
+    slow_pos = out.find("[slow]")
     assert fast_pos != -1 and slow_pos != -1
     assert fast_pos < slow_pos, f"expected Fast before Slow:\n{out}"
 
 
 def test_run_tasks_locks_prevent_interleaved_lines(capsys: pytest.CaptureFixture[str]) -> None:
-    """Every status line starts at the line boundary with the expected prefix — no torn writes."""
+    """Every row line starts with two-space indent and a `[` — no torn writes."""
     tasks = [_python_task(f"Task{i}", "pass") for i in range(8)]
     run_tasks(tasks)
     out = _strip(capsys.readouterr().out)
     for line in out.splitlines():
         if not line.strip():
             continue
-        assert line.lstrip().startswith(("✓", "✗")), f"torn or unexpected line: {line!r}"
+        assert line.startswith("  [") and "]" in line, f"torn or unexpected line: {line!r}"
 
 
 def test_run_tasks_empty_is_noop(capsys: pytest.CaptureFixture[str]) -> None:
@@ -118,7 +124,7 @@ def test_run_tasks_test_summary_extracts_count(capsys: pytest.CaptureFixture[str
     )
     run_tasks([Task("Unit tests", [sys.executable, "-c", code], test_summary=True)])
     out = _strip(capsys.readouterr().out)
-    assert "✓ Unit tests (3 tests, 0.012s)" in out
+    assert _row_has(out, "unit", "3 tests in 0.012s")
 
 
 def test_run_tasks_dumps_each_failure_with_title(capsys: pytest.CaptureFixture[str]) -> None:
@@ -158,3 +164,19 @@ def test_run_tasks_preserves_output_on_failure(capsys: pytest.CaptureFixture[str
     out = _strip(capsys.readouterr().out)
     assert "OUT" in out
     assert "ERR" in out
+
+
+def test_task_explicit_label_and_display_override_defaults(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    task = Task(
+        "Whatever description",
+        [sys.executable, "-c", "pass"],
+        label="typecheck",
+        display="basedpyright src",
+    )
+    run_tasks([task])
+    out = _strip(capsys.readouterr().out)
+    assert "[typecheck]" in out
+    assert "basedpyright src" in out
+    assert "[whatever]" not in out

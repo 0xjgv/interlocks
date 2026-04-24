@@ -25,6 +25,8 @@ def task_complexity() -> Task:
             "-i",
             "0",
         ),
+        label="complexity",
+        display=f"lizard -C {cfg.complexity_max_ccn}",
     )
 
 
