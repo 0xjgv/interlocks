@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: 0xjgv/pyharness@v1
+      - uses: 0xjgv/interlock@v1
 ```
 
 The reusable action installs interlock, runs `interlock ci`, and writes a concise `GITHUB_STEP_SUMMARY` when GitHub provides the summary file. The action does not duplicate lint, typecheck, coverage, CRAP, dependency, architecture, acceptance, or mutation logic; the CLI remains the source of truth.

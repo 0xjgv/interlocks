@@ -1,8 +1,8 @@
-# Template pyproject.toml for publishing `pyharness-mutmut` to PyPI.
+# Template pyproject.toml for publishing `interlock-mutmut` to PyPI.
 #
-# This file is NOT the pyproject for pyharness itself. It is dropped into a
+# This file is NOT the pyproject for interlock itself. It is dropped into a
 # local clone of https://github.com/boxed/mutmut (checked out to the SHA
-# pyharness pins) in place of upstream's pyproject.toml, then built and
+# interlock pins) in place of upstream's pyproject.toml, then built and
 # published via `uv build && uv publish`. See PUBLISH.md in this directory
 # for the step-by-step walkthrough.
 #
@@ -11,15 +11,15 @@
 # (version 3.5.0). Keep it in sync when bumping the pinned SHA.
 
 [project]
-name = "pyharness-mutmut"
+name = "interlock-mutmut"
 version = "3.5.0"
-description = "pyharness-published fork of mutmut for PyPI-only installs (no git required at install time)."
-keywords = ["mutmut", "mutant", "mutation", "test", "testing", "pyharness"]
+description = "interlock-published fork of mutmut for PyPI-only installs (no git required at install time)."
+keywords = ["mutmut", "mutant", "mutation", "test", "testing", "interlock"]
 authors = [
     { name = "Anders Hovmöller", email = "boxed@killingar.net" },
 ]
 maintainers = [
-    { name = "pyharness maintainers" },
+    { name = "interlock maintainers" },
 ]
 requires-python = ">=3.10"
 readme = "README.rst"
@@ -52,7 +52,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/boxed/mutmut"
 Upstream = "https://github.com/boxed/mutmut"
-Pyharness = "https://github.com/juans-gaitan/pyharness"
+Interlock = "https://github.com/juans-gaitan/interlock"
 Documentation = "https://mutmut.readthedocs.io/en/latest/"
 Repository = "https://github.com/boxed/mutmut"
 Issues = "https://github.com/boxed/mutmut/issues"

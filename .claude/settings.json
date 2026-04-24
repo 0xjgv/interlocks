@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/juan/Code/pyharness/.venv/bin/python3 -m interlock.cli post-edit"
+            "command": "/Users/juan/Code/interlock/.venv/bin/python3 -m interlock.cli post-edit"
           }
         ]
       }

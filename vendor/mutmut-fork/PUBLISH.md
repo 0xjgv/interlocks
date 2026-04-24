@@ -1,15 +1,15 @@
-# Publishing `pyharness-mutmut` to PyPI
+# Publishing `interlock-mutmut` to PyPI
 
-This is a **manual, one-off workflow**. Pyharness maintainers run it when the
-upstream SHA pyharness pins needs to be republished under the
-`pyharness-mutmut` distribution name so that `pipx install pyharness` works
+This is a **manual, one-off workflow**. Interlock maintainers run it when the
+upstream SHA interlock pins needs to be republished under the
+`interlock-mutmut` distribution name so that `pipx install interlock` works
 without `git` available on the install host.
 
 ## Prerequisites
 
 - `git`, `uv` (>=0.9.5), and a PyPI API token scoped to the
-  `pyharness-mutmut` project.
-- Maintainer access to https://pypi.org/project/pyharness-mutmut/ (or the
+  `interlock-mutmut` project.
+- Maintainer access to https://pypi.org/project/interlock-mutmut/ (or the
   ability to claim the name on first publish).
 
 ## Walkthrough
@@ -23,9 +23,9 @@ cd /tmp/mutmut-fork
 
 ### 2. Pin to a known-good SHA
 
-Pyharness today pins mutmut to commit
+Interlock today pins mutmut to commit
 **`e31d923c734383ddb7df4aa439ab3c60fd7d629a`** (see the `mutmut @ git+...`
-entry in pyharness's root `pyproject.toml`). That commit corresponds to
+entry in interlock's root `pyproject.toml`). That commit corresponds to
 upstream version **3.5.0** with the `set_start_method` guard from
 [mutmut#466](https://github.com/boxed/mutmut/pull/466).
 
@@ -44,19 +44,19 @@ in the template `pyproject.toml` (step 3) to match whatever upstream says.
 Overwrite upstream's `pyproject.toml` with the skeleton shipped in this repo:
 
 ```sh
-cp /path/to/pyharness/vendor/mutmut-fork/pyproject.toml ./pyproject.toml
+cp /path/to/interlock/vendor/mutmut-fork/pyproject.toml ./pyproject.toml
 ```
 
 The skeleton keeps every upstream runtime dependency, the `mutmut` console
 script, and the BSD-3-Clause license. It differs from upstream only in:
 
-- `name = "pyharness-mutmut"` (was `mutmut`)
+- `name = "interlock-mutmut"` (was `mutmut`)
 - `description` — reflects the republish purpose
-- `urls` — points back to upstream + pyharness repo for issue routing
+- `urls` — points back to upstream + interlock repo for issue routing
 - authors — credits the upstream maintainer
 
 Double-check the `version` field. Keep it in lockstep with upstream at the
-pinned SHA (currently `3.5.0`). If a previous `pyharness-mutmut` publish has
+pinned SHA (currently `3.5.0`). If a previous `interlock-mutmut` publish has
 already claimed that version on PyPI, bump a local suffix
 (e.g. `3.5.0.post1`) rather than picking an arbitrary version — this
 preserves the upstream-version signal for downstream consumers.
@@ -67,12 +67,12 @@ preserves the upstream-version signal for downstream consumers.
 uv build
 ```
 
-Verify `dist/pyharness_mutmut-<version>-py3-none-any.whl` and the matching
+Verify `dist/interlock_mutmut-<version>-py3-none-any.whl` and the matching
 `.tar.gz` are produced, and that the wheel still ships the `mutmut/` package
 directory (i.e. the import path is unchanged):
 
 ```sh
-unzip -l dist/pyharness_mutmut-*.whl | grep '^.* mutmut/'
+unzip -l dist/interlock_mutmut-*.whl | grep '^.* mutmut/'
 ```
 
 ### 5. Publish
@@ -81,20 +81,20 @@ unzip -l dist/pyharness_mutmut-*.whl | grep '^.* mutmut/'
 uv publish --token "$PYPI_TOKEN"
 ```
 
-On first publish, PyPI will register the `pyharness-mutmut` project against
+On first publish, PyPI will register the `interlock-mutmut` project against
 your account. Subsequent publishes need the same token scope.
 
 Smoke-test from a fresh environment:
 
 ```sh
-uv tool install --from pyharness-mutmut mutmut
+uv tool install --from interlock-mutmut mutmut
 mutmut --help
 ```
 
-### 6. Follow-up PR in pyharness
+### 6. Follow-up PR in interlock
 
-This scaffold unit deliberately does **not** modify pyharness's own
-`pyproject.toml`. Once the first `pyharness-mutmut` release is live on PyPI,
+This scaffold unit deliberately does **not** modify interlock's own
+`pyproject.toml`. Once the first `interlock-mutmut` release is live on PyPI,
 open a follow-up PR that rewrites the dependency line from:
 
 ```toml
@@ -104,9 +104,9 @@ open a follow-up PR that rewrites the dependency line from:
 to:
 
 ```toml
-"pyharness-mutmut>=3.5.0",
+"interlock-mutmut>=3.5.0",
 ```
 
 and regenerates `uv.lock`. That PR is intentionally separate so the publish
 step (which requires human-held PyPI credentials) stays decoupled from
-pyharness's normal review flow.
+interlock's normal review flow.
