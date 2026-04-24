@@ -62,10 +62,10 @@ def test_require_pyproject_points_at_init(tmp_path: Path) -> None:
 def test_preflight_exempt_commands_never_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``help``/``doctor``/``init``/``version`` must work without a pyproject."""
+    """Utility commands must work without a pyproject."""
     monkeypatch.chdir(tmp_path)
     clear_cache()
-    for command in ("help", "doctor", "init", "version"):
+    for command in ("help", "doctor", "init", "presets", "version"):
         preflight(command)  # must not raise or exit
 
 

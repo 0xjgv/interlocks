@@ -18,7 +18,7 @@
 - Coverage: `harness coverage --min=0` — coverage.py with threshold + uncovered listing
 - CRAP: `harness crap --max=30` — complexity × coverage gate (blocking by default; `enforce_crap = false` to stay advisory)
 - Mutation: `harness mutation --min-coverage=70 --max-runtime=600` — mutmut (advisory unless `enforce_mutation = true` or `--min-score=` is set; see `harness nightly`)
-- Stats: `harness stats` — trust-score report (verdict + suspicious tests + hot files), read-only; `--verbose` for full breakdown, `--no-trend` to skip the `.harness/trust.json` cache
+- Trust: `harness trust` — trust-score report (verdict + suspicious tests + hot files), read-only; `--refresh` re-runs coverage first, `--verbose` for full breakdown, `--no-trend` to skip the `.harness/trust.json` cache
 - Setup: `harness setup-hooks` to install git pre-commit hook
 - Auto-format: runs automatically after Claude edits via `Stop` hook (post-edit)
 

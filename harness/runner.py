@@ -26,7 +26,7 @@ RESET = "\033[0m"
 VERBOSE = "--verbose" in sys.argv
 
 # Commands that must work without a project — diagnostics, scaffolding, meta.
-PREFLIGHT_EXEMPT: frozenset[str] = frozenset({"doctor", "init", "version", "help"})
+PREFLIGHT_EXEMPT: frozenset[str] = frozenset({"doctor", "init", "presets", "version", "help"})
 
 _BIN = Path(sys.executable).parent
 

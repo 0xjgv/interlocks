@@ -24,9 +24,13 @@ def task_complexity() -> Task:
             str(cfg.complexity_max_loc),
             "-i",
             "0",
+            "-w",
         ),
         label="complexity",
-        display=f"lizard -C {cfg.complexity_max_ccn}",
+        display=(
+            f"lizard -C {cfg.complexity_max_ccn} "
+            f"-a {cfg.complexity_max_args} -L {cfg.complexity_max_loc}"
+        ),
     )
 
 

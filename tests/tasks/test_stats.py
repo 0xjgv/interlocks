@@ -23,7 +23,6 @@ from harness.tasks.stats import (
     _flag_suspicious,
     _read_prev_trust,
     _write_trust,
-    cmd_stats,
     cmd_trust,
 )
 
@@ -285,7 +284,7 @@ def test_write_trust_caps_history_at_twenty(tmp_path: Path) -> None:
     assert data["history"][0]["score"] == 5.0
 
 
-# ─────────────── cmd_stats end-to-end ──────────────────────────
+# ─────────────── cmd_trust end-to-end ──────────────────────────
 
 _MODULE_SRC = textwrap.dedent(
     """\
@@ -354,7 +353,7 @@ def tmp_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_cmd_stats_skips_without_coverage(
+def test_cmd_trust_skips_without_coverage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -364,33 +363,33 @@ def test_cmd_stats_skips_without_coverage(
     from harness.config import clear_cache
 
     clear_cache()
-    monkeypatch.setattr(sys, "argv", ["harness", "stats"])
-    cmd_stats()
+    monkeypatch.setattr(sys, "argv", ["harness", "trust"])
+    cmd_trust()
     captured = capsys.readouterr()
     assert "no coverage" in captured.out.lower()
 
 
-def test_cmd_stats_prints_report(
+def test_cmd_trust_prints_report(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["harness", "stats", "--no-trend"])
-    cmd_stats()
+    monkeypatch.setattr(sys, "argv", ["harness", "trust", "--no-trend"])
+    cmd_trust()
     captured = capsys.readouterr()
-    assert "pyharness trust report" in captured.out
-    assert "TRUST" in captured.out
-    assert "suspicious tests" in captured.out
-    assert "hot files" in captured.out
-    assert "next actions" in captured.out
+    assert "command=trust" in captured.out
+    assert "── Trust" in captured.out
+    assert "── Suspicious Tests" in captured.out
+    assert "── Hot Files" in captured.out
+    assert "── Next Actions" in captured.out
 
 
-def test_cmd_stats_writes_trend_file(
+def test_cmd_trust_writes_trend_file(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["harness", "stats"])
-    cmd_stats()
+    monkeypatch.setattr(sys, "argv", ["harness", "trust"])
+    cmd_trust()
     cache = tmp_project / ".harness" / "trust.json"
     assert cache.is_file()
     data = json.loads(cache.read_text(encoding="utf-8"))
@@ -398,24 +397,24 @@ def test_cmd_stats_writes_trend_file(
     assert len(data["history"]) == 1
 
 
-def test_cmd_stats_no_trend_skips_cache(
+def test_cmd_trust_no_trend_skips_cache(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["harness", "stats", "--no-trend"])
-    cmd_stats()
+    monkeypatch.setattr(sys, "argv", ["harness", "trust", "--no-trend"])
+    cmd_trust()
     assert not (tmp_project / ".harness" / "trust.json").exists()
 
 
-def test_cmd_stats_second_run_shows_delta(
+def test_cmd_trust_second_run_shows_delta(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["harness", "stats"])
-    cmd_stats()
+    monkeypatch.setattr(sys, "argv", ["harness", "trust"])
+    cmd_trust()
     capsys.readouterr()  # drain first run
-    cmd_stats()
+    cmd_trust()
     captured = capsys.readouterr()
     assert "since last run" in captured.out
 
@@ -437,7 +436,8 @@ def test_cmd_trust_refresh_runs_coverage_first(
 
     captured = capsys.readouterr()
     assert calls == [("coverage", 0)]
-    assert "pyharness trust report" in captured.out
+    assert "command=trust" in captured.out
+    assert "── Trust" in captured.out
     assert "run `harness trust --verbose`" in captured.out
 
 
@@ -456,7 +456,7 @@ def test_cmd_trust_refresh_failure_stops_before_report(
         cmd_trust()
 
     assert exc.value.code == 7
-    assert "pyharness trust report" not in capsys.readouterr().out
+    assert "── Trust" not in capsys.readouterr().out
 
 
 # ─────────────── CLI wiring smoke ──────────────────────────────
@@ -471,7 +471,7 @@ def _subprocess_env() -> dict[str, str]:
     return env
 
 
-def test_cli_help_lists_stats_and_trust() -> None:
+def test_cli_help_lists_trust() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "harness.cli", "help"],
         capture_output=True,
@@ -480,7 +480,6 @@ def test_cli_help_lists_stats_and_trust() -> None:
         env=_subprocess_env(),
     )
     assert result.returncode == 0
-    assert "stats" in result.stdout
     assert "trust" in result.stdout
     assert "Reports:" in result.stdout
 
@@ -516,9 +515,9 @@ def test_render_does_not_crash_on_empty_report(capsys: pytest.CaptureFixture[str
     )
     _render(report, verbose=False)
     captured = capsys.readouterr()
-    assert "TRUST" in captured.out
+    assert "── Trust" in captured.out
     assert "(none)" in captured.out
-    assert "next actions" in captured.out
+    assert "── Next Actions" in captured.out
 
 
 def test_inspection_dataclass_fields() -> None:

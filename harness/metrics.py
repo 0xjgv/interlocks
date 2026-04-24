@@ -166,7 +166,7 @@ def compute_crap_rows(
     """Join lizard functions with coverage to produce CRAP rows.
 
     When ``max_crap`` is ``None``, returns every row (reader mode — used by
-    ``harness stats``). When set, returns only rows whose CRAP exceeds the
+    ``harness trust``). When set, returns only rows whose CRAP exceeds the
     threshold (gate mode — used by ``harness crap``). ``changed``, when given,
     filters to functions in those paths.
     """

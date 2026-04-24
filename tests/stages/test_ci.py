@@ -142,6 +142,7 @@ def test_ci_in_process_queues_all_tasks(
 ) -> None:
     """Stub run_tasks + inline gates — verify cmd_ci composes the expected task list
     plus the sequential post-coverage gates."""
+    from harness.config import load_config
     from harness.stages import ci as ci_mod
 
     parallel: list[str] = []
@@ -154,17 +155,19 @@ def test_ci_in_process_queues_all_tasks(
 
     ci_mod.cmd_ci()
 
+    cfg = load_config()
     assert parallel == [
         "Format check",
         "Lint check",
         "Complexity (lizard)",
         "Deps (deptry)",
         "Type check",
-        "Coverage >= 80%",
+        f"Coverage >= {cfg.coverage_min}%",
         "Architecture (import-linter)",
         "Acceptance (pytest-bdd)",
     ]
-    assert sequential == ["CRAP"]
+    expected_sequential = ["CRAP"] + (["Mutation"] if cfg.run_mutation_in_ci else [])
+    assert sequential == expected_sequential
     assert "CI Checks" in capsys.readouterr().out
 
 

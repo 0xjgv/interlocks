@@ -3,13 +3,21 @@
 
 from __future__ import annotations
 
+import re
 import sys
+import time
 import tomllib
 from typing import TYPE_CHECKING
 
 from harness import ui
-from harness.config import load_config
-from harness.runner import preflight
+from harness.config import (
+    kv_with_source,
+    load_config,
+    preset_defaults,
+    preset_description,
+    supported_presets,
+)
+from harness.runner import fail_skip, ok, preflight
 from harness.stages.check import cmd_check
 from harness.stages.ci import cmd_ci
 from harness.stages.clean import cmd_clean
@@ -30,33 +38,150 @@ from harness.tasks.init import cmd_init
 from harness.tasks.init_acceptance import cmd_init_acceptance
 from harness.tasks.lint import cmd_lint
 from harness.tasks.mutation import cmd_mutation
-from harness.tasks.stats import cmd_stats, cmd_trust
+from harness.tasks.stats import cmd_trust
 from harness.tasks.test import cmd_test
 from harness.tasks.typecheck import cmd_typecheck
 from harness.tasks.version import cmd_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
+
+    from harness.config import HarnessConfig
 
 
 def cmd_help() -> None:
+    start = time.monotonic()
+    cfg = _load_optional_config()
+    ui.command_banner("help", cfg)
+    ui.section("Usage")
+    print("  Usage: harness <command>")
+    ui.section("Commands")
     width = max(len(name) for name in TASKS)
-    print("Usage: harness <command>")
     for group_name, group in TASK_GROUPS:
         print()
         print(f"{group_name}:")
         for name, (_, description) in group.items():
             print(f"  {name:<{width}}  {description}")
-    _print_detected_block()
+    _print_detected_block(cfg)
+    ui.command_footer(start)
 
 
-def _print_detected_block() -> None:
-    try:
-        cfg = load_config()
-    except (OSError, tomllib.TOMLDecodeError):
+_TOOL_HARNESS_HEADER = re.compile(r"^\[tool\.harness\]\s*$", re.MULTILINE)
+_NEXT_HEADER = re.compile(r"^\[", re.MULTILINE)
+_PRESET_LINE = re.compile(r"^(?P<indent>[ \t]*)preset\s*=.*$", re.MULTILINE)
+
+_PRESET_REPORTED_KEYS: tuple[str, ...] = (
+    "coverage_min",
+    "crap_max",
+    "complexity_max_ccn",
+    "complexity_max_args",
+    "complexity_max_loc",
+    "mutation_min_coverage",
+    "mutation_max_runtime",
+    "mutation_min_score",
+    "enforce_crap",
+    "run_mutation_in_ci",
+    "enforce_mutation",
+    "mutation_ci_mode",
+    "run_acceptance_in_check",
+)
+
+
+def cmd_presets() -> None:
+    start = time.monotonic()
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if len(args) >= 2 and args[1] == "set":
+        _cmd_presets_set(args[2:], start=start)
         return
+
+    cfg = _load_optional_config()
+    ui.command_banner("presets", cfg)
+    ui.section("Current")
+    ui.kv_block([("preset", cfg.preset if cfg is not None and cfg.preset else "(none)")])
+    if cfg is not None:
+        ui.section("Current Values")
+        ui.kv_block([kv_with_source(cfg, key, getattr(cfg, key)) for key in _PRESET_REPORTED_KEYS])
+    ui.section("Available Presets")
+    for preset in supported_presets():
+        defaults = preset_defaults(preset)
+        print(f"  {preset:<8}  {preset_description(preset)}")
+        print(
+            " " * 12
+            + f"coverage>={defaults['coverage_min']}  "
+            + f"CRAP<={defaults['crap_max']}  "
+            + f"mutation score>={defaults['mutation_min_score']}  "
+            + f"mutation_ci={defaults['mutation_ci_mode']}"
+        )
+    ui.section("Next Steps")
+    print("  Set a project preset with the CLI:")
     print()
-    print("Detected:")
+    print("    harness presets set baseline")
+    print()
+    print("  Or add this to pyproject.toml:")
+    print()
+    print('    [tool.harness]\n    preset = "baseline"')
+    print()
+    print("  Preset thresholds are defaults. You can manually override any threshold")
+    print("  in the same [tool.harness] table in pyproject.toml.")
+    ui.command_footer(start)
+
+
+def _cmd_presets_set(args: list[str], *, start: float) -> None:
+    presets = supported_presets()
+    if len(args) != 1:
+        fail_skip(f"usage: harness presets set <{'|'.join(presets)}>")
+    preset = args[0]
+    if preset not in presets:
+        fail_skip(f"unsupported preset: {preset} (expected {'|'.join(presets)})")
+
+    cfg = load_config()
+    pyproject = cfg.project_root / "pyproject.toml"
+    if not pyproject.is_file():
+        fail_skip("presets set: no pyproject.toml — run `harness init` to scaffold")
+
+    ui.command_banner("presets set", cfg)
+    ui.section("Preset")
+    _write_project_preset(pyproject, preset)
+    ok(f"set [tool.harness] preset = {preset!r} in {cfg.relpath(pyproject)}")
+    ui.command_footer(start)
+
+
+def _write_project_preset(pyproject: Path, preset: str) -> None:
+    text = pyproject.read_text(encoding="utf-8")
+    replacement = f'preset = "{preset}"'
+    match = _TOOL_HARNESS_HEADER.search(text)
+    if match is None:
+        suffix = "" if text.endswith("\n") else "\n"
+        pyproject.write_text(f"{text}{suffix}\n[tool.harness]\n{replacement}\n", encoding="utf-8")
+        return
+
+    body_start = match.end()
+    next_header = _NEXT_HEADER.search(text, body_start)
+    body_end = next_header.start() if next_header else len(text)
+    body = text[body_start:body_end]
+    preset_line = _PRESET_LINE.search(body)
+    if preset_line is None:
+        insert = f"\n{replacement}" if body.startswith("\n") else f"\n{replacement}\n"
+        pyproject.write_text(text[:body_start] + insert + text[body_start:], encoding="utf-8")
+        return
+
+    line = f"{preset_line.group('indent')}{replacement}"
+    updated_body = body[: preset_line.start()] + line + body[preset_line.end() :]
+    pyproject.write_text(text[:body_start] + updated_body + text[body_end:], encoding="utf-8")
+
+
+def _load_optional_config() -> HarnessConfig | None:
+    try:
+        return load_config()
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+
+
+def _print_detected_block(cfg: HarnessConfig | None) -> None:
+    if cfg is None:
+        return
+    ui.section("Detected")
     detected: list[tuple[str, str]] = [
         ("preset", cfg.preset or "(none)"),
         ("project_root", str(cfg.project_root)),
@@ -73,11 +198,10 @@ def _print_detected_block() -> None:
         detected.append(("acceptance_runner", cfg.acceptance_runner))
     ui.kv_block(detected)
     if cfg.unsupported_presets:
-        print()
-        print("Config warnings:")
+        ui.section("Config Warnings")
         ui.kv_block([("unsupported preset", p) for p in cfg.unsupported_presets])
-    print()
-    print("Thresholds (override via [tool.harness] or ~/.config/harness/config.toml):")
+    ui.section("Thresholds")
+    print("  Override via [tool.harness] or ~/.config/harness/config.toml.")
     ui.kv_block([
         ("coverage_min", str(cfg.coverage_min)),
         ("crap_max", str(cfg.crap_max)),
@@ -136,10 +260,6 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
     (
         "Reports",
         {
-            "stats": (
-                cmd_stats,
-                "Legacy alias for trust report (cached quality data)",
-            ),
             "trust": (
                 cmd_trust,
                 "Actionable trust report: coverage, CRAP, suspicious tests, next actions",
@@ -151,6 +271,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
         {
             "doctor": (cmd_doctor, "Preflight diagnostic: paths, tools, venv"),
             "init": (cmd_init, "Scaffold a greenfield pyproject.toml + tests/ in CWD"),
+            "presets": (cmd_presets, "Show preset options or set one with `presets set <preset>`"),
             "version": (cmd_version, "print pyharness version"),
         },
     ),

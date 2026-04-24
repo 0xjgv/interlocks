@@ -73,7 +73,7 @@ The reusable action installs pyharness, runs `harness ci`, and writes a concise 
 
 ## Adoption Presets
 
-Presets are optional defaults under `[tool.harness]` or `~/.config/harness/config.toml`. Explicit values in the same layer override preset defaults.
+Presets are optional defaults under `[tool.harness]` or `~/.config/harness/config.toml`. Explicit values in the same layer override preset defaults, so you can manually tune thresholds in `pyproject.toml` after choosing a preset.
 
 ```toml
 [tool.harness]
@@ -151,6 +151,8 @@ coverage_min = 85
 ```
 
 Run `harness help` to see the active preset and resolved values.
+Run `harness presets` to see preset options, their main thresholds, and copyable config.
+Run `harness presets set baseline` to set a project preset from the CLI.
 
 ## Stages
 
@@ -188,7 +190,6 @@ Advanced gates:
 - `crap --max=N [--changed-only]`: CRAP complexity x coverage gate. Blocking depends on `enforce_crap`.
 - `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only]`: mutmut. Advisory unless `enforce_mutation = true` or `--min-score=` is passed.
 - `trust [--refresh] [--no-trend]`: actionable trust report combining coverage, CRAP, mutation, suspicious-test AST inspection, recent git diff, and next actions. `--refresh` runs coverage first with `--min=0`.
-- `stats [--no-trend]`: legacy alias for the cached trust report. It is read-only and never exits non-zero.
 
 Scaffolding:
 
@@ -199,6 +200,7 @@ Utility:
 
 - `doctor`: adoption diagnostic. Exempt from the `pyproject.toml` preflight gate.
 - `help`: command list plus detected paths, active preset, and thresholds.
+- `presets`: show preset options, current values, copyable config, and set a project preset with `harness presets set <preset>`.
 - `version`: print the installed pyharness version.
 
 ## Acceptance Tests

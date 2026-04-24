@@ -6,6 +6,7 @@ import ast
 import datetime as _dt
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
+from harness import ui
 from harness.config import load_config
 from harness.git import changed_py_files_vs
 from harness.metrics import (
@@ -258,20 +260,14 @@ def _write_trust(cache: Path, score: float) -> None:
 # ─────────────── render ─────────────────────────────────────────
 
 
-def _render(report: TrustReport, *, verbose: bool, command_name: str = "stats") -> None:
-    """ANSI one-shot report. Box-drawing chars are stdlib-safe on modern terms."""
-    print()
+def _render(report: TrustReport, *, verbose: bool) -> None:
+    """Render a trust report using the same section grammar as stage output."""
     _render_header(report)
-    print()
     _render_suspicious(report.suspicious, verbose=verbose)
-    print()
     _render_hot_files(report.crap_rows, crap_max=report.crap_max, verbose=verbose)
-    print()
     _render_diff(report)
-    print()
     _render_next_actions(report, verbose=verbose)
-    print()
-    _render_stages(report, command_name=command_name)
+    _render_stages(report)
 
 
 def _render_header(report: TrustReport) -> None:
@@ -286,10 +282,11 @@ def _render_header(report: TrustReport) -> None:
         crap_count=len(report.crap_rows),
         mutation=report.mutation,
     )
-    print("┌─ pyharness trust report ────────────────────────────────────┐")
-    print(f"│ TRUST  {score_txt}{delta_txt}  {emoji} {word}")
-    print(f"│ verdict: {sentence}")
-    print("└─────────────────────────────────────────────────────────────┘")
+    ui.section("Trust")
+    ui.kv_block([
+        ("score", f"{score_txt}{delta_txt}  {emoji} {word}"),
+        ("verdict", sentence),
+    ])
 
 
 def _print_truncated(rows: list, *, verbose: bool, formatter: Callable[..., str]) -> None:
@@ -310,12 +307,14 @@ def _format_suspicious(t: TestInspection) -> str:
 
 
 def _render_suspicious(rows: list[TestInspection], *, verbose: bool) -> None:
-    print("▸ suspicious tests (assertion-light, LOC > 5)")
+    ui.section("Suspicious Tests")
+    print("  assertion-light, LOC > 5")
     _print_truncated(rows, verbose=verbose, formatter=_format_suspicious)
 
 
 def _render_hot_files(rows: list[CrapRow], *, crap_max: float, verbose: bool) -> None:
-    print("▸ hot files (CRAP > configured ceiling)")
+    ui.section("Hot Files")
+    print("  CRAP > configured ceiling")
 
     def _format(r: CrapRow) -> str:
         color = _crap_color(r.crap, crap_max)
@@ -329,11 +328,11 @@ def _render_hot_files(rows: list[CrapRow], *, crap_max: float, verbose: bool) ->
 
 
 def _render_diff(report: TrustReport) -> None:
+    ui.section("Diff")
     if not report.diff_changed:
-        print("▸ diff since HEAD~1")
         print("    (none)")
         return
-    print(f"▸ diff since HEAD~1: {len(report.diff_changed)} changed file(s)")
+    print(f"  since HEAD~1: {len(report.diff_changed)} changed file(s)")
     hot_paths = {r.path for r in report.diff_new_crap}
     for path in sorted(report.diff_changed)[:10]:
         marker = "  (new CRAP>ceiling fn)" if path in hot_paths else ""
@@ -341,7 +340,7 @@ def _render_diff(report: TrustReport) -> None:
 
 
 def _render_next_actions(report: TrustReport, *, verbose: bool) -> None:
-    print("▸ next actions")
+    ui.section("Next Actions")
     if not report.suspicious and not report.crap_rows:
         print("    (none)")
         return
@@ -373,7 +372,7 @@ def _render_more_hint(*, total: int, shown: int) -> None:
         print(f"      … {total - shown} more (use --verbose)")
 
 
-def _render_stages(report: TrustReport, *, command_name: str) -> None:
+def _render_stages(report: TrustReport) -> None:
     parts: list[str] = []
     if report.coverage_pct is not None:
         parts.append(f"coverage {report.coverage_pct:.0f}%")
@@ -381,8 +380,9 @@ def _render_stages(report: TrustReport, *, command_name: str) -> None:
         parts.append(f"mutation {report.mutation.score:.0f}%")
     parts.append(f"CRAP {len(report.crap_rows)} over ceiling")
     parts.append(f"suspicious {len(report.suspicious)}")
-    print("stages: " + "   ".join(parts))
-    print(f"run `harness {command_name} --verbose` for full breakdown")
+    ui.section("Signals")
+    print("  " + "   ".join(parts))
+    print("  run `harness trust --verbose` for full breakdown")
 
 
 def _delta_arrow(delta: float) -> str:
@@ -404,29 +404,24 @@ def _crap_color(crap: float, crap_max: float) -> str:
 # ─────────────── entry point ────────────────────────────────────
 
 
-def cmd_stats() -> None:
-    """Print a trust-score report over cached quality data. Always exits 0 (advisory)."""
-    _cmd_trust_like(command_name="stats", allow_refresh=False)
-
-
 def cmd_trust() -> None:
     """Print an actionable trust report; --refresh runs coverage first."""
-    _cmd_trust_like(command_name="trust", allow_refresh=True)
-
-
-def _cmd_trust_like(*, command_name: str, allow_refresh: bool) -> None:
+    start = time.monotonic()
     cfg = load_config()
+    ui.command_banner("trust", cfg)
     no_trend = "--no-trend" in sys.argv
 
-    if allow_refresh and "--refresh" in sys.argv:
+    if "--refresh" in sys.argv:
         cmd_coverage(min_pct=0)
 
     if not Path(".coverage").exists():
-        warn_skip(f"{command_name}: no coverage data — run `harness coverage` first")
+        warn_skip("trust: no coverage data — run `harness coverage` first")
+        ui.command_footer(start)
         return
     cov_file = generate_coverage_xml()
     if not cov_file.exists():
-        warn_skip(f"{command_name}: coverage.xml not generated — run `harness coverage` first")
+        warn_skip("trust: coverage.xml not generated — run `harness coverage` first")
+        ui.command_footer(start)
         return
 
     cov_map = parse_coverage(cov_file)
@@ -461,10 +456,11 @@ def _cmd_trust_like(*, command_name: str, allow_refresh: bool) -> None:
         diff_changed=diff_changed,
         diff_new_crap=[r for r in crap_rows if r.path in diff_changed],
     )
-    _render(report, verbose=VERBOSE, command_name=command_name)
+    _render(report, verbose=VERBOSE)
 
     if not no_trend:
         _write_trust(cache, score)
+    ui.command_footer(start)
 
 
 def _coverage_pct(cov_map: dict[str, dict[int, int]]) -> float | None:

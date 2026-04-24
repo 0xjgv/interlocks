@@ -5,9 +5,9 @@ Feature: harness doctor adoption diagnostic
 
   Scenario: Doctor reports adoption readiness
     Given I run "harness doctor"
-    Then the output contains "Readiness:"
-    And the output contains "Detected configuration:"
-    And the output contains "Blockers:"
-    And the output contains "Warnings:"
-    And the output contains "Next steps:"
+    Then the output contains "── Readiness"
+    And the output contains "── Detected Configuration"
+    And the output contains "── Blockers"
+    And the output contains "── Warnings"
+    And the output contains "── Next Steps"
     And the output contains "src_dir"

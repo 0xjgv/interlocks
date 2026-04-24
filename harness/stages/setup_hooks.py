@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import shlex
 import sys
+import time
 from pathlib import Path
 
-from harness.runner import ok, section
+from harness import ui
+from harness.config import load_config
+from harness.runner import ok
 
 
 def _is_post_edit_command(command: object) -> bool:
@@ -56,23 +59,28 @@ def _ensure_stop_hook(settings: dict[str, object], command: str) -> dict[str, ob
 
 
 def cmd_hooks() -> None:
-    section("Setup Hooks")
-    python = shlex.quote(sys.executable)
-
-    hook = Path(".git/hooks/pre-commit")
-    hook.parent.mkdir(parents=True, exist_ok=True)
-    hook.write_text(f"#!/bin/sh\nexec {python} -m harness.cli pre-commit\n", encoding="utf-8")
-    hook.chmod(0o755)
-    ok("Installed pre-commit hook")
-
-    settings_path = Path(".claude/settings.json")
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    start = time.monotonic()
+    ui.banner(load_config())
+    ui.section("Setup Hooks")
     try:
-        existing = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
-        existing = {}
-    if not isinstance(existing, dict):
-        existing = {}
-    existing = _ensure_stop_hook(existing, f"{python} -m harness.cli post-edit")
-    settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
-    ok("Installed Claude Code Stop hook")
+        python = shlex.quote(sys.executable)
+
+        hook = Path(".git/hooks/pre-commit")
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text(f"#!/bin/sh\nexec {python} -m harness.cli pre-commit\n", encoding="utf-8")
+        hook.chmod(0o755)
+        ok("Installed pre-commit hook")
+
+        settings_path = Path(".claude/settings.json")
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            existing = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            existing = {}
+        if not isinstance(existing, dict):
+            existing = {}
+        existing = _ensure_stop_hook(existing, f"{python} -m harness.cli post-edit")
+        settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+        ok("Installed Claude Code Stop hook")
+    finally:
+        ui.stage_footer(time.monotonic() - start)

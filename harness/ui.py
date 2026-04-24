@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import time
 from typing import TYPE_CHECKING, Literal
 
 from harness import __version__
@@ -59,6 +60,18 @@ def banner(cfg: HarnessConfig) -> None:
         f"runner={cfg.test_runner}",
         f"invoker={cfg.test_invoker}",
     ]
+    print(_c(_DIM, "  ·  ".join(parts)))
+
+
+def command_banner(command: str, cfg: HarnessConfig | None = None) -> None:
+    """One-line command banner aligned with stage banners."""
+    parts = [f"pyharness v{__version__}", f"command={command}"]
+    if cfg is not None:
+        parts.extend([
+            f"preset={cfg.preset or 'none'}",
+            f"runner={cfg.test_runner}",
+            f"invoker={cfg.test_invoker}",
+        ])
     print(_c(_DIM, "  ·  ".join(parts)))
 
 
@@ -113,9 +126,23 @@ def kv_block(pairs: list[tuple[str, str]], *, indent: str = "  ", gap: int = 2) 
         print(f"{indent}{key:<{key_width}}{' ' * gap}{value}")
 
 
+def message_list(items: list[str], *, empty: str = "none", indent: str = "  ") -> None:
+    """Print bullet messages with a consistent empty state."""
+    if not items:
+        print(f"{indent}{empty}")
+        return
+    for item in items:
+        print(f"{indent}- {item}")
+
+
 def stage_footer(elapsed_s: float) -> None:
     """`Completed in X.Ys` footer."""
     print(f"\n{_c(_DIM, f'Completed in {elapsed_s:.1f}s')}")
+
+
+def command_footer(start_time: float) -> None:
+    """Print an elapsed footer for non-stage commands."""
+    stage_footer(time.monotonic() - start_time)
 
 
 _STATE_COLORS: dict[State, str] = {

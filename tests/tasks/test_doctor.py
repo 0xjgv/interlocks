@@ -40,11 +40,12 @@ def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     assert "status                 blocked" in result.stdout
     assert "missing pyproject.toml" in result.stdout
     # Section headers show up so the report is grouped, not a blob.
-    assert "Readiness:" in result.stdout
-    assert "Detected configuration:" in result.stdout
-    assert "Blockers:" in result.stdout
-    assert "Warnings:" in result.stdout
-    assert "Next steps:" in result.stdout
+    assert "command=doctor" in result.stdout
+    assert "── Readiness" in result.stdout
+    assert "── Detected Configuration" in result.stdout
+    assert "── Blockers" in result.stdout
+    assert "── Warnings" in result.stdout
+    assert "── Next Steps" in result.stdout
 
 
 def test_doctor_in_process_reports_sections(
@@ -70,8 +71,9 @@ def test_doctor_in_process_reports_sections(
         clear_cache()
 
     captured = capsys.readouterr()
-    assert "Readiness:" in captured.out
-    assert "Detected configuration:" in captured.out
+    assert "command=doctor" in captured.out
+    assert "── Readiness" in captured.out
+    assert "── Detected Configuration" in captured.out
     assert "src_dir" in captured.out
     assert "test_runner" in captured.out
     assert "status                 ready" in captured.out

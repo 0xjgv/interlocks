@@ -37,6 +37,11 @@ _SOURCE_PROJECT = "project-configured"
 _SOURCE_USER = "user-global"
 
 _SUPPORTED_PRESETS: tuple[Preset, ...] = ("baseline", "strict", "legacy")
+_PRESET_DESCRIPTIONS: dict[Preset, str] = {
+    "baseline": "adoption defaults; advisory CRAP; mutation off in CI; acceptance off in check",
+    "strict": "mature repo defaults; CRAP and mutation blocking; mutation full in CI",
+    "legacy": "ratcheting defaults; permissive thresholds; advisory gates",
+}
 _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
     "baseline": {
         "coverage_min": 70,
@@ -84,6 +89,27 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "run_acceptance_in_check": False,
     },
 }
+
+
+def supported_presets() -> tuple[Preset, ...]:
+    """Return supported preset names in display order."""
+    return _SUPPORTED_PRESETS
+
+
+def preset_defaults(preset: Preset) -> dict[str, object]:
+    """Return a copy of the defaults applied by ``preset``."""
+    return dict(_PRESET_DEFAULTS[preset])
+
+
+def preset_description(preset: Preset) -> str:
+    """Return the human-readable description for ``preset``."""
+    return _PRESET_DESCRIPTIONS[preset]
+
+
+def kv_with_source(cfg: HarnessConfig, key: str, value: object) -> tuple[str, str]:
+    """Render a ``(key, "value (source)")`` row using ``cfg.value_sources``."""
+    source = cfg.value_sources.get(key, "unknown")
+    return (key, f"{value} ({source})")
 
 
 class HarnessConfigError(Exception):

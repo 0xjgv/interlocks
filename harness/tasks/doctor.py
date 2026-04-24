@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import shutil
 import sys
+import time
 import tomllib
 from typing import TYPE_CHECKING
 
 from harness import ui
-from harness.config import find_project_root, load_config
+from harness.config import find_project_root, kv_with_source, load_config
 from harness.detect import expected_target_interpreter
 
 if TYPE_CHECKING:
@@ -41,6 +42,7 @@ def task_doctor() -> Task | None:
 
 
 def cmd_doctor() -> None:
+    start = time.monotonic()
     project_root = find_project_root()
     pyproject_path = project_root / "pyproject.toml"
 
@@ -53,7 +55,8 @@ def cmd_doctor() -> None:
     _collect_tool_warnings(project_root, cfg, warnings, blockers)
     is_blocked = bool(blockers or failures)
 
-    print("Readiness:")
+    ui.command_banner("doctor", cfg)
+    ui.section("Readiness")
     if is_blocked:
         print("  status                 blocked")
         print("  summary                fix blockers before running `harness check`")
@@ -61,21 +64,18 @@ def cmd_doctor() -> None:
         print("  status                 ready")
         print("  summary                ready to try `harness check`")
 
-    print()
-    print("Detected configuration:")
+    ui.section("Detected Configuration")
     _print_configuration(project_root, cfg, pyproject_path)
 
-    print()
-    print("Blockers:")
+    ui.section("Blockers")
     _print_messages([*failures, *blockers], empty="none")
 
-    print()
-    print("Warnings:")
+    ui.section("Warnings")
     _print_messages(warnings, empty="none")
 
-    print()
-    print("Next steps:")
+    ui.section("Next Steps")
     _print_next_steps(is_blocked)
+    ui.command_footer(start)
 
     if failures:
         sys.exit(1)
@@ -134,7 +134,7 @@ def _print_configuration(
     if cfg is None:
         ui.kv_block(pairs)
         return
-    pairs.extend(_cfg_pair(cfg, key, value) for key, value in _cfg_rows(cfg))
+    pairs.extend(kv_with_source(cfg, key, value) for key, value in _cfg_rows(cfg))
     ui.kv_block(pairs)
 
 
@@ -163,17 +163,8 @@ def _cfg_rows(cfg: HarnessConfig) -> list[tuple[str, object]]:
     return rows
 
 
-def _cfg_pair(cfg: HarnessConfig, key: str, value: object) -> tuple[str, str]:
-    source = cfg.value_sources.get(key, "unknown")
-    return (key, f"{value} ({source})")
-
-
 def _print_messages(messages: list[str], *, empty: str) -> None:
-    if not messages:
-        print(f"  {empty}")
-        return
-    for msg in messages:
-        print(f"  - {msg}")
+    ui.message_list(messages, empty=empty)
 
 
 def _print_next_steps(blocked: bool) -> None:
