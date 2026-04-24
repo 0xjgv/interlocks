@@ -1,6 +1,6 @@
 # pyharness
 
-Ship one tool company-wide. Shared thresholds (CRAP + mutation gates), staged pipelines (`check` / `pre-commit` / `ci` / `nightly`), pre-wired tool defaults. Stop re-plumbing ruff + basedpyright + pytest + coverage + mutmut + deptry + import-linter + pip-audit + lizard in every repo.
+Ship one tool company-wide. Shared thresholds (CRAP + mutation gates), staged pipelines (`check` / `pre-commit` / `ci` / `nightly`), pre-wired tool defaults. Stop re-plumbing ruff + basedpyright + pytest + pytest-bdd + coverage + mutmut + deptry + import-linter + pip-audit + lizard in every repo.
 
 Built for platform / devex teams who need every Python service in the org to pass the same gates with the same config surface — without copy-pasting `[tool.ruff]` and pinning six dev-dependencies in each repo.
 
@@ -23,18 +23,26 @@ enforce_crap = true
 
 No more drift between a team's `.coveragerc`, `pyproject`'s `[tool.coverage.report] fail_under`, and the CI script's `--fail-under=` flag.
 
-### Staged gates — one tool, four pipelines, no per-repo bash
+### Pipeline stages — one tool, four pipelines, no per-repo bash
 
 | Stage | When | What runs |
 |-------|------|-----------|
-| `harness check` | Dev inner loop | fix → format → parallel(typecheck, test, acceptance¹) → deps (advisory) |
+| `harness check` | Dev inner loop | fix → format → parallel(typecheck, test, acceptance¹) → deps (advisory) → suppressions report |
 | `harness pre-commit` | Git pre-commit hook | fix + format on staged files, re-stage, typecheck, test (only if `src_dir/` touched) |
 | `harness ci` | On every PR | parallel(format-check, lint, complexity, deps, typecheck, coverage, arch², acceptance²) → CRAP (blocking) → mutation (if `run_mutation_in_ci`) |
-| `harness nightly` | Cron / scheduled | coverage → mutation (**always blocking** on `mutation_min_score`) |
+| `harness nightly` | Cron / scheduled | coverage → mutation (**always blocking**: nightly injects `--min-score=<mutation_min_score>` into argv when absent³) |
 
-¹ opt in with `run_acceptance_in_check = true`. ² skips silently if not configured / no features dir.
+¹ opt in with `run_acceptance_in_check = true`. ² skips silently if not configured / no features dir. ³ user-supplied `--min-score=` takes precedence.
 
-Your CI workflow becomes one line: `uv run harness ci`. Your pre-commit hook becomes one line: `harness pre-commit`. Your nightly cron becomes one line: `harness nightly`. The logic lives inside pyharness, upgrades with pyharness. `harness nightly` overrides `enforce_mutation` — by design it always fails the run when the score drops. That's the point of nightly.
+**Other stages** (direct-invocation only; not part of the pipeline):
+
+- `harness post-edit` — ruff `--fix` + `ruff format` on `git status`-reported changed Python files, advisory only. Drives the Claude Code Stop hook.
+- `harness setup-hooks` — writes `.git/hooks/pre-commit` and merges a Stop hook into `.claude/settings.json`. Idempotent.
+- `harness clean` — removes `.ruff_cache`, `build/`, `dist/`, `htmlcov/`, `.coverage`, `mutants/`, `.mutmut-cache`, `mutmut-junit.xml`, and every `__pycache__/`.
+
+Your CI workflow becomes one line: `harness ci`. Your pre-commit hook becomes one line: `harness pre-commit`. Your nightly cron becomes one line: `harness nightly`. The logic lives inside pyharness and upgrades with pyharness — no per-repo bash to maintain.
+
+Direct-invocation stages (`post-edit`, `setup-hooks`, `clean`) are documented in more detail under [Stages](#stages).
 
 ### Self-dogfooded public-surface contracts
 
@@ -44,12 +52,7 @@ pyharness's own CLI contract is guarded by its own acceptance suite (`tests/feat
 
 When your project has no `[tool.ruff]` / `pyrightconfig.json` / `.coveragerc` / `.importlinter`, harness injects its bundled default so `harness lint`, `harness typecheck`, `harness coverage`, `harness arch` all work in a brand-new repo with zero setup. Projects that need custom rules declare their own config and harness steps aside.
 
-| Task | Detected via | Bundled fallback |
-|------|-------------|------------------|
-| `lint` / `fix` / `format` / `format-check` | `[tool.ruff]` or `ruff.toml` / `.ruff.toml` | `harness/defaults/ruff.toml` |
-| `typecheck` | `[tool.basedpyright]` or `pyrightconfig.{json,toml}` | `harness/defaults/pyrightconfig.json` |
-| `coverage` | `[tool.coverage.*]` or `.coveragerc` | `harness/defaults/coveragerc` |
-| `arch` | `[tool.importlinter]` or `.importlinter` / `setup.cfg` | `harness/defaults/importlinter_template.ini` (default: `src ↛ tests`) |
+See the full inventory — including `init` / `init-acceptance` scaffold templates — in [Bundled tool defaults](#bundled-tool-defaults) under Reference.
 
 ## Install
 
@@ -57,7 +60,7 @@ When your project has no `[tool.ruff]` / `pyrightconfig.json` / `.coveragerc` / 
 pipx install pyharness       # or: uv tool install pyharness
 ```
 
-Every underlying tool (ruff, basedpyright, coverage, pytest, pytest-bdd, lizard, mutmut, pip-audit, deptry, import-linter) ships with the CLI. No extra `pip install` dance in your project.
+Every underlying tool (ruff, basedpyright, pytest, pytest-bdd, coverage, mutmut, deptry, import-linter, pip-audit, lizard) ships with the CLI. No extra `pip install` dance in your project.
 
 ## Quickstart
 
@@ -69,6 +72,10 @@ harness setup-hooks          # git pre-commit + Claude Code post-edit hook
 ```
 
 Nothing to configure. Paths, test runner, and invoker auto-detect from `pyproject.toml`. Override any of them under `[tool.harness]` when you need to.
+
+If you run `harness <task>` in a directory without a `pyproject.toml`, it exits 2 with `harness: no pyproject.toml — run 'harness init' to scaffold`. Only `doctor`, `init`, `version`, and `help` are exempt.
+
+Pass `--verbose` to any command to stream subprocess stdout/stderr tagged with the task name. `harness stats --verbose` additionally prints the full breakdown instead of truncating at 10 rows.
 
 ## Reference
 
@@ -90,14 +97,32 @@ Individual commands. Each reads config + CLI flags. Most call through a shared r
 
 **Gates**
 - `coverage --min=N` — coverage.py with fail-under
-- `crap --max=N` — complexity × coverage gate, blocking by default
-- `mutation --max-runtime=N` — mutmut; advisory unless `enforce_mutation = true` or `--min-score=` passed (see `nightly`)
+- `crap --max=N [--changed-only]` — cyclomatic × coverage gate, blocking by default; `--changed-only` scopes to files in `git diff`
+- `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only]` — mutmut; advisory unless `enforce_mutation = true` or `--min-score=` passed (see `nightly`)
 
-**Scaffolding & housekeeping**
+**Scaffolding**
 - `init-acceptance` — write `tests/features/example.feature`, `tests/step_defs/test_example.py`, `tests/step_defs/conftest.py` (refuses to overwrite)
-- `setup-hooks` — install `.git/hooks/pre-commit` + append `post-edit` to `.claude/settings.json` Stop hook
-- `clean` — remove caches, build artifacts, mutation state
-- `help` — show detected paths + active thresholds
+
+### Stages
+
+Composed entry points. The four pipeline stages (`check`, `pre-commit`, `ci`, `nightly`) are the ones you wire into your workflow — see the [Pipeline stages](#pipeline-stages--one-tool-four-pipelines-no-per-repo-bash) table. The three utility stages below are direct-invocation only.
+
+- `post-edit` — advisory `ruff --fix` + `ruff format` on `git status`-reported changed Python files. Drives the Claude Code Stop hook.
+- `setup-hooks` — install `.git/hooks/pre-commit` + merge a Stop hook into `.claude/settings.json`. Idempotent.
+- `clean` — removes `.ruff_cache`, `build/`, `dist/`, `htmlcov/`, `.coverage`, `mutants/`, `.mutmut-cache`, `mutmut-junit.xml`, and every `__pycache__/`.
+
+### Reports
+
+- `stats [--no-trend]` — trust-score report (verdict + suspicious tests + hot files); read-only, never exits non-zero. Combines coverage, CRAP, mutation, suspicious-test AST inspection, and recent git diff. Writes `.harness/trust.json` (max 20 entries) so subsequent runs can show trend arrows; pass `--no-trend` to skip the cache write. `--verbose` prints the full breakdown instead of truncating at 10 rows.
+
+### Utility
+
+These commands are exempt from the preflight `pyproject.toml` gate — they exist to diagnose or bootstrap broken setups.
+
+- `doctor` — diagnostic. Prints detected paths (project root / src / test / features), runner, invoker; reports which of `ruff`, `basedpyright`, `coverage`, `mutmut`, `pytest`, `pip-audit`, `deptry`, `import-linter`, `lizard` are on `PATH`; notes whether `.venv/bin/python` exists. Exits 1 only when config itself fails to load.
+- `init` — greenfield scaffold. Writes `pyproject.toml` (from a bundled template with `{project_name}` replaced by the cwd basename), `tests/__init__.py`, and `tests/test_smoke.py`. Refuses to overwrite any existing target.
+- `version` — print the installed pyharness version.
+- `help` — show detected paths + active thresholds.
 
 ### Acceptance tests (Gherkin)
 
@@ -174,14 +199,19 @@ crap_max = 25.0
 
 When the target project has no config for a given tool, harness injects its bundled default. This is why `harness lint`, `harness typecheck`, `harness coverage`, and `harness arch` work in a brand-new repo with no setup.
 
-| Task | Detected via | Bundled fallback | Injected flag |
-|------|-------------|------------------|---------------|
-| `lint` / `fix` / `format` / `format-check` | `[tool.ruff]` or `ruff.toml` / `.ruff.toml` | `harness/defaults/ruff.toml` | `--config` |
-| `typecheck` | `[tool.basedpyright]` or `pyrightconfig.{json,toml}` | `harness/defaults/pyrightconfig.json` | `--project` |
-| `coverage` | `[tool.coverage.*]` or `.coveragerc` | `harness/defaults/coveragerc` | `--rcfile=` |
-| `arch` | `[tool.importlinter]` or `.importlinter` / `setup.cfg` | `harness/defaults/importlinter_template.ini` (default `src ↛ tests`) | `--config` |
-| `deps` | `[tool.deptry]` | none — deptry's built-ins apply | — |
-| `mutation` | `[tool.mutmut]` | none — mutmut reads the project's `pyproject.toml` | — |
+| File | Consumed by | Detected via | Injected flag |
+|------|-------------|--------------|---------------|
+| `ruff.toml` | `fix` / `format` / `lint` / `format-check` | `[tool.ruff]` · `ruff.toml` · `.ruff.toml` | `--config` |
+| `pyrightconfig.json` | `typecheck` | `[tool.basedpyright]` · `pyrightconfig.{json,toml}` | `--project` |
+| `coveragerc` | `coverage` | `[tool.coverage.*]` · `.coveragerc` | `--rcfile=` |
+| `importlinter_template.ini` | `arch` | `[tool.importlinter]` · `.importlinter` · `setup.cfg` | formatted → tempfile · `--config` |
+| `bdd_example.feature` | `init-acceptance` | — | direct copy |
+| `bdd_test_example.py` | `init-acceptance` | — | direct copy |
+| `bdd_conftest.py` | `init-acceptance` | — | direct copy |
+| `scaffold_pyproject.toml` | `init` | — | read + `{project_name}` substitution |
+| `scaffold_test_example.py` | `init` | — | direct copy |
+
+`harness deps` and `harness mutation` ship no bundled fallback — deptry applies its built-ins, and mutmut reads the project's `pyproject.toml` directly.
 
 Run `harness help` to see what was detected and which thresholds are in effect.
 
@@ -198,19 +228,4 @@ Installs two things:
 
 Both reference the Python that installed pyharness, so they survive venv changes.
 
-## Changelog
-
-### Blocking CRAP (breaking default)
-
-`harness crap` used to be advisory (printed offenders, exit 0). It now **exits 1 by default** when any function's CRAP score exceeds `crap_max` (30.0). Restore the old behaviour with:
-
-```toml
-[tool.harness]
-enforce_crap = false
-```
-
-Mutation stays advisory by default — runtime is unbounded on real codebases. Gate it per-PR with `run_mutation_in_ci = true` + `enforce_mutation = true`, or schedule `harness nightly` for a bounded, blocking run.
-
-### Acceptance stage
-
-`harness acceptance` (pytest-bdd default, behave auto-detected) and `harness init-acceptance` (scaffold a working example) are new. Acceptance auto-runs in `ci` when a features dir exists; opt into `check` with `run_acceptance_in_check = true`.
+See [CHANGELOG.md](./CHANGELOG.md) for release history.

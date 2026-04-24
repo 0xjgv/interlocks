@@ -29,3 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `harness arch` (import-linter), `harness coverage`, `harness version`.
 - Git `pre-commit` and Claude Code `Stop` hook installers via
   `harness setup-hooks`.
+
+### Notes
+
+- The blocking CRAP gate is on by default (`enforce_crap = true`).
+  Set `enforce_crap = false` under `[tool.harness]` to fall back to
+  advisory mode (print offenders, exit 0).
+- `harness mutation` stays advisory by default — mutmut runtime is
+  unbounded on real codebases. Gate it per-PR with
+  `run_mutation_in_ci = true` + `enforce_mutation = true`, or
+  schedule `harness nightly` for a bounded, blocking run.
