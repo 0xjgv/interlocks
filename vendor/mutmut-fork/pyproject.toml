@@ -52,7 +52,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/boxed/mutmut"
 Upstream = "https://github.com/boxed/mutmut"
-Interlock = "https://github.com/juans-gaitan/interlock"
+Interlock = "https://github.com/0xjgv/interlock"
 Documentation = "https://mutmut.readthedocs.io/en/latest/"
 Repository = "https://github.com/boxed/mutmut"
 Issues = "https://github.com/boxed/mutmut/issues"
@@ -69,4 +69,6 @@ requires = ["uv_build>=0.9.5,<0.10.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
+module-root = "src"
+module-name = "mutmut"
 source-include = ["HISTORY.rst"]

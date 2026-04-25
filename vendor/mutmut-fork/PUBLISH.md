@@ -61,7 +61,30 @@ already claimed that version on PyPI, bump a local suffix
 (e.g. `3.5.0.post1`) rather than picking an arbitrary version — this
 preserves the upstream-version signal for downstream consumers.
 
-### 4. Build
+### 4. Patch distribution-name fallback
+
+The module import path stays `mutmut`, but the published distribution name is
+`interlock-mutmut`. Patch upstream's version lookup so `import mutmut` works
+when only `interlock-mutmut` metadata exists:
+
+```sh
+python - <<'PY'
+from pathlib import Path
+
+path = Path("src/mutmut/__init__.py")
+text = path.read_text(encoding="utf-8")
+text = text.replace(
+    '__version__ = importlib.metadata.version("mutmut")\n',
+    'try:\n'
+    '    __version__ = importlib.metadata.version("mutmut")\n'
+    'except importlib.metadata.PackageNotFoundError:\n'
+    '    __version__ = importlib.metadata.version("interlock-mutmut")\n',
+)
+path.write_text(text, encoding="utf-8")
+PY
+```
+
+### 5. Build
 
 ```sh
 uv build
@@ -73,9 +96,19 @@ directory (i.e. the import path is unchanged):
 
 ```sh
 unzip -l dist/interlock_mutmut-*.whl | grep '^.* mutmut/'
+uvx twine check dist/*
 ```
 
-### 5. Publish
+Smoke-test from a fresh environment before publishing:
+
+```sh
+uv venv /tmp/interlock-mutmut-smoke
+uv pip install --python /tmp/interlock-mutmut-smoke/bin/python dist/interlock_mutmut-*.whl
+/tmp/interlock-mutmut-smoke/bin/python -c 'import mutmut; print(mutmut.__version__)'
+/tmp/interlock-mutmut-smoke/bin/mutmut --help
+```
+
+### 6. Publish
 
 ```sh
 uv publish --token "$PYPI_TOKEN"
@@ -91,7 +124,7 @@ uv tool install --from interlock-mutmut mutmut
 mutmut --help
 ```
 
-### 6. Follow-up PR in interlock
+### 7. Follow-up PR in interlock
 
 This scaffold unit deliberately does **not** modify interlock's own
 `pyproject.toml`. Once the first `interlock-mutmut` release is live on PyPI,
