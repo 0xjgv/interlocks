@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-scenarios("../features/interlock_meta.feature")
+scenarios(str(Path(__file__).parent.parent / "features" / "interlock_meta.feature"))
 
 
 _PYPROJECT = textwrap.dedent(

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then, when
 
-scenarios("../features/interlock_tasks.feature")
+scenarios(str(Path(__file__).parent.parent / "features" / "interlock_tasks.feature"))
 
 
 # ─────────────── layout builders ─────────────────────

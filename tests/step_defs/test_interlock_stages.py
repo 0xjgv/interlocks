@@ -15,7 +15,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from tests.step_defs.conftest import make_tmp_project, run_interlock_in_cwd
 
-scenarios("../features/interlock_stages.feature")
+scenarios(str(Path(__file__).parent.parent / "features" / "interlock_stages.feature"))
 
 
 @given("a minimal tmp project", target_fixture="tmp_project")

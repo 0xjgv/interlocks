@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then
 
-scenarios("../features/interlock_cli.feature")
+scenarios(str(Path(__file__).parent.parent / "features" / "interlock_cli.feature"))
 
 
 @given(parsers.parse('I run "interlock {subcmd}"'), target_fixture="cli_output")

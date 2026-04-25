@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then, when
 
-scenarios("../features/interlock_init.feature")
+scenarios(str(Path(__file__).parent.parent / "features" / "interlock_init.feature"))
 
 _PRE_EXISTING = "# pre-existing pyproject\n"
 

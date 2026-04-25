@@ -15,7 +15,7 @@ from pytest_bdd import given, parsers, scenarios, then
 
 import interlock
 
-scenarios("../features/interlock_doctor.feature")
+scenarios(str(Path(__file__).parent.parent / "features" / "interlock_doctor.feature"))
 
 # Point the subprocess at this checkout's interlock even when an outer
 # interpreter's site-packages shadows it (same concern as test_doctor.py).
