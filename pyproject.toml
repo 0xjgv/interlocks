@@ -19,8 +19,7 @@ dependencies = [
     "deptry>=0.25.1",
     "import-linter>=2.11",
     "lizard>=1.21.6",
-    # Pinned to main until >3.5.0 ships with the set_start_method guard (mutmut#466).
-    "mutmut @ git+https://github.com/boxed/mutmut.git@e31d923c734383ddb7df4aa439ab3c60fd7d629a",
+    "interlock-mutmut>=3.5.0",
     "pip-audit>=2.7",
     "ruff>=0.15.11",
 ]
@@ -212,7 +211,7 @@ pytest_add_cli_args = [
 extend_exclude = ["interlock/defaults"]
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ["basedpyright", "coverage", "deptry", "import-linter", "lizard", "mutmut", "pip-audit", "ruff"]
+DEP002 = ["basedpyright", "coverage", "deptry", "import-linter", "interlock-mutmut", "lizard", "pip-audit", "ruff"]
 
 # ── Import-Linter ──────────────────────────────────────────────────
 # Declaring explicit contracts overrides the default (src ↛ tests) that

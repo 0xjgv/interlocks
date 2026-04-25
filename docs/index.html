@@ -44,6 +44,7 @@
 
     html {
       scroll-behavior: smooth;
+      font-size: 17px;
     }
 
     body {
@@ -135,7 +136,7 @@
       gap: var(--s);
       background: var(--bg-panel);
       border: var(--bw) solid var(--border);
-      padding: calc(var(--s) * 0.5) var(--s);
+      padding: calc(var(--s) * 0.5) calc(var(--s) * 0.5) calc(var(--s) * 0.5) var(--s);
       margin: 0 0 var(--s) 0;
       font-family: var(--font-mono);
     }
@@ -229,16 +230,19 @@
     .copy-wrap {
       display: flex;
       align-items: center;
-      gap: var(--s);
+      justify-content: center;
     }
 
     .copy-btn {
       flex-shrink: 0;
       background: transparent;
-      border: var(--bw) solid var(--border);
-      color: var(--fg);
-      padding: var(--s);
+      border: 0;
+      color: var(--muted);
+      padding: 0 calc(var(--s) * 0.5);
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       line-height: 0;
     }
 
@@ -347,7 +351,7 @@
     .wordmark-fade p {
       margin: 0;
       text-align: center;
-      font-size: 21vw;
+      font-size: 18vw;
       line-height: 0.75;
       font-weight: 600;
       text-transform: uppercase;
@@ -416,7 +420,8 @@
   <header class="top">
     <div class="top-inner">
       <div class="logo">INTERLOCK</div>
-      <a href="https://github.com/0xjgv/interlock" class="cta-primary">View on GitHub &rarr;</a>
+      <a href="https://github.com/0xjgv/interlock" class="cta-primary">View on GitHub
+        &rarr;</a>
     </div>
   </header>
   <div class="wrap">
@@ -427,19 +432,26 @@
     <section class="hero">
       <div class="hero-inner">
         <h1>The machine-verifiable floor for AI-authored Python.</h1>
-        <p class="trust">Deterministic gates for lint, typecheck, tests, coverage, complexity,
+        <p class="trust">Deterministic gates for lint, typecheck, tests, coverage,
+          complexity,
           CRAP, and mutation &mdash; every agent PR trips them before merge.</p>
         <p class="install-alt" style="margin-top: calc(var(--s) * -0.25);">
-          One command surface, local and in CI. Try it without installing &mdash; <code>uvx</code> or <code>pipx run</code>.
+          One command surface, local and in CI. Try it without installing &mdash;
+          <code>uvx</code> or <code>pipx run</code>.
         </p>
-        <div class="copy-wrap" style="justify-content: center; margin-top: var(--s);">
-          <div class="install-cmd"><code id="install-cmd">uvx --from interlock il doctor</code></div>
-          <button class="copy-btn" data-copy="install-cmd" aria-label="Copy install command">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="4" y="4" width="9" height="10" stroke="currentColor" stroke-width="1.3" />
-              <path d="M11 2H3V12" stroke="currentColor" stroke-width="1.3" />
-            </svg>
-          </button>
+        <div class="copy-wrap" style="margin-top: var(--s);">
+          <div class="install-cmd">
+            <code id="install-cmd-text">uvx --from interlock il doctor</code>
+            <button class="copy-btn" data-copy="install-cmd-text"
+              aria-label="Copy install command">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="9" height="10" stroke="currentColor"
+                  stroke-width="1.3" />
+                <path d="M11 2H3V12" stroke="currentColor" stroke-width="1.3" />
+              </svg>
+            </button>
+          </div>
         </div>
         <p class="install-alt">or <code>pipx run --spec interlock il doctor</code></p>
         <a class="cta-primary" href="#stages">Run your first check &rarr;</a>
@@ -490,37 +502,49 @@ Completed in 7.4s</pre>
         <li>
           <span class="stage-name">interlock check</span>
           <span class="stage-when">&mdash; after edits, before pushing</span>
-          <span class="stage-what">fix &rarr; format &rarr; parallel(typecheck, test, acceptance when opted in) &rarr; deps advisory &rarr; cached CRAP &rarr; suppressions report.</span>
+          <span class="stage-what">fix &rarr; format &rarr; parallel(typecheck, test,
+            acceptance when opted in) &rarr; deps advisory &rarr; cached CRAP &rarr;
+            suppressions report.</span>
         </li>
         <li>
           <span class="stage-name">interlock pre-commit</span>
           <span class="stage-when">&mdash; git pre-commit hook</span>
-          <span class="stage-what">fix and format staged Python files, re-stage, typecheck, run tests when source changed. Skip with <code>git commit --no-verify</code>.</span>
+          <span class="stage-what">fix and format staged Python files, re-stage,
+            typecheck, run tests when source changed. Skip with
+            <code>git commit --no-verify</code>.</span>
         </li>
         <li>
           <span class="stage-name">interlock ci</span>
           <span class="stage-when">&mdash; pull requests and protected branches</span>
-          <span class="stage-what">format-check, lint, complexity (lizard, CCN 15), deps, typecheck, coverage, arch, acceptance &rarr; blocking CRAP &rarr; optional mutation.</span>
+          <span class="stage-what">format-check, lint, complexity (lizard, CCN 15), deps,
+            typecheck, coverage, arch, acceptance &rarr; blocking CRAP &rarr; optional
+            mutation.</span>
         </li>
         <li>
           <span class="stage-name">interlock nightly</span>
           <span class="stage-when">&mdash; scheduled job</span>
-          <span class="stage-what">coverage then mutation, always blocking on <code>mutation_min_score</code>. Wire via cron or a GitHub Actions schedule.</span>
+          <span class="stage-what">coverage then mutation, always blocking on
+            <code>mutation_min_score</code>. Wire via cron or a GitHub Actions
+            schedule.</span>
         </li>
         <li>
           <span class="stage-name">interlock post-edit</span>
           <span class="stage-when">&mdash; editor / agent hook</span>
-          <span class="stage-what">advisory ruff fix and format on changed Python files. Installed as a Claude Code Stop hook by <code>setup-hooks</code>.</span>
+          <span class="stage-what">advisory ruff fix and format on changed Python files.
+            Installed as a Claude Code Stop hook by <code>setup-hooks</code>.</span>
         </li>
         <li>
           <span class="stage-name">interlock doctor</span>
           <span class="stage-when">&mdash; first command in a new repo</span>
-          <span class="stage-what">static readiness check: detected paths, runner, invoker, active preset, resolved thresholds, blockers, and shortest next steps. Never runs tests or network.</span>
+          <span class="stage-what">static readiness check: detected paths, runner,
+            invoker, active preset, resolved thresholds, blockers, and shortest next
+            steps. Never runs tests or network.</span>
         </li>
         <li>
           <span class="stage-name">interlock clean</span>
           <span class="stage-when">&mdash; local cleanup</span>
-          <span class="stage-what">removes caches, build artifacts, coverage output, mutation state, and <code>__pycache__/</code>.</span>
+          <span class="stage-what">removes caches, build artifacts, coverage output,
+            mutation state, and <code>__pycache__/</code>.</span>
         </li>
       </ul>
     </div>
@@ -531,19 +555,29 @@ Completed in 7.4s</pre>
 
     <h2 class="section-title">In practice</h2>
     <div class="panel catch-story">
-      <p><strong>Monday morning.</strong> New Python repo, fresh from <code>git init</code>.
-        No <code>pyproject.toml</code> gate configured, no CI pipeline, no agreed thresholds.
-        The team wants a baseline by EOD.</p>
-      <p>You run <code>pipx install interlocks</code> and <code>interlock doctor</code>. It prints
-        detected source and test directories, the active preset, resolved thresholds, and the
+      <p><strong>Monday morning.</strong> New Python repo, fresh from
+        <code>git init</code>.
+        No <code>pyproject.toml</code> gate configured, no CI pipeline, no agreed
+        thresholds.
+        The team wants a baseline by EOD.
+      </p>
+      <p>You run <code>pipx install interlocks</code> and <code>interlock doctor</code>.
+        It prints
+        detected source and test directories, the active preset, resolved thresholds, and
+        the
         two commands you need next. You commit a three-line GitHub workflow that calls
-        <code>0xjgv/interlock@v1</code>. Locally, <code>interlock check</code> runs the same
-        gates CI will run, minus the heavy ones.</p>
-      <p>By the afternoon, the first PR lands. CI enforces lint, typecheck, tests, coverage,
-        CRAP, deps, arch, and acceptance &mdash; all from the reusable action. Nobody edited
+        <code>0xjgv/interlock@v1</code>. Locally, <code>interlock check</code> runs the
+        same
+        gates CI will run, minus the heavy ones.
+      </p>
+      <p>By the afternoon, the first PR lands. CI enforces lint, typecheck, tests,
+        coverage,
+        CRAP, deps, arch, and acceptance &mdash; all from the reusable action. Nobody
+        edited
         eleven tool configs.</p>
       <p class="verdict-line">Result: green CI in one PR. Config: zero.</p>
-      <a class="section-cta" href="https://github.com/0xjgv/interlock">Read the docs on GitHub &rarr;</a>
+      <a class="section-cta" href="https://github.com/0xjgv/interlock">Read the docs on
+        GitHub &rarr;</a>
     </div>
 
     <div class="section-divider" aria-hidden="true"></div>

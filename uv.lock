@@ -355,6 +355,23 @@ wheels = [
 ]
 
 [[package]]
+name = "interlock-mutmut"
+version = "3.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "coverage" },
+    { name = "libcst" },
+    { name = "pytest" },
+    { name = "setproctitle" },
+    { name = "textual" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ba/76/ab8679c3722abb676c7ef7084844aa10a126c728feeee1e1be9b92b5370a/interlock_mutmut-3.5.0.tar.gz", hash = "sha256:82a6d3b4ec6e49753577e3d05c8c516ce13a58a86da523a9afb1584ce06a4907", size = 47663, upload-time = "2026-04-25T20:00:04.036Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/82/624b43cf8e64f994a72a428ee378049a601243a771d51b0339a987233d38/interlock_mutmut-3.5.0-py3-none-any.whl", hash = "sha256:1b8ffba36482da9e54ede07ccdb35a3557e2192878e0a93d2526fb8717f2c167", size = 48597, upload-time = "2026-04-25T20:00:02.429Z" },
+]
+
+[[package]]
 name = "interlocks"
 version = "0.1.0"
 source = { editable = "." }
@@ -363,8 +380,8 @@ dependencies = [
     { name = "coverage" },
     { name = "deptry" },
     { name = "import-linter" },
+    { name = "interlock-mutmut" },
     { name = "lizard" },
-    { name = "mutmut" },
     { name = "pip-audit" },
     { name = "ruff" },
 ]
@@ -381,8 +398,8 @@ requires-dist = [
     { name = "coverage", specifier = ">=7.13.5" },
     { name = "deptry", specifier = ">=0.25.1" },
     { name = "import-linter", specifier = ">=2.11" },
+    { name = "interlock-mutmut", specifier = ">=3.5.0" },
     { name = "lizard", specifier = ">=1.21.6" },
-    { name = "mutmut", git = "https://github.com/boxed/mutmut.git?rev=e31d923c734383ddb7df4aa439ab3c60fd7d629a" },
     { name = "pip-audit", specifier = ">=2.7" },
     { name = "ruff", specifier = ">=0.15.11" },
 ]
@@ -609,19 +626,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/03/42106dcded51f0a0b5284d3ce30a671e7bd3f7318d122b2ead66ad289fed/msgpack-1.1.2-cp314-cp314t-win32.whl", hash = "sha256:1d1418482b1ee984625d88aa9585db570180c286d942da463533b238b98b812b", size = 75197, upload-time = "2025-10-08T09:15:42.954Z" },
     { url = "https://files.pythonhosted.org/packages/15/86/d0071e94987f8db59d4eeb386ddc64d0bb9b10820a8d82bcd3e53eeb2da6/msgpack-1.1.2-cp314-cp314t-win_amd64.whl", hash = "sha256:5a46bf7e831d09470ad92dff02b8b1ac92175ca36b087f904a0519857c6be3ff", size = 85772, upload-time = "2025-10-08T09:15:43.954Z" },
     { url = "https://files.pythonhosted.org/packages/81/f2/08ace4142eb281c12701fc3b93a10795e4d4dc7f753911d836675050f886/msgpack-1.1.2-cp314-cp314t-win_arm64.whl", hash = "sha256:d99ef64f349d5ec3293688e91486c5fdb925ed03807f64d98d205d2713c60b46", size = 70868, upload-time = "2025-10-08T09:15:44.959Z" },
-]
-
-[[package]]
-name = "mutmut"
-version = "3.5.0"
-source = { git = "https://github.com/boxed/mutmut.git?rev=e31d923c734383ddb7df4aa439ab3c60fd7d629a#e31d923c734383ddb7df4aa439ab3c60fd7d629a" }
-dependencies = [
-    { name = "click" },
-    { name = "coverage" },
-    { name = "libcst" },
-    { name = "pytest" },
-    { name = "setproctitle" },
-    { name = "textual" },
 ]
 
 [[package]]
