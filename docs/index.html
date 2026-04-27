@@ -432,8 +432,8 @@
       <div class="hero-inner">
         <h1>The machine-verifiable floor for AI-authored Python.</h1>
         <p class="trust">Deterministic gates for lint, typecheck, tests, coverage,
-          complexity,
-          CRAP, and mutation &mdash; every agent PR trips them before merge.</p>
+          acceptance, complexity, CRAP, mutation, deps, audit, and arch &mdash; every
+          agent PR trips them before merge.</p>
         <p class="install-alt" style="margin-top: calc(var(--s) * -0.25);">
           One command surface, local and in CI. Try it without installing &mdash;
           <code>uvx</code> or <code>pipx run</code>.
@@ -467,7 +467,7 @@
     <h2 class="section-title">`interlocks check` &mdash; the local edit loop</h2>
     <div class="terminal-demo">
       <pre class="block">$ interlocks check
-interlocks v0.1.0  ·  preset=baseline  ·  runner=pytest  ·  invoker=uv
+interlocks v0.1.2  ·  preset=strict  ·  runner=pytest  ·  invoker=uv
 
 ── Quality Checks ──────────────────────────────────────────
   [fix]         ruff check --fix                      ok
@@ -568,7 +568,8 @@ Completed in 7.4s</pre>
         mutation, suspicious-test inspection, recent git diff, and next actions.
       </p>
       <p><strong>Utilities.</strong> <code>doctor</code>, <code>init</code>,
-        <code>presets</code>, <code>version</code>, and <code>help</code>.
+        <code>presets</code>, <code>config</code>, <code>version</code>, and
+        <code>help</code>.
       </p>
     </div>
 
@@ -609,7 +610,7 @@ Completed in 7.4s</pre>
     <!-- Footer -->
 
     <footer class="site">
-      <span>interlocks v0.1.0 &middot; MIT</span>
+      <span>interlocks v0.1.2 &middot; MIT</span>
       <span>Forged with &#9874;&#65039;</span>
       <a href="https://github.com/0xjgv/interlocks">GitHub</a>
     </footer>
