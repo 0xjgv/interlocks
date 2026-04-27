@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
-from interlocks.config import clear_cache
+from interlocks.config import clear_cache, load_config, preset_defaults
 
 
 @pytest.fixture
@@ -21,6 +21,13 @@ def clean_config_cache() -> Iterator[None]:
         yield
     finally:
         clear_cache()
+
+
+def _setup_minimal_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text('[project]\nname = "pkg"\nversion = "0.0.0"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    return pyproject
 
 
 def test_tasks_dict_built_from_groups() -> None:
@@ -142,28 +149,38 @@ def test_cmd_presets_prints_active_preset(
     )
 
 
-def test_cmd_presets_set_appends_interlock_table(
+@pytest.mark.parametrize(
+    "argv",
+    (
+        ["interlocks", "presets", "set", "baseline"],
+        ["interlocks", "presets", "baseline"],
+    ),
+)
+def test_cmd_presets_writes_interlock_table(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     clean_config_cache: None,
+    argv: list[str],
 ) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "pkg"\nversion = "0.0.0"\n', encoding="utf-8"
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "set", "baseline"])
+    pyproject = _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", argv)
 
     cmd_presets()
 
-    assert '[tool.interlocks]\npreset = "baseline"\n' in (tmp_path / "pyproject.toml").read_text(
-        encoding="utf-8"
-    )
+    assert '[tool.interlocks]\npreset = "baseline"\n' in pyproject.read_text(encoding="utf-8")
     assert "set [tool.interlocks] preset = 'baseline'" in capsys.readouterr().out
 
 
-def test_cmd_presets_set_replaces_existing_preset_without_thresholds(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clean_config_cache: None
+@pytest.mark.parametrize(
+    "argv",
+    (
+        ["interlocks", "presets", "set", "strict"],
+        ["interlocks", "presets", "strict"],
+    ),
+)
+def test_cmd_presets_replaces_existing_preset_without_thresholds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clean_config_cache: None, argv: list[str]
 ) -> None:
     (tmp_path / "pyproject.toml").write_text(
         textwrap.dedent(
@@ -183,7 +200,7 @@ def test_cmd_presets_set_replaces_existing_preset_without_thresholds(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "set", "strict"])
+    monkeypatch.setattr(sys, "argv", argv)
 
     cmd_presets()
 
@@ -194,23 +211,73 @@ def test_cmd_presets_set_replaces_existing_preset_without_thresholds(
     assert "[tool.pytest.ini_options]" in text
 
 
-def test_cmd_presets_set_rejects_unknown_preset(
+@pytest.mark.parametrize(
+    "argv",
+    (
+        ["interlocks", "presets", "set", "baseline"],
+        ["interlocks", "presets", "baseline"],
+    ),
+)
+def test_cmd_presets_clears_config_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clean_config_cache: None, argv: list[str]
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+    assert load_config().preset is None
+
+    monkeypatch.setattr(sys, "argv", argv)
+    cmd_presets()
+    cfg = load_config()
+    defaults = preset_defaults("baseline")
+
+    assert cfg.preset == "baseline"
+    assert cfg.coverage_min == defaults["coverage_min"]
+    assert cfg.crap_max == defaults["crap_max"]
+    assert cfg.enforce_crap == defaults["enforce_crap"]
+    assert cfg.value_sources["coverage_min"] == "preset-derived"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    (
+        ["interlocks", "presets", "set", "agent-safe"],
+        ["interlocks", "presets", "agent-safe"],
+    ),
+)
+def test_cmd_presets_rejects_unknown_preset(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     clean_config_cache: None,
+    argv: list[str],
 ) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "pkg"\nversion = "0.0.0"\n', encoding="utf-8"
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "set", "agent-safe"])
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", argv)
 
     with pytest.raises(SystemExit) as exc:
         cmd_presets()
 
     assert exc.value.code == 1
-    assert "unsupported preset: agent-safe" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "unsupported preset: agent-safe" in out
+    assert "expected baseline|strict|legacy" in out
+
+
+def test_cmd_presets_shorthand_rejects_extra_args(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "baseline", "extra"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_presets()
+
+    assert exc.value.code == 1
+    assert "usage: interlocks presets" in capsys.readouterr().out
 
 
 def test_main_no_args_prints_help(

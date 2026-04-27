@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from interlocks import ui
 from interlocks.config import (
+    clear_cache,
     kv_with_source,
     load_config,
     preset_defaults,
@@ -92,10 +93,18 @@ _PRESET_REPORTED_KEYS: tuple[str, ...] = (
 def cmd_presets() -> None:
     start = time.monotonic()
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if not args or args[0] != "presets":
+        args = ["presets"]
     if len(args) >= 2 and args[1] == "set":
         _cmd_presets_set(args[2:], start=start)
         return
+    if len(args) == 2:
+        _cmd_presets_set([args[1]], start=start)
+        return
+    if len(args) > 2:
+        fail_skip(_presets_usage())
 
+    presets = supported_presets()
     cfg = _load_optional_config()
     ui.command_banner("presets", cfg)
     ui.section("Current")
@@ -104,7 +113,7 @@ def cmd_presets() -> None:
         ui.section("Current Values")
         ui.kv_block([kv_with_source(cfg, key, getattr(cfg, key)) for key in _PRESET_REPORTED_KEYS])
     ui.section("Available Presets")
-    for preset in supported_presets():
+    for preset in presets:
         defaults = preset_defaults(preset)
         print(f"  {preset:<8}  {preset_description(preset)}")
         print(
@@ -128,13 +137,19 @@ def cmd_presets() -> None:
     ui.command_footer(start)
 
 
+def _presets_usage() -> str:
+    choices = "|".join(supported_presets())
+    return f"usage: interlocks presets [<{choices}>] or interlocks presets set <{choices}>"
+
+
 def _cmd_presets_set(args: list[str], *, start: float) -> None:
     presets = supported_presets()
+    choices = "|".join(presets)
     if len(args) != 1:
-        fail_skip(f"usage: interlocks presets set <{'|'.join(presets)}>")
+        fail_skip(f"usage: interlocks presets set <{choices}>")
     preset = args[0]
     if preset not in presets:
-        fail_skip(f"unsupported preset: {preset} (expected {'|'.join(presets)})")
+        fail_skip(f"unsupported preset: {preset} (expected {choices})")
 
     cfg = load_config()
     pyproject = cfg.project_root / "pyproject.toml"
@@ -144,6 +159,7 @@ def _cmd_presets_set(args: list[str], *, start: float) -> None:
     ui.command_banner("presets set", cfg)
     ui.section("Preset")
     _write_project_preset(pyproject, preset)
+    clear_cache()
     ok(f"set [tool.interlocks] preset = {preset!r} in {cfg.relpath(pyproject)}")
     ui.command_footer(start)
 
