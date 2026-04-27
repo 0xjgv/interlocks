@@ -4,13 +4,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>interlocks — The machine-verifiable floor for AI-authored Python.</title>
+  <title>interlocks — Quality gates for AI-authored Python PRs.</title>
   <meta name="description"
-    content="interlocks gives Python teams one opinionated command surface for local checks and CI. Deterministic gates for lint, typecheck, tests, coverage, complexity, CRAP, and mutation — every agent PR trips them before merge." />
-  <meta property="og:title"
-    content="interlocks — The machine-verifiable floor for AI-authored Python." />
+    content="interlocks gives AI-era Python repos one deterministic quality loop: lint, typecheck, tests, coverage, mutation, dependency hygiene, architecture checks, and audit locally and in CI." />
+  <meta property="og:title" content="interlocks — Quality gates for AI-authored Python PRs." />
   <meta property="og:description"
-    content="Deterministic gates for lint, typecheck, tests, coverage, complexity, CRAP, and mutation. Try it instantly with uvx or pipx." />
+    content="AI made code cheap. interlocks makes Python PRs trustworthy with the same deterministic gate locally, in hooks, and in CI." />
   <link rel="icon"
     href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23000'/%3E%3Ctext x='8' y='12' font-family='monospace' font-size='11' font-weight='700' fill='%23e6e600' text-anchor='middle'%3EI%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -18,20 +17,23 @@
   <link
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Quantico:ital,wght@0,400;0,700;1,400;1,700&display=swap"
     rel="stylesheet" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Quantico:ital,wght@0,700;1,700&display=swap"
-    rel="stylesheet">
   <style>
     :root {
       --bg: #ffffff;
       --bg-panel: #f5f5f5;
+      --bg-shell: #0f1115;
       --fg: #000000;
+      --fg-shell: #f7f7f2;
       --muted: #777777;
+      --muted-shell: #9ba3ad;
       --border: rgb(204 204 204 / 0.75);
+      --border-strong: #000000;
       --bw: 1px;
       --accent: #b8b800;
-      --accent-red: #cc0000;
-      /* All padding, margin, and gap use this single step */
+      --ok: #148a46;
+      --warn: #b87400;
+      --fail: #c5162e;
+      --info: #1d62a6;
       --s: 15px;
       --font-logo: "Quantico", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       --font-mono: "IBM Plex Mono", SFMono-Regular, "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
@@ -45,6 +47,7 @@
     html {
       scroll-behavior: smooth;
       font-size: 17px;
+      overflow-x: hidden;
     }
 
     body {
@@ -58,10 +61,23 @@
       overflow-x: hidden;
     }
 
+    a {
+      color: inherit;
+    }
+
+    code,
+    pre {
+      font-family: var(--font-mono);
+    }
+
+    code {
+      overflow-wrap: anywhere;
+    }
+
     .wrap {
       padding: calc(var(--s) * 2) calc(var(--s) * 2) 0;
       position: relative;
-      max-width: 55rem;
+      max-width: 68rem;
       margin: 0 auto;
       z-index: 1;
     }
@@ -76,24 +92,22 @@
     }
 
     .top-inner {
-      max-width: 52rem;
+      max-width: 65rem;
       margin: 0 auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: var(--s);
+      min-width: 0;
     }
 
     .logo {
-      font-size: 1rem;
+      font-size: 0.95rem;
       letter-spacing: 0.12em;
       font-family: var(--font-logo);
       display: flex;
       align-items: center;
       gap: calc(var(--s) * 0.5);
-    }
-
-    .logo img {
-      height: 1.5em;
     }
 
     .cta-primary {
@@ -105,61 +119,271 @@
       letter-spacing: 0.1em;
       text-transform: uppercase;
       font-family: var(--font-logo);
+      border: var(--bw) solid var(--fg);
+      white-space: nowrap;
     }
 
     .cta-primary:hover {
-      opacity: 0.9;
+      background: var(--bg);
+      color: var(--fg);
     }
 
     .hero {
       padding: calc(var(--s) * 3) var(--s) var(--s);
-      font-family: var(--font-logo);
-      text-align: center;
       margin-bottom: 0;
     }
 
-    .hero h1 {
-      font-size: clamp(1.4rem, 4vw, 2.2rem);
-      font-weight: 700;
-      line-height: 1.25;
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: calc(var(--s) * 2);
+      align-items: stretch;
+      min-width: 0;
+    }
+
+    @media (min-width: 54rem) {
+      .hero-grid {
+        grid-template-columns: minmax(0, 1.04fr) minmax(24rem, 0.96fr);
+      }
+    }
+
+    .hero-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .eyebrow {
       margin: 0 0 var(--s) 0;
+      font-family: var(--font-logo);
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
     }
 
-    .hero-inner {
-      padding: calc(var(--s) * 3) calc(var(--s) * 2);
+    .hero h1 {
+      font-family: var(--font-logo);
+      font-size: clamp(1.8rem, 4.6vw, 3.35rem);
+      font-weight: 700;
+      line-height: 1.06;
+      margin: 0 0 var(--s) 0;
+      letter-spacing: -0.02em;
     }
 
-    .hero .install-cmd {
+    .lede {
+      margin: 0 0 calc(var(--s) * 1.5) 0;
+      max-width: 38rem;
+      font-family: var(--font-prose);
+      font-size: clamp(1rem, 2vw, 1.12rem);
+      line-height: 1.55;
+      color: var(--fg);
+    }
+
+    .install-cmd {
+      display: inline-flex;
+      align-items: stretch;
+      max-width: 100%;
+      background: var(--fg);
+      color: var(--bg);
+      border: var(--bw) solid var(--fg);
+      font-family: var(--font-mono);
+      box-shadow: 5px 5px 0 var(--accent);
+    }
+
+    .install-cmd code {
+      padding: calc(var(--s) * 0.72) var(--s);
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+
+    .install-cmd code::-webkit-scrollbar {
+      display: none;
+    }
+
+    .copy-wrap {
+      display: flex;
+      align-items: center;
+      max-width: 100%;
+    }
+
+    .copy-btn {
+      flex-shrink: 0;
+      background: transparent;
+      border: 0;
+      border-left: var(--bw) solid rgb(255 255 255 / 0.3);
+      color: currentColor;
+      padding: 0 calc(var(--s) * 0.72);
+      cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: var(--s);
-      background: var(--bg-panel);
-      border: var(--bw) solid var(--border);
-      padding: calc(var(--s) * 0.5) calc(var(--s) * 0.5) calc(var(--s) * 0.5) var(--s);
-      margin: 0 0 var(--s) 0;
-      font-family: var(--font-mono);
+      justify-content: center;
+      gap: calc(var(--s) * 0.4);
+      font-family: var(--font-logo);
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
-    .hero .install-alt {
-      font-family: var(--font-mono);
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin: 0 0 var(--s) 0;
+    .copy-btn::after {
+      content: "copy";
+      line-height: 1;
     }
 
-    .hero .trust {
-      font-family: var(--font-mono);
-      font-size: 0.84rem;
+    .copy-btn.is-copied::after {
+      content: "copied";
+    }
+
+    .copy-btn:hover,
+    .copy-btn.is-copied {
       color: var(--accent);
     }
 
-    .hero .cta-primary {
-      display: inline-block;
-      margin-block: var(--s) calc(var(--s) * 2);
+    .also-works {
+      margin: calc(var(--s) * 1.5) 0 0 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(var(--s) * 0.5);
+      align-items: center;
+      font-size: 0.78rem;
+      color: var(--muted);
     }
 
-    .terminal-demo {
-      margin: calc(var(--s) * 2) 0 0 0;
+    .chip,
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      border: var(--bw) solid var(--border);
+      padding: 0.14rem 0.42rem;
+      font-family: var(--font-logo);
+      font-size: 0.64rem;
+      letter-spacing: 0.08em;
+      line-height: 1.35;
+      text-transform: uppercase;
+      color: var(--fg);
+      background: var(--bg);
+      white-space: nowrap;
+    }
+
+    .status-pill.ok {
+      color: var(--ok);
+    }
+
+    .status-pill.warn {
+      color: var(--warn);
+    }
+
+    .status-pill.fail {
+      color: var(--fail);
+    }
+
+    .status-pill.info {
+      color: var(--info);
+    }
+
+    .doctor-card,
+    .quote-panel,
+    .shell-card,
+    .workflow-card,
+    .matrix-wrap,
+    .practice-panel {
+      background: var(--bg-panel);
+      border: var(--bw) solid var(--border);
+    }
+
+    .quote-panel {
+      margin: 0 var(--s);
+      padding: calc(var(--s) * 1.2) var(--s);
+      text-align: center;
+    }
+
+    .quote-panel blockquote {
+      margin: 0 auto;
+      max-width: 38rem;
+      font-family: var(--font-logo);
+      font-size: clamp(1.05rem, 2vw, 1.45rem);
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+
+    .quote-panel p {
+      margin: var(--s) auto 0;
+      max-width: 40rem;
+      font-family: var(--font-prose);
+      color: var(--muted);
+    }
+
+    .doctor-card {
+      min-width: 0;
+    }
+
+    .tool-header,
+    .shell-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--s);
+      padding: calc(var(--s) * 0.8) var(--s);
+      border-bottom: var(--bw) solid var(--border);
+      background: var(--bg);
+    }
+
+    .tool-title,
+    .shell-title {
+      margin: 0;
+      font-family: var(--font-logo);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .tool-meta,
+    .shell-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: calc(var(--s) * 0.4);
+    }
+
+    .diagnosis {
+      margin: 0;
+      padding: var(--s);
+    }
+
+    .diagnosis-row {
+      display: grid;
+      grid-template-columns: minmax(6.5rem, 0.42fr) minmax(0, 1fr);
+      gap: var(--s);
+      padding: calc(var(--s) * 0.65) 0;
+      border-top: var(--bw) solid var(--border);
+      font-size: 0.82rem;
+    }
+
+    .diagnosis-row:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .diagnosis dt {
+      color: var(--muted);
+    }
+
+    .diagnosis dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .next-commands {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .next-commands li+li {
+      margin-top: calc(var(--s) * 0.35);
     }
 
     .section-title {
@@ -171,128 +395,284 @@
       text-transform: uppercase;
     }
 
-    .panel {
-      background: var(--bg-panel);
-      padding: var(--s);
+    .section-title+.section-intro {
+      margin-top: calc(var(--s) * -0.25);
     }
 
-    .panel>*:first-child {
-      margin-top: 0;
-    }
-
-    .panel>*:last-child {
-      margin-bottom: 0;
-    }
-
-    .panel>*+* {
-      margin-top: var(--s);
-    }
-
-    .panel p {
-      margin: 0;
-    }
-
-    .prose {
+    .section-intro {
+      margin: 0 var(--s) var(--s);
       font-family: var(--font-prose);
-      color: var(--fg);
-      padding: var(--s);
-    }
-
-    .prose li {
-      margin: var(--s);
-    }
-
-    pre.block {
-      margin: var(--s);
-      padding: calc(var(--s) * 2);
-      overflow-x: auto;
-      background: var(--bg);
-      border: var(--bw) solid var(--border);
-      font-family: var(--font-mono);
-      font-size: 0.75rem;
-      line-height: 1.45;
-      white-space: pre;
-    }
-
-    code {
-      font-family: var(--font-mono);
-    }
-
-    .muted {
       color: var(--muted);
-    }
-
-    .accent {
-      color: var(--accent);
-    }
-
-    .copy-wrap {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .copy-btn {
-      flex-shrink: 0;
-      background: transparent;
-      border: 0;
-      color: var(--muted);
-      padding: 0 calc(var(--s) * 0.5);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 0;
-    }
-
-    .copy-btn:hover {
-      border-color: var(--muted);
-      color: var(--accent);
-    }
-
-    .catch-story {
-      font-family: var(--font-prose);
-      line-height: 1.65;
+      max-width: 48rem;
       font-size: 0.94rem;
     }
 
-    .catch-story strong {
-      color: var(--fg);
+    .terminal-demo {
+      margin: calc(var(--s) * 2) 0 0 0;
     }
 
-    .catch-story p {
+    .shell-card {
+      overflow: hidden;
+    }
+
+    .shell-card+.shell-card {
+      margin-top: var(--s);
+    }
+
+    .shell-header {
+      flex-wrap: wrap;
+    }
+
+    .shell-body {
+      margin: 0;
+      padding: calc(var(--s) * 1.2) var(--s);
+      overflow-x: auto;
+      background: var(--bg-shell);
+      color: var(--fg-shell);
+      font-size: 0.76rem;
+      line-height: 1.32;
+      white-space: pre;
+      scrollbar-color: var(--muted) transparent;
+    }
+
+    .shell-row {
+      display: inline;
+    }
+
+    .prompt {
+      color: var(--accent);
+    }
+
+    .shell-ok {
+      color: #5fd08a;
+    }
+
+    .shell-warn {
+      color: #f0b44c;
+    }
+
+    .shell-fail {
+      color: #ff667a;
+    }
+
+    .shell-muted {
+      color: var(--muted-shell);
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s);
+      margin: 0 var(--s);
+      counter-reset: pipeline;
+      min-width: 0;
+    }
+
+    @media (min-width: 42rem) {
+      .pipeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 64rem) {
+      .pipeline {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+    }
+
+    .pipeline-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      padding: var(--s);
+      border: var(--bw) solid var(--border);
+      background: var(--bg-panel);
+      counter-increment: pipeline;
+    }
+
+    .pipeline-card::before {
+      content: counter(pipeline, decimal-leading-zero);
+      width: fit-content;
+      margin-bottom: var(--s);
+      padding: 0.1rem 0.45rem;
+      border: var(--bw) solid var(--fg);
+      background: var(--fg);
+      color: var(--bg);
+      font-family: var(--font-logo);
+      font-size: 0.64rem;
+      letter-spacing: 0.1em;
+    }
+
+    @media (min-width: 64rem) {
+      .pipeline-card:not(:last-child)::after {
+        content: "→";
+        position: absolute;
+        right: calc(var(--s) * -0.78);
+        top: calc(var(--s) * 1.02);
+        z-index: 2;
+        color: var(--muted);
+        background: var(--bg);
+        padding: 0 0.18rem;
+      }
+    }
+
+    .pipeline-card h3,
+    .practice-panel h3 {
+      margin: 0 0 calc(var(--s) * 0.7) 0;
+      font-family: var(--font-logo);
+      font-size: 1rem;
+      line-height: 1.25;
+    }
+
+    .pipeline-card code {
+      display: block;
+      margin: 0 0 var(--s) 0;
+      color: var(--accent);
+      font-size: 0.86rem;
+      overflow-wrap: anywhere;
+    }
+
+    .pipeline-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(var(--s) * 0.35);
+      margin: 0 0 var(--s) 0;
+    }
+
+    .pipeline-card p,
+    .practice-panel p {
+      margin: 0;
+      font-family: var(--font-prose);
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .checks-list {
+      margin: var(--s) 0 0 0;
+      padding: var(--s) 0 0 0;
+      border-top: var(--bw) solid var(--border);
+      list-style: none;
+      color: var(--fg);
+      font-size: 0.78rem;
+    }
+
+    .checks-list li+li {
+      margin-top: calc(var(--s) * 0.35);
+    }
+
+    .matrix-wrap {
+      margin: 0 var(--s);
+      overflow-x: auto;
+    }
+
+    .command-table {
+      width: 100%;
+      min-width: 46rem;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    .command-table th,
+    .command-table td {
+      padding: calc(var(--s) * 0.72) var(--s);
+      border-top: var(--bw) solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .command-table thead th {
+      border-top: 0;
+      font-family: var(--font-logo);
+      font-size: 0.66rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--bg);
+    }
+
+    .command-table code {
+      color: var(--fg);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .purpose {
+      font-family: var(--font-prose);
       color: var(--muted);
     }
 
-    .catch-story .verdict-line {
-      color: var(--accent);
-      font-family: var(--font-mono);
-      font-size: 0.875rem;
+    .pill-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: calc(var(--s) * 0.35);
     }
 
-    .catch-story a {
-      color: var(--fg);
-      text-decoration: underline;
-      text-underline-offset: var(--s);
+    .practice-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s);
+      margin: 0 var(--s);
+      min-width: 0;
     }
 
-    .catch-story a:hover {
-      color: var(--accent);
+    @media (min-width: 48rem) {
+      .practice-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
-    .catch-story code {
-      color: var(--fg);
-      background: var(--bg);
-      padding: 0 4px;
-      border: var(--bw) solid var(--border);
-      font-size: 0.85em;
+    .practice-panel {
+      padding: var(--s);
+    }
+
+    .opinion-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--s);
+      margin: 0 var(--s);
+      min-width: 0;
+    }
+
+    @media (min-width: 48rem) {
+      .opinion-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .workflow-list {
+      margin: var(--s) 0 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.82rem;
+    }
+
+    .workflow-list li {
+      display: flex;
+      gap: calc(var(--s) * 0.55);
+      padding: calc(var(--s) * 0.48) 0;
+      border-top: var(--bw) solid var(--border);
+    }
+
+    .workflow-list li:first-child {
+      border-top: 0;
+    }
+
+    .workflow-list .marker {
+      color: var(--muted);
+      flex: 0 0 auto;
+    }
+
+    .snippet-card {
+      margin: var(--s) var(--s) 0;
     }
 
     .section-cta {
       display: inline-block;
       color: var(--fg);
       text-decoration: underline;
-      text-underline-offset: var(--s);
+      text-underline-offset: 0.35em;
       font-size: 0.94rem;
       padding: var(--s) 0 0 0;
     }
@@ -301,81 +681,23 @@
       color: var(--accent);
     }
 
-    .stages-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      font-family: var(--font-prose);
-    }
-
-    .stages-list li {
-      padding: var(--s) 0;
-      border-top: var(--bw) solid var(--border);
-    }
-
-    .stages-list li:first-child {
-      border-top: 0;
-    }
-
-    .stages-list .stage-name {
-      display: inline-block;
-      font-family: var(--font-mono);
-      color: var(--accent);
-      font-size: 0.9rem;
-      margin-right: var(--s);
-    }
-
-    .stages-list .stage-when {
-      color: var(--muted);
-      font-size: 0.85rem;
-      font-family: var(--font-mono);
-    }
-
-    .stages-list .stage-what {
-      display: block;
-      color: var(--fg);
-      font-size: 0.92rem;
-      margin-top: calc(var(--s) * 0.4);
-      line-height: 1.5;
-    }
-
-    .wordmark-fade {
-      overflow: hidden;
-      padding-top: var(--s);
-      margin-bottom: -3px;
-      -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent);
-      mask-image: linear-gradient(to bottom, black 30%, transparent);
-    }
-
-    .wordmark-fade p {
-      margin: 0;
-      text-align: center;
-      font-size: 16.5vw;
-      line-height: 0.75;
-      font-weight: 600;
-      text-transform: uppercase;
-      color: rgba(136, 136, 136, 0.25);
-      font-family: var(--font-logo);
-    }
-
-    footer.site {
+    .result-line {
+      margin: var(--s) var(--s) 0;
       padding: var(--s);
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: var(--s);
-      font-size: 0.84rem;
+      border: var(--bw) solid var(--border-strong);
+      font-family: var(--font-logo);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      background: var(--bg);
+    }
+
+    .muted {
       color: var(--muted);
     }
 
-    footer.site a {
-      color: var(--muted);
-      text-decoration: underline;
-      text-underline-offset: var(--s);
-    }
-
-    footer.site a:hover {
-      color: var(--fg);
+    .accent {
+      color: var(--accent);
     }
 
     .grid-rails {
@@ -412,6 +734,180 @@
       height: 1px;
       background: var(--border);
     }
+
+    .wordmark-fade {
+      overflow: hidden;
+      padding-top: var(--s);
+      margin-bottom: -3px;
+      -webkit-mask-image: linear-gradient(to bottom, black 30%, transparent);
+      mask-image: linear-gradient(to bottom, black 30%, transparent);
+    }
+
+    .wordmark-fade p {
+      margin: 0;
+      text-align: center;
+      font-size: 16.5vw;
+      line-height: 0.75;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: rgba(136, 136, 136, 0.18);
+      font-family: var(--font-logo);
+    }
+
+    footer.site {
+      padding: var(--s);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: var(--s);
+      font-size: 0.84rem;
+      color: var(--muted);
+    }
+
+    footer.site a {
+      color: var(--muted);
+      text-decoration: underline;
+      text-underline-offset: 0.35em;
+    }
+
+    footer.site a:hover {
+      color: var(--fg);
+    }
+
+    @media (max-width: 42rem) {
+      body > * {
+        max-width: 100vw;
+      }
+
+      .wrap {
+        padding-inline: calc(var(--s) * 0.75);
+        overflow-x: hidden;
+      }
+
+      .hero,
+      .hero-grid,
+      .hero-copy,
+      .doctor-card,
+      .quote-panel,
+      .terminal-demo,
+      .pipeline,
+      .matrix-wrap,
+      .practice-grid,
+      .snippet-card,
+      .result-line,
+      .section-intro {
+        width: 100%;
+        max-width: calc(100vw - (var(--s) * 1.5));
+      }
+
+      .hero {
+        padding-inline: 0;
+      }
+
+      .top-inner {
+        align-items: flex-start;
+      }
+
+      .logo {
+        min-width: 0;
+        font-size: 0.82rem;
+        letter-spacing: 0.1em;
+      }
+
+      .top .cta-primary {
+        max-width: 7rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .cta-primary {
+        font-size: 0.64rem;
+        padding-inline: calc(var(--s) * 0.55);
+      }
+
+      .hero h1 {
+        max-width: 18.5rem;
+        font-size: clamp(1.28rem, 7vw, 1.6rem);
+        overflow-wrap: anywhere;
+      }
+
+      .lede {
+        max-width: 18.5rem;
+        font-size: 0.92rem;
+        overflow-wrap: anywhere;
+      }
+
+      .install-cmd {
+        width: 100%;
+        max-width: 18.5rem;
+        min-width: 0;
+      }
+
+      .install-cmd code {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .copy-btn::after {
+        content: "";
+      }
+
+      .copy-btn.is-copied::after {
+        content: "";
+      }
+
+      .also-works {
+        max-width: 18.5rem;
+      }
+
+      .chip {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .section-title,
+      .section-intro,
+      .quote-panel,
+      .pipeline,
+      .matrix-wrap,
+      .practice-grid,
+      .opinion-grid,
+      .snippet-card,
+      .result-line {
+        margin-inline: 0;
+      }
+
+      .quote-panel blockquote {
+        max-width: 18rem;
+        font-size: 0.9rem;
+        overflow-wrap: anywhere;
+      }
+
+      .quote-panel p {
+        max-width: 18rem;
+      }
+
+      .tool-header,
+      .shell-header {
+        align-items: flex-start;
+      }
+
+      .doctor-card,
+      .quote-panel,
+      .shell-card,
+      .matrix-wrap,
+      .practice-panel,
+      .pipeline-card {
+        max-width: 18.5rem;
+        min-width: 0;
+      }
+
+      .diagnosis-row {
+        grid-template-columns: 1fr;
+        gap: calc(var(--s) * 0.2);
+      }
+    }
   </style>
 </head>
 
@@ -423,199 +919,465 @@
         &rarr;</a>
     </div>
   </header>
+
   <div class="wrap">
     <div class="grid-rails" aria-hidden="true"></div>
 
-    <!-- 1. Hero + Install -->
-
-    <section class="hero">
-      <div class="hero-inner">
-        <h1>The machine-verifiable floor for AI-authored Python.</h1>
-        <p class="trust">Deterministic gates for lint, typecheck, tests, coverage,
-          acceptance, complexity, CRAP, mutation, deps, audit, and arch &mdash; every
-          agent PR trips them before merge.</p>
-        <p class="install-alt" style="margin-top: calc(var(--s) * -0.25);">
-          One command surface, local and in CI. Try it without installing &mdash;
-          <code>uvx</code> or <code>pipx run</code>.
-        </p>
-        <div class="copy-wrap" style="margin-top: var(--s);">
-          <div class="install-cmd">
-            <code id="install-cmd-text">uvx --from interlocks il doctor</code>
-            <button class="copy-btn" data-copy="install-cmd-text"
-              aria-label="Copy install command">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
-                xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="4" width="9" height="10" stroke="currentColor"
-                  stroke-width="1.3" />
-                <path d="M11 2H3V12" stroke="currentColor" stroke-width="1.3" />
-              </svg>
-            </button>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Quality gates for AI-authored Python PRs</p>
+          <h1 id="hero-title">AI made code cheap. Interlocks makes Python PRs trustworthy.</h1>
+          <p class="lede">One deterministic quality loop for AI-era Python repos: lint,
+            typecheck, test, coverage, mutation, deps, architecture, and audit. Same
+            gate locally, in hooks, and in CI.</p>
+          <div class="copy-wrap">
+            <div class="install-cmd">
+              <code id="quickstart-cmd">uvx --from interlocks il doctor</code>
+              <button class="copy-btn" data-copy="quickstart-cmd"
+                aria-label="Copy quickstart command">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                  xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <rect x="4" y="4" width="9" height="10" stroke="currentColor"
+                    stroke-width="1.3" />
+                  <path d="M11 2H3V12" stroke="currentColor" stroke-width="1.3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="also-works" aria-label="Also works">
+            <span class="chip">pipx run --spec interlocks il doctor</span>
+            <span class="chip">interlocks doctor</span>
+            <span class="chip">alias: il</span>
+            <span class="chip">package: interlocks</span>
           </div>
         </div>
-        <p class="install-alt">or <code>pipx run --spec interlocks il doctor</code></p>
-        <p class="install-alt">Package: <code>interlocks</code>. Commands:
-          <code>interlocks</code> and <code>il</code>.
-        </p>
-        <a class="cta-primary" href="#stages">Run your first check &rarr;</a>
+
+        <aside class="doctor-card" aria-labelledby="doctor-title">
+          <div class="tool-header">
+            <p class="tool-title" id="doctor-title">il doctor</p>
+            <div class="tool-meta">
+              <span class="status-pill ok">repo detected</span>
+              <span class="status-pill warn">hooks missing</span>
+            </div>
+          </div>
+          <dl class="diagnosis">
+            <div class="diagnosis-row">
+              <dt>project</dt>
+              <dd><code>pyproject.toml</code> found</dd>
+            </div>
+            <div class="diagnosis-row">
+              <dt>runner</dt>
+              <dd><code>pytest</code> via config/deps/import</dd>
+            </div>
+            <div class="diagnosis-row">
+              <dt>invoker</dt>
+              <dd><code>uv</code> when <code>uv.lock</code> exists; otherwise
+                <code>python</code>
+              </dd>
+            </div>
+            <div class="diagnosis-row">
+              <dt>preset</dt>
+              <dd><code>baseline</code>, <code>strict</code>, or <code>legacy</code></dd>
+            </div>
+            <div class="diagnosis-row">
+              <dt>source</dt>
+              <dd><code>src/&lt;pkg&gt;</code>, top-level package, or build backend module
+              </dd>
+            </div>
+            <div class="diagnosis-row">
+              <dt>tests</dt>
+              <dd><code>tests/</code>, <code>test/</code>, or <code>src/tests/</code></dd>
+            </div>
+            <div class="diagnosis-row">
+              <dt>next</dt>
+              <dd>
+                <ul class="next-commands">
+                  <li><code>il setup-hooks</code></li>
+                  <li><code>il check</code></li>
+                  <li><code>il ci</code></li>
+                </ul>
+              </dd>
+            </div>
+          </dl>
+        </aside>
       </div>
     </section>
 
     <div class="section-divider" aria-hidden="true"></div>
 
-    <!-- 2. Terminal demo: `interlocks check` -->
+    <section class="quote-panel" aria-label="Positioning">
+      <blockquote>&ldquo;AI writes the PR. Interlocks decides if it deserves review.&rdquo;</blockquote>
+      <p>Human review cannot be the quality floor when agents ship code fast. Deterministic gates catch fake confidence before it reaches CI or customers.</p>
+    </section>
 
-    <h2 class="section-title">`interlocks check` &mdash; the local edit loop</h2>
+    <div class="section-divider" aria-hidden="true"></div>
+
+    <h2 class="section-title">Proof in the terminal</h2>
+    <p class="section-intro">No dashboard fiction. The product surface is the pass/fail output every repo sees.</p>
     <div class="terminal-demo">
-      <pre class="block">$ interlocks check
-interlocks v0.1.2  ·  preset=strict  ·  runner=pytest  ·  invoker=uv
+      <article class="shell-card" aria-labelledby="shell-check-title">
+        <div class="shell-header">
+          <p class="shell-title" id="shell-check-title">local run</p>
+          <div class="shell-meta">
+            <span class="status-pill info">il check</span>
+            <span class="status-pill">7.4s</span>
+            <span class="status-pill ok">PASS</span>
+          </div>
+        </div>
+        <pre class="shell-body"><span class="shell-row"><span class="prompt">$</span> il check</span>
+<span class="shell-row">interlocks v0.1.2  ·  preset=baseline  ·  runner=pytest  ·  invoker=uv</span>
+<span class="shell-row shell-muted"></span>
+<span class="shell-row shell-muted">── Quality Checks ──────────────────────────────────────────</span>
+<span class="shell-row">  [fix]         ruff check --fix                      <span class="shell-ok">ok</span></span>
+<span class="shell-row">  [format]      ruff format                           <span class="shell-ok">ok</span> <span class="shell-muted">(2 files reformatted)</span></span>
+<span class="shell-row shell-muted"></span>
+<span class="shell-row shell-muted">── Parallel ────────────────────────────────────────────────</span>
+<span class="shell-row">  [typecheck]   basedpyright                          <span class="shell-ok">0 errors, 0 warnings</span></span>
+<span class="shell-row">  [test]        pytest -q                             <span class="shell-ok">184 passed in 3.2s</span></span>
+<span class="shell-row">                                                      <span class="shell-ok">coverage 87.4%</span></span>
+<span class="shell-row shell-muted"></span>
+<span class="shell-row shell-muted">── Advisory ────────────────────────────────────────────────</span>
+<span class="shell-row">  [deps]        deptry                                <span class="shell-ok">ok</span></span>
+<span class="shell-row">  [crap]        cached (crap_max=30.0)                <span class="shell-ok">ok · 0 offenders</span></span>
+<span class="shell-row shell-muted"></span>
+<span class="shell-row shell-muted">── Suppressions ────────────────────────────────────────────</span>
+<span class="shell-row">  ruff : noqa              <span class="shell-ok">0</span></span>
+<span class="shell-row">  basedpyright : ignore    <span class="shell-warn">1   interlocks/runner.py:42</span></span>
+<span class="shell-row">  pytest.skip              <span class="shell-warn">2</span></span>
+<span class="shell-row shell-muted"></span>
+<span class="shell-row">Completed in <span class="shell-ok">7.4s</span></span></pre>
+      </article>
 
-── Quality Checks ──────────────────────────────────────────
-  [fix]         ruff check --fix                      ok
-  [format]      ruff format                           ok (2 files reformatted)
-
-── Parallel ────────────────────────────────────────────────
-  [typecheck]   basedpyright                          0 errors, 0 warnings
-  [test]        pytest -q                             184 passed in 3.2s
-                                                      coverage 87.4%
-
-── Advisory ────────────────────────────────────────────────
-  [deps]        deptry                                ok
-  [crap]        cached (crap_max=30.0)                ok · 0 offenders
-
-── Suppressions ────────────────────────────────────────────
-  ruff : noqa              0
-  basedpyright : ignore    1   interlocks/runner.py:42
-  pytest.skip              2
-
-Completed in 7.4s</pre>
+      <article class="shell-card" aria-labelledby="shell-fail-title">
+        <div class="shell-header">
+          <p class="shell-title" id="shell-fail-title">failure example</p>
+          <div class="shell-meta">
+            <span class="status-pill info">il coverage --min=85</span>
+            <span class="status-pill fail">FAIL</span>
+          </div>
+        </div>
+        <pre
+          class="shell-body"><span class="shell-row"><span class="prompt">$</span> il coverage --min=85</span>
+<span class="shell-row">coverage                                      <span class="shell-fail">79.2% &lt; required 85%</span></span>
+<span class="shell-row shell-muted">next: inspect uncovered files</span>
+<span class="shell-row"><span class="prompt">$</span> il trust --refresh --verbose</span></pre>
+      </article>
     </div>
 
     <div class="section-divider" aria-hidden="true"></div>
 
-    <!-- 3. Stages -->
-
-    <h2 class="section-title" id="stages">Stages &mdash; when to run what</h2>
-    <div class="panel">
-      <p class="muted" style="font-family: var(--font-prose); font-size: 0.9rem;">
-        Seven stages, one CLI. Each has a narrow job and a stable contract so hooks,
-        CI, and schedulers call the same commands you run locally.
-      </p>
-      <ul class="stages-list">
-        <li>
-          <span class="stage-name">interlocks check</span>
-          <span class="stage-when">&mdash; after edits, before pushing</span>
-          <span class="stage-what">fix &rarr; format &rarr; parallel(typecheck, test,
-            acceptance when opted in) &rarr; deps advisory &rarr; cached CRAP advisory
-            &rarr; suppressions report.</span>
-        </li>
-        <li>
-          <span class="stage-name">interlocks pre-commit</span>
-          <span class="stage-when">&mdash; git pre-commit hook</span>
-          <span class="stage-what">fix and format staged Python files, re-stage,
-            typecheck, run tests when source changed. Skip with
-            <code>git commit --no-verify</code>.</span>
-        </li>
-        <li>
-          <span class="stage-name">interlocks ci</span>
-          <span class="stage-when">&mdash; pull requests and protected branches</span>
-          <span class="stage-what">format-check, lint, complexity (lizard, CCN 15), deps,
-            typecheck, coverage, optional arch/acceptance &rarr; blocking CRAP &rarr;
-            optional mutation.</span>
-        </li>
-        <li>
-          <span class="stage-name">interlocks nightly</span>
-          <span class="stage-when">&mdash; scheduled job</span>
-          <span class="stage-what">coverage then mutation, always blocking on
-            <code>mutation_min_score</code>. Wire via cron or a GitHub Actions
-            schedule.</span>
-        </li>
-        <li>
-          <span class="stage-name">interlocks post-edit</span>
-          <span class="stage-when">&mdash; editor / agent hook</span>
-          <span class="stage-what">advisory ruff fix and format on changed Python files.
-            Installed as a Claude Code Stop hook by <code>setup-hooks</code>.</span>
-        </li>
-        <li>
-          <span class="stage-name">interlocks setup-hooks</span>
-          <span class="stage-when">&mdash; hook installer</span>
-          <span class="stage-what">installs the git pre-commit hook and merges the Claude
-            Code
-            Stop hook that runs <code>interlocks post-edit</code>. Rerunnable and
-            idempotent.</span>
-        </li>
-        <li>
-          <span class="stage-name">interlocks clean</span>
-          <span class="stage-when">&mdash; local cleanup</span>
-          <span class="stage-what">removes caches, build artifacts, coverage output,
-            mutation state, and <code>__pycache__/</code>.</span>
-        </li>
-      </ul>
+    <h2 class="section-title" id="stages">Quality loop</h2>
+    <p class="section-intro"><code>doctor</code> diagnoses the repo, <code>check</code> guards local edits, hooks catch staged changes, CI blocks merges, and nightly mutation finds weak tests.</p>
+    <div class="pipeline">
+      <article class="pipeline-card">
+        <h3>After edits</h3>
+        <code>il check</code>
+        <div class="pipeline-meta">
+          <span class="status-pill info">LOCAL</span>
+          <span class="status-pill ok">FAST GATE</span>
+        </div>
+        <p>Default local loop after file changes.</p>
+        <ul class="checks-list">
+          <li>fix + format</li>
+          <li>typecheck + test in parallel</li>
+          <li>deps, cached CRAP, suppressions report</li>
+        </ul>
+      </article>
+      <article class="pipeline-card">
+        <h3>Before commit</h3>
+        <code>il pre-commit</code>
+        <div class="pipeline-meta">
+          <span class="status-pill info">HOOK</span>
+          <span class="status-pill ok">BLOCKING</span>
+        </div>
+        <p>Runs on staged changes through git hook.</p>
+        <ul class="checks-list">
+          <li>fix + format staged Python</li>
+          <li>re-stage formatted files</li>
+          <li>typecheck + tests when source changed</li>
+        </ul>
+      </article>
+      <article class="pipeline-card">
+        <h3>Pull request</h3>
+        <code>il ci</code>
+        <div class="pipeline-meta">
+          <span class="status-pill info">CI</span>
+          <span class="status-pill ok">BLOCKING</span>
+        </div>
+        <p>Required PR gate for repo-wide verification.</p>
+        <ul class="checks-list">
+          <li>lint + format check</li>
+          <li>complexity, deps, typecheck</li>
+          <li>coverage, CRAP, arch, acceptance</li>
+        </ul>
+      </article>
+      <article class="pipeline-card">
+        <h3>Scheduled trust</h3>
+        <code>il nightly</code>
+        <div class="pipeline-meta">
+          <span class="status-pill info">CRON</span>
+          <span class="status-pill warn">SLOW GATE</span>
+        </div>
+        <p>Long-running confidence check for tests.</p>
+        <ul class="checks-list">
+          <li>coverage first</li>
+          <li>mutation via mutmut</li>
+          <li>blocks on mutation_min_score</li>
+        </ul>
+      </article>
+      <article class="pipeline-card">
+        <h3>Setup + maintenance</h3>
+        <code>il setup-hooks / il clean</code>
+        <div class="pipeline-meta">
+          <span class="status-pill info">SETUP</span>
+          <span class="status-pill">UTILITY</span>
+        </div>
+        <p>Wire feedback loops and reset generated state.</p>
+        <ul class="checks-list">
+          <li>install git pre-commit hook</li>
+          <li>merge Claude Code Stop hook</li>
+          <li>remove caches, build artifacts, coverage, mutation state</li>
+        </ul>
+      </article>
     </div>
 
     <div class="section-divider" aria-hidden="true"></div>
 
-    <!-- 4. Command surface -->
-
-    <h2 class="section-title">Command surface</h2>
-    <div class="panel catch-story">
-      <p><strong>Tasks.</strong> <code>fix</code>, <code>format</code>,
-        <code>lint</code>, <code>typecheck</code>, <code>test</code>,
-        <code>coverage</code>, <code>crap</code>, <code>mutation</code>,
-        <code>deps</code>, <code>audit</code>, <code>arch</code>,
-        <code>acceptance</code>, and <code>init-acceptance</code>.
-      </p>
-      <p><strong>Reports.</strong> <code>trust</code> combines coverage, CRAP,
-        mutation, suspicious-test inspection, recent git diff, and next actions.
-      </p>
-      <p><strong>Utilities.</strong> <code>doctor</code>, <code>init</code>,
-        <code>presets</code>, <code>config</code>, <code>version</code>, and
-        <code>help</code>.
-      </p>
+    <h2 class="section-title">What gets verified</h2>
+    <p class="section-intro">Commands stay small. Stages compose them into local, hook, CI, and scheduled gates.</p>
+    <div class="matrix-wrap">
+      <table class="command-table">
+        <thead>
+          <tr>
+            <th scope="col">Command</th>
+            <th scope="col">Purpose</th>
+            <th scope="col">Where</th>
+            <th scope="col">Gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>fix</code></td>
+            <td class="purpose">Fix lint errors with ruff.</td>
+            <td><span class="pill-stack"><span class="status-pill info">LOCAL</span><span
+                  class="status-pill info">HOOK</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>format</code></td>
+            <td class="purpose">Format code with ruff.</td>
+            <td><span class="pill-stack"><span class="status-pill info">LOCAL</span><span
+                  class="status-pill info">HOOK</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>lint</code></td>
+            <td class="purpose">Read-only lint check.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">LOCAL</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>typecheck</code></td>
+            <td class="purpose">Run basedpyright.</td>
+            <td><span class="pill-stack"><span class="status-pill info">LOCAL</span><span
+                  class="status-pill info">CI</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>test</code></td>
+            <td class="purpose">Run pytest or unittest from detected config.</td>
+            <td><span class="pill-stack"><span class="status-pill info">LOCAL</span><span
+                  class="status-pill info">CI</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>coverage</code></td>
+            <td class="purpose">Run tests with threshold and uncovered listing.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">NIGHTLY</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>crap</code></td>
+            <td class="purpose">Gate complex, under-tested functions.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">LOCAL</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>mutation</code></td>
+            <td class="purpose">Run mutmut kill-rate checks.</td>
+            <td><span class="pill-stack"><span
+                  class="status-pill info">NIGHTLY</span><span
+                  class="status-pill info">CI</span></span></td>
+            <td><span class="status-pill warn">ADVISORY</span></td>
+          </tr>
+          <tr>
+            <td><code>deps</code></td>
+            <td class="purpose">Find unused, missing, transitive deps with deptry.</td>
+            <td><span class="pill-stack"><span class="status-pill info">LOCAL</span><span
+                  class="status-pill info">CI</span></span></td>
+            <td><span class="status-pill warn">ADVISORY</span></td>
+          </tr>
+          <tr>
+            <td><code>audit</code></td>
+            <td class="purpose">Audit dependencies for known vulnerabilities.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">LOCAL</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>arch</code></td>
+            <td class="purpose">Run import-linter architecture contracts.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">LOCAL</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>acceptance</code></td>
+            <td class="purpose">Run Gherkin scenarios via pytest-bdd or behave.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">LOCAL</span></span></td>
+            <td><span class="status-pill ok">BLOCKING</span></td>
+          </tr>
+          <tr>
+            <td><code>trust</code></td>
+            <td class="purpose">Report coverage, CRAP, suspicious tests, hot files, next
+              actions.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">REPORT</span></td>
+          </tr>
+          <tr>
+            <td><code>doctor</code></td>
+            <td class="purpose">Diagnose paths, tools, venv, hooks, config.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">REPORT</span></td>
+          </tr>
+          <tr>
+            <td><code>init</code></td>
+            <td class="purpose">Scaffold greenfield pyproject and tests.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">UTILITY</span></td>
+          </tr>
+          <tr>
+            <td><code>init-acceptance</code></td>
+            <td class="purpose">Scaffold tests/features and step_defs.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">UTILITY</span></td>
+          </tr>
+          <tr>
+            <td><code>presets</code></td>
+            <td class="purpose">Show or set baseline, strict, legacy preset.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">UTILITY</span></td>
+          </tr>
+          <tr>
+            <td><code>version</code></td>
+            <td class="purpose">Print interlocks version.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">REPORT</span></td>
+          </tr>
+          <tr>
+            <td><code>help</code></td>
+            <td class="purpose">Print command help and detected config.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">REPORT</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="section-divider" aria-hidden="true"></div>
 
-    <!-- 5. In practice -->
-
-    <h2 class="section-title">In practice</h2>
-    <div class="panel catch-story">
-      <p><strong>Monday morning.</strong> New Python repo, fresh from
-        <code>git init</code>.
-        No <code>pyproject.toml</code> gate configured, no CI pipeline, no agreed
-        thresholds.
-        The team wants a baseline by EOD.
-      </p>
-      <p>You run <code>pipx install interlocks</code> or
-        <code>uv tool install interlocks</code>, then <code>interlocks doctor</code>.
-        It prints
-        detected source and test directories, the active preset, resolved thresholds, and
-        the
-        two commands you need next. You commit a three-line GitHub workflow that calls
-        <code>0xjgv/interlocks@v1</code>. Locally, <code>interlocks check</code> runs the
-        same
-        gates CI will run, minus the heavy ones.
-      </p>
-      <p>By the afternoon, the first PR lands. CI enforces lint, typecheck, tests,
-        coverage,
-        CRAP, deps, arch, and acceptance &mdash; all from the reusable action. Nobody
-        edited
-        eleven tool configs.</p>
-      <p class="verdict-line">Result: green CI in one PR. Config: zero.</p>
-      <a class="section-cta" href="https://github.com/0xjgv/interlocks">Read the docs on
-        GitHub &rarr;</a>
+    <h2 class="section-title">Before / after</h2>
+    <div class="practice-grid">
+      <article class="practice-panel">
+        <h3>Before</h3>
+        <p>Quality depends on scattered tools, hand-maintained config, and human memory.</p>
+        <ul class="workflow-list">
+          <li><span class="marker">×</span><span>ruff, pyright, pytest, coverage, deptry,
+              lizard, pip-audit, import-linter, mutmut configured by hand.</span></li>
+          <li><span class="marker">×</span><span>Local check differs from protected branch
+              check.</span></li>
+          <li><span class="marker">×</span><span>Weak tests pass coverage until mutation
+              or CRAP exposes fake confidence.</span></li>
+        </ul>
+      </article>
+      <article class="practice-panel">
+        <h3>After</h3>
+        <p>Repo gets diagnosed once. Same deterministic gate runs before review, before commit, and before merge.</p>
+        <ul class="workflow-list">
+          <li><span class="marker">1</span><span><code>il doctor</code> detects source,
+              tests, runner, invoker, preset, thresholds.</span></li>
+          <li><span class="marker">2</span><span><code>il setup-hooks</code> wires git
+              pre-commit and Claude Code Stop hook.</span></li>
+          <li><span class="marker">3</span><span><code>il check</code> gives local
+              pass/fail before push.</span></li>
+          <li><span class="marker">4</span><span>Reusable GitHub Action runs the CI
+              gate.</span></li>
+        </ul>
+      </article>
     </div>
 
     <div class="section-divider" aria-hidden="true"></div>
 
-    <!-- Footer -->
+    <section aria-labelledby="review-title">
+      <h2 class="section-title" id="review-title">Why agents need gates</h2>
+      <p class="section-intro">Models can write plausible code. Interlocks forces evidence.</p>
+      <div class="opinion-grid">
+        <article class="practice-panel" aria-labelledby="opus-review-title">
+          <h3 id="opus-review-title">Claude Code Opus 4.7</h3>
+          <p>I can write PRs fast. I still need gates that do not negotiate: lint, types, tests, coverage, mutation, deps, architecture, and audit in one loop.</p>
+          <p><code>interlocks</code> makes the quality bar explicit before a human reviews.</p>
+        </article>
+        <article class="practice-panel" aria-labelledby="gpt-review-title">
+          <h3 id="gpt-review-title">GPT-5.5</h3>
+          <p>The failure mode is not syntax. It is plausible code with shallow tests and green checks.</p>
+          <p><code>interlocks</code> catches fake confidence: complex untested code, weak coverage, surviving mutants, and CI drift.</p>
+        </article>
+      </div>
+    </section>
+
+    <div class="section-divider" aria-hidden="true"></div>
+
+    <section aria-labelledby="actions-title">
+      <h2 class="section-title" id="actions-title">Block bad PRs in CI</h2>
+      <p class="section-intro">Use the same CLI gate on pull requests and protected branches.</p>
+      <article class="shell-card snippet-card" aria-labelledby="actions-card-title">
+        <div class="shell-header">
+          <p class="shell-title" id="actions-card-title">workflow</p>
+          <div class="shell-meta">
+            <span class="status-pill info">CI</span>
+            <span class="status-pill ok">BLOCKING</span>
+          </div>
+        </div>
+        <pre class="shell-body" id="actions-snippet"><span class="shell-row">name: interlocks</span>
+<span class="shell-row">on: [push, pull_request]</span>
+<span class="shell-row">jobs:</span>
+<span class="shell-row">  quality:</span>
+<span class="shell-row">    runs-on: ubuntu-latest</span>
+<span class="shell-row">    steps:</span>
+<span class="shell-row">      - uses: actions/checkout@v4</span>
+<span class="shell-row">      - uses: 0xjgv/interlocks@v1</span></pre>
+      </article>
+    </section>
+
+    <p class="result-line">Result: trustworthy Python PRs before human review.</p>
+    <p class="section-intro"><a class="section-cta"
+        href="https://github.com/0xjgv/interlocks">Read docs on GitHub &rarr;</a></p>
+
+    <div class="section-divider" aria-hidden="true"></div>
 
     <footer class="site">
       <span>interlocks v0.1.2 &middot; MIT</span>
-      <span>Forged with &#9874;&#65039;</span>
+      <span>Python quality gates</span>
       <a href="https://github.com/0xjgv/interlocks">GitHub</a>
     </footer>
     <div class="section-divider" aria-hidden="true"></div>
   </div>
+
   <div class="wordmark-fade" aria-hidden="true">
     <p>interlocks</p>
   </div>
@@ -626,11 +1388,13 @@ Completed in 7.4s</pre>
         btn.addEventListener("click", function () {
           var id = btn.getAttribute("data-copy");
           var el = id ? document.getElementById(id) : null;
-          if (!el) return;
-          var text = el.textContent || "";
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text);
-          }
+          if (!el || !navigator.clipboard || !navigator.clipboard.writeText) return;
+          navigator.clipboard.writeText(el.textContent || "").then(function () {
+            btn.classList.add("is-copied");
+            window.setTimeout(function () {
+              btn.classList.remove("is-copied");
+            }, 1500);
+          }).catch(function () { });
         });
       });
     })();
