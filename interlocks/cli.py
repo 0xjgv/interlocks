@@ -93,19 +93,27 @@ _PRESET_REPORTED_KEYS: tuple[str, ...] = (
 
 def cmd_presets() -> None:
     start = time.monotonic()
+    if _maybe_handle_presets_set(start):
+        return
+    _cmd_presets_list(start)
+
+
+def _maybe_handle_presets_set(start: float) -> bool:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     if not args or args[0] != "presets":
         args = ["presets"]
     if len(args) >= 2 and args[1] == "set":
         _cmd_presets_set(args[2:], start=start)
-        return
+        return True
     if len(args) == 2:
         _cmd_presets_set([args[1]], start=start)
-        return
+        return True
     if len(args) > 2:
         fail_skip(_presets_usage())
+    return False
 
-    presets = supported_presets()
+
+def _cmd_presets_list(start: float) -> None:
     cfg = load_optional_config()
     ui.command_banner("presets", cfg)
     ui.section("Current")
@@ -114,7 +122,7 @@ def cmd_presets() -> None:
         ui.section("Current Values")
         ui.kv_block([kv_with_source(cfg, key, getattr(cfg, key)) for key in _PRESET_REPORTED_KEYS])
     ui.section("Available Presets")
-    for preset in presets:
+    for preset in supported_presets():
         defaults = preset_defaults(preset)
         print(f"  {preset:<8}  {preset_description(preset)}")
         print(
