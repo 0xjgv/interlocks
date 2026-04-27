@@ -283,13 +283,13 @@ Trusted Publishing setup:
 
 Release checklist:
 
-1. Set `pyproject.toml` version to `0.1.0`.
-2. Set `interlocks/__init__.py` `__version__` to `0.1.0`.
-3. Update `CHANGELOG.md` for `0.1.0`.
+1. Set `pyproject.toml` version to the next release.
+2. Set `interlocks/__init__.py` `__version__` to the same release.
+3. Update `CHANGELOG.md` for the release.
 4. Run `uv run interlocks ci`.
 5. Run `uv build`.
 6. Trigger `release` manually to publish to TestPyPI.
-7. Create matching tag `v0.1.0`.
+7. Create matching `vX.Y.Z` tag.
 8. Push tag.
 9. Confirm PyPI release, GitHub release assets, and attestations.
 

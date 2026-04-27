@@ -355,7 +355,7 @@ wheels = [
 ]
 
 [[package]]
-name = "interlocks-mutmut"
+name = "interlock-mutmut"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
@@ -373,14 +373,14 @@ wheels = [
 
 [[package]]
 name = "interlocks"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "basedpyright" },
     { name = "coverage" },
     { name = "deptry" },
     { name = "import-linter" },
-    { name = "interlocks-mutmut" },
+    { name = "interlock-mutmut" },
     { name = "lizard" },
     { name = "pip-audit" },
     { name = "ruff" },
@@ -398,7 +398,7 @@ requires-dist = [
     { name = "coverage", specifier = ">=7.13.5" },
     { name = "deptry", specifier = ">=0.25.1" },
     { name = "import-linter", specifier = ">=2.11" },
-    { name = "interlocks-mutmut", specifier = ">=3.5.0" },
+    { name = "interlock-mutmut", specifier = ">=3.5.0" },
     { name = "lizard", specifier = ">=1.21.6" },
     { name = "pip-audit", specifier = ">=2.7" },
     { name = "ruff", specifier = ">=0.15.11" },

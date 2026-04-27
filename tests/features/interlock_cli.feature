@@ -29,9 +29,9 @@ Feature: interlocks CLI surface area
     And the output lists the command "version"
     And the output lists the command "help"
 
-  Scenario: interlocks version prints 0.1.0
+  Scenario: interlocks version prints 0.1.1
     Given I run "interlocks version"
-    Then the output contains "0.1.0"
+    Then the output contains "0.1.1"
 
   Scenario: interlocks help --quiet skips banner and section headers
     Given I run "interlocks help --quiet"
