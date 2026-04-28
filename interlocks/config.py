@@ -600,7 +600,6 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         acceptance_trace_path,
         acceptance_budget_path,
         enforce_acceptance_budget,
-        enforce_acceptance_budget_source,
     ) = _resolve_acceptance_budget_paths(table, project_root)
 
     overrides = {
@@ -636,7 +635,6 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
             value_sources,
             table,
             overrides=overrides,
-            enforce_acceptance_budget_source=enforce_acceptance_budget_source,
         ),
         unsupported_presets=unsupported_presets,
         **_threshold_overrides(table),
@@ -675,17 +673,19 @@ def _resolve_flags(table: dict[str, Any]) -> tuple[bool, bool, MutationCIMode, s
 
 def _resolve_enforce_acceptance_budget(
     table: dict[str, Any], acceptance_budget_path: Path
-) -> tuple[bool, str]:
-    """Resolve ``enforce_acceptance_budget`` honouring explicit override then file presence.
-
-    Returns ``(value, source_label)`` so callers can record provenance — explicit
-    pyproject values map to ``project-configured`` while filesystem auto-detect
-    maps to ``auto-detected``.
-    """
+) -> bool:
+    """Resolve ``enforce_acceptance_budget`` honouring explicit override then file presence."""
     explicit = _coerce_bool(table.get("enforce_acceptance_budget"))
     if explicit is not None:
-        return explicit, _SOURCE_PROJECT
-    return acceptance_budget_path.exists(), _SOURCE_AUTO
+        return explicit
+    return acceptance_budget_path.exists()
+
+
+def _enforce_acceptance_budget_source(table: dict[str, Any]) -> str:
+    """Provenance label: ``project-configured`` when explicit, else ``auto-detected``."""
+    if _coerce_bool(table.get("enforce_acceptance_budget")) is not None:
+        return _SOURCE_PROJECT
+    return _SOURCE_AUTO
 
 
 def _resolve_evaluation_evidence(
@@ -708,7 +708,7 @@ def _resolve_evaluation_evidence(
 
 def _resolve_acceptance_budget_paths(
     table: dict[str, Any], project_root: Path
-) -> tuple[Path, Path, bool, str]:
+) -> tuple[Path, Path, bool]:
     """Bundle the three acceptance-budget resolutions used by ``_load_config_cached``."""
     acceptance_trace_path = _resolved_path(
         table.get("acceptance_trace_path"),
@@ -720,15 +720,8 @@ def _resolve_acceptance_budget_paths(
         project_root / InterlockConfig.acceptance_budget_path,
         project_root,
     )
-    enforce_acceptance_budget, enforce_acceptance_budget_source = (
-        _resolve_enforce_acceptance_budget(table, acceptance_budget_path)
-    )
-    return (
-        acceptance_trace_path,
-        acceptance_budget_path,
-        enforce_acceptance_budget,
-        enforce_acceptance_budget_source,
-    )
+    enforce_acceptance_budget = _resolve_enforce_acceptance_budget(table, acceptance_budget_path)
+    return (acceptance_trace_path, acceptance_budget_path, enforce_acceptance_budget)
 
 
 _STRING_KEYS = (
@@ -815,7 +808,6 @@ def _complete_value_sources(
     table: dict[str, Any],
     *,
     overrides: dict[str, object],
-    enforce_acceptance_budget_source: str,
 ) -> dict[str, str]:
     complete = dict(sources)
     default_keys = (
@@ -847,7 +839,7 @@ def _complete_value_sources(
     complete.setdefault(
         "preset", _SOURCE_DEFAULT if table.get("preset") is None else _SOURCE_PROJECT
     )
-    complete["enforce_acceptance_budget"] = enforce_acceptance_budget_source
+    complete["enforce_acceptance_budget"] = _enforce_acceptance_budget_source(table)
     return complete
 
 
