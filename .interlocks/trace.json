@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "computed_at": "2026-04-28T16:07:03Z",
+  "computed_at": "2026-04-28T17:01:55Z",
   "scenarios": {
     "75e0b75b25e305d4": {
       "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
@@ -18,8 +18,7 @@
         "interlocks.acceptance_budget:compute_signature",
         "interlocks.acceptance_budget:derive_repo_secret",
         "interlocks.acceptance_budget:write_budget",
-        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario",
-        "interlocks.runner:capture"
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
       ]
     },
     "156b322c632d5296": {
@@ -30,8 +29,7 @@
         "interlocks.acceptance_budget:compute_signature",
         "interlocks.acceptance_budget:derive_repo_secret",
         "interlocks.acceptance_budget:write_budget",
-        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario",
-        "interlocks.runner:capture"
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
       ]
     },
     "7c9dc335f8ade7c4": {
@@ -43,8 +41,7 @@
         "interlocks.acceptance_budget:derive_repo_secret",
         "interlocks.acceptance_budget:load_budget",
         "interlocks.acceptance_budget:write_budget",
-        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario",
-        "interlocks.runner:capture"
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
       ]
     },
     "5b7f074494caebe6": {
@@ -55,8 +52,7 @@
         "interlocks.acceptance_budget:compute_signature",
         "interlocks.acceptance_budget:derive_repo_secret",
         "interlocks.acceptance_budget:write_budget",
-        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario",
-        "interlocks.runner:capture"
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
       ]
     },
     "98e2eac1fe727920": {
@@ -74,8 +70,7 @@
         "interlocks.acceptance_budget:compute_signature",
         "interlocks.acceptance_budget:derive_repo_secret",
         "interlocks.acceptance_budget:write_budget",
-        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario",
-        "interlocks.runner:capture"
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
       ]
     },
     "62233018162363bd": {
@@ -253,7 +248,6 @@
     "interlocks.acceptance_budget:derive_repo_secret",
     "interlocks.acceptance_budget:load_budget",
     "interlocks.acceptance_budget:write_budget",
-    "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario",
-    "interlocks.runner:capture"
+    "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
   ]
 }

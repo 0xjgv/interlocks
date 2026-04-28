@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.interlocks/trace.json` (trace-map completeness). The previous `# req:` /
   `@req-*` marker scoring is removed. Markers remain in feature files as advisory
   metadata; nothing parses them.
+- `derive_repo_secret` now reads `[project].name` (or legacy
+  `[tool.poetry].name`) from `pyproject.toml` instead of resolving the first
+  commit via `git rev-list`. Shallow clones (e.g. `actions/checkout` defaults
+  to depth=1) returned the boundary commit instead of the true root, breaking
+  signature verification in CI; the new derivation is git-independent and
+  per-project deterministic. Existing budgets must be re-signed with
+  `interlocks acceptance baseline --force`.
 
 ### Removed
 

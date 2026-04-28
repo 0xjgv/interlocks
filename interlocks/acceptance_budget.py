@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess  # noqa: S404 - intentional: derive_repo_secret reads `git rev-list` via runner.capture.
+import tomllib
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal
 
 from interlocks._atomic import atomic_write_bytes
-from interlocks.runner import capture
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -190,24 +189,31 @@ def verify_signature(budget: Budget, repo_secret: str) -> Literal["ok", "missing
 def derive_repo_secret(project_root: Path) -> str:
     """Return the repo-deterministic secret used to sign the budget.
 
-    Uses the first commit hash via ``git rev-list --max-parents=0 HEAD``. If
-    ``git`` errors, the repo has zero commits, or the binary is missing, falls
-    back to ``f"interlocks-acceptance-budget:{project_root.resolve()}"``.
+    Reads ``[project].name`` (or the legacy ``[tool.poetry].name`` fallback)
+    from ``project_root / "pyproject.toml"``. Per-project, stable across
+    commits, releases, and shallow clones — git is **not** consulted because
+    ``actions/checkout`` defaults to depth=1 and rewrites obscure the true
+    first-commit hash. Falls back to
+    ``f"interlocks-acceptance-budget:{project_root.resolve()}"`` when the file
+    is absent, malformed, or missing a recognizable name.
     """
     fallback = f"interlocks-acceptance-budget:{project_root.resolve()}"
+    pyproject = project_root / "pyproject.toml"
     try:
-        result = capture(["git", "rev-list", "--max-parents=0", "HEAD"], cwd=project_root)
-    except (OSError, subprocess.SubprocessError):
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
         return fallback
-    if result.returncode != 0:
-        return fallback
-    first_line = result.stdout.strip().splitlines()
-    if not first_line:
-        return fallback
-    candidate = first_line[0].strip()
-    if not candidate:
-        return fallback
-    return candidate
+    project = data.get("project")
+    if isinstance(project, dict):
+        name = project.get("name")
+        if isinstance(name, str) and name.strip():
+            return f"interlocks-acceptance-budget:{name.strip()}"
+    poetry = data.get("tool", {}).get("poetry") if isinstance(data.get("tool"), dict) else None
+    if isinstance(poetry, dict):
+        name = poetry.get("name")
+        if isinstance(name, str) and name.strip():
+            return f"interlocks-acceptance-budget:{name.strip()}"
+    return fallback
 
 
 __all__ = [

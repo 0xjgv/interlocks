@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -219,46 +218,43 @@ def test_verify_signature_distinguishes_missing_from_mismatch() -> None:
     assert verify_signature(bogus, "secret") == "mismatch"
 
 
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(
-        ["git", *args],  # noqa: S607
-        cwd=str(cwd),
-        check=True,
-        capture_output=True,
-        env={
-            "GIT_AUTHOR_NAME": "test",
-            "GIT_AUTHOR_EMAIL": "test@example.com",
-            "GIT_COMMITTER_NAME": "test",
-            "GIT_COMMITTER_EMAIL": "test@example.com",
-            "PATH": __import__("os").environ.get("PATH", ""),
-            "HOME": str(cwd),
-            "GIT_CONFIG_GLOBAL": str(cwd / ".gitconfig-empty"),
-            "GIT_CONFIG_SYSTEM": "/dev/null",
-        },
+def test_derive_repo_secret_uses_pep621_project_name(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo-pkg"\nversion = "0.1.0"\n', encoding="utf-8"
     )
+    assert derive_repo_secret(tmp_path) == "interlocks-acceptance-budget:demo-pkg"
 
 
-def test_derive_repo_secret_returns_first_commit_hash(tmp_path: Path) -> None:
-    _git(tmp_path, "init", "--initial-branch=main")
-    (tmp_path / "x.txt").write_text("hello", encoding="utf-8")
-    _git(tmp_path, "add", "x.txt")
-    _git(tmp_path, "commit", "-m", "first")
-
-    secret = derive_repo_secret(tmp_path)
-    # First commit hash: 40 hex chars.
-    assert len(secret) == 40
-    assert all(c in "0123456789abcdef" for c in secret)
+def test_derive_repo_secret_falls_back_to_poetry_name(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.poetry]\nname = "legacy-pkg"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    assert derive_repo_secret(tmp_path) == "interlocks-acceptance-budget:legacy-pkg"
 
 
-def test_derive_repo_secret_falls_back_when_no_git(tmp_path: Path) -> None:
+def test_derive_repo_secret_falls_back_when_pyproject_missing(tmp_path: Path) -> None:
     secret = derive_repo_secret(tmp_path)
     assert secret == f"interlocks-acceptance-budget:{tmp_path.resolve()}"
 
 
-def test_derive_repo_secret_falls_back_on_empty_repo(tmp_path: Path) -> None:
-    _git(tmp_path, "init", "--initial-branch=main")
+def test_derive_repo_secret_falls_back_on_malformed_pyproject(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("not = valid = toml\n[", encoding="utf-8")
     secret = derive_repo_secret(tmp_path)
     assert secret == f"interlocks-acceptance-budget:{tmp_path.resolve()}"
+
+
+def test_derive_repo_secret_falls_back_when_name_missing(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "0.1.0"\n', encoding="utf-8")
+    secret = derive_repo_secret(tmp_path)
+    assert secret == f"interlocks-acceptance-budget:{tmp_path.resolve()}"
+
+
+def test_derive_repo_secret_is_independent_of_path(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\n', encoding="utf-8")
+    sibling = tmp_path.parent / (tmp_path.name + "-clone")
+    sibling.mkdir()
+    (sibling / "pyproject.toml").write_text('[project]\nname = "demo"\n', encoding="utf-8")
+    assert derive_repo_secret(tmp_path) == derive_repo_secret(sibling)
 
 
 def test_load_budget_malformed_json_raises(tmp_path: Path) -> None:

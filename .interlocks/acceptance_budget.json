@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "baseline_at": "2026-04-28T12:58:41Z",
+  "baseline_at": "2026-04-28T17:01:56Z",
   "untraced": {
     "interlocks.acceptance_budget": [
       "Budget",
@@ -108,6 +108,7 @@
       "RunResult",
       "Task",
       "arg_value",
+      "capture",
       "fail",
       "fail_skip",
       "generate_coverage_xml",
@@ -256,6 +257,6 @@
       "use_color"
     ]
   },
-  "untraced_count": 157,
-  "signature": "sha256:b338d925846f1ece487e2ab266df4b0338cadd6814e352b17b083f3932b02a4d"
+  "untraced_count": 158,
+  "signature": "sha256:7b8c13d62b436186e8f6645d8822b0c8ef9b5b4ff734a027a49e21c160d2b337"
 }
