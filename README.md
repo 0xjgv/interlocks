@@ -183,7 +183,7 @@ Run `interlocks presets set baseline` to set a project preset from the CLI.
 `mutation_ci_mode` picks how `interlocks ci` invokes mutmut:
 
 - `"off"` — skip mutation in CI (default; `run_mutation_in_ci = true` legacy flag still forces a full run)
-- `"incremental"` — restrict survivor reporting to files changed vs `mutation_since_ref` (default `origin/main`); fast PR signal
+- `"incremental"` — mutates only files changed vs `mutation_since_ref` (default `origin/main`); fast PR signal — runtime scales with PR diff. Empty diff is a clean skip.
 - `"full"` — full mutmut suite
 
 Nightly always runs the full suite + score gate, so PRs trade some signal for speed; the scheduled job catches anything the incremental pass misses.

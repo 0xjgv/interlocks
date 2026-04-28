@@ -122,6 +122,31 @@ _MUTATION_PYPROJECT = textwrap.dedent(
     """
 )
 
+# `mutation_min_coverage = 0` bypasses the suite-coverage gate; the layout has
+# no git repo, so `git diff` returns empty stdout and the task hits the
+# changed-files skip cleanly without invoking mutmut.
+_MUTATION_INCREMENTAL_PYPROJECT = textwrap.dedent(
+    """\
+    [project]
+    name = "mut-probe"
+    version = "0.0.1"
+    requires-python = ">=3.13"
+
+    [tool.interlocks]
+    mutation_max_runtime = 5
+    mutation_min_coverage = 0
+    mutation_since_ref = "HEAD"
+
+    [tool.coverage.run]
+    source = ["mypkg"]
+    branch = true
+
+    [tool.mutmut]
+    paths_to_mutate = ["mypkg/"]
+    tests_dir = ["tests/"]
+    """
+)
+
 _TRIVIAL_MODULE = "def double(x):\n    return x * 2\n"
 _TRIVIAL_TEST = textwrap.dedent(
     """\
@@ -188,6 +213,17 @@ def _make_crap(root: Path) -> None:
 
 def _make_mutation(root: Path) -> None:
     _make_trivial_package(root, _MUTATION_PYPROJECT)
+
+
+def _make_mutation_incremental_empty(root: Path) -> None:
+    """Incremental mutation with primed coverage and an empty diff → clean skip."""
+    _make_trivial_package(root, _MUTATION_INCREMENTAL_PYPROJECT)
+    subprocess.run(
+        [sys.executable, "-m", "coverage", "run", "-m", "unittest", "discover", "-s", "tests"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
 
 
 _REQUIRE_ACCEPTANCE_PYPROJECT = textwrap.dedent(
@@ -275,6 +311,7 @@ _LAYOUTS = {
     "coverage": _make_coverage,
     "crap": _make_crap,
     "mutation": _make_mutation,
+    "mutation-incremental-empty": _make_mutation_incremental_empty,
     "require-acceptance-no-features": _make_require_acceptance_no_features,
     "require-acceptance-behavior-covered": _make_require_acceptance_behavior_covered,
     "require-acceptance-behavior-uncovered": _make_require_acceptance_behavior_uncovered,

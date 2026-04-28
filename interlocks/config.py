@@ -245,7 +245,8 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "mutation_ci_mode",
         "off|incremental|full",
         "off",
-        "CI mutation strategy: off skips, incremental restricts to changed files, full runs all",
+        "CI mutation strategy: off skips; "
+        "incremental mutates only files changed vs mutation_since_ref; full runs all",
         "Mutation",
     ),
     ConfigKeyDoc(

@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   coverage is missing. Default `false` preserves existing baseline/legacy behavior;
   strict preset enables it.
 
+### Changed
+
+- `mutation_ci_mode = "incremental"` now scopes `mutmut run` to module globs
+  derived from files changed vs `mutation_since_ref` (default `origin/main`),
+  so PR runtime scales with the diff (was: only filtered survivor display
+  while mutmut still ran the full suite). Empty diff skips cleanly.
+
 ## [0.1.2] - 2026-04-27
 
 ### Added

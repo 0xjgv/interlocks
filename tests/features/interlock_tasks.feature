@@ -45,6 +45,13 @@ Feature: interlocks task commands run against a real tmp project
     Then the exit code is 0
     And the output contains "mutation"
 
+  # req: task-mutation-incremental
+  Scenario: incremental mutation skips when no src files changed
+    Given a tmp project with layout "mutation-incremental-empty"
+    When I run "interlocks mutation --changed-only" in that project
+    Then the exit code is 0
+    And the output contains "no changed src files"
+
   # req: task-acceptance-required
   Scenario: acceptance fails when require_acceptance is true and features dir is missing
     Given a tmp project with layout "require-acceptance-no-features"

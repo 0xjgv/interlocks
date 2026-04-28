@@ -216,6 +216,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.mutation:cmd_mutation",
     ),
     Behavior(
+        "task-mutation-incremental",
+        "task",
+        "incremental mutation scopes mutmut to files changed vs mutation_since_ref",
+        "interlocks.tasks.mutation:cmd_mutation",
+    ),
+    Behavior(
         "task-acceptance-required",
         "task",
         "acceptance fails when required scenarios are missing",

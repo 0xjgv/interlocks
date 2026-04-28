@@ -12,7 +12,9 @@ import pytest
 
 from interlocks import metrics as metrics_mod
 from interlocks.config import InterlockConfig
+from interlocks.tasks import mutation as mutation_mod
 from interlocks.tasks.mutation import (
+    _changed_to_globs,
     _mutant_in_changed,
     _print_survivors,
     _resolve_min_score,
@@ -263,3 +265,84 @@ def primed_coverage_xml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Call
         return xml
 
     return _write
+
+
+# ─────────────── _changed_to_globs ─────────────────────
+
+
+def test_changed_to_globs_drops_tests() -> None:
+    """Test paths under tests/ never become mutmut globs."""
+    globs = _changed_to_globs({"interlocks/tasks/foo.py", "tests/test_x.py"}, "interlocks")
+    assert globs == ["interlocks.tasks.foo.*"]
+
+
+def test_changed_to_globs_handles_init() -> None:
+    """`__init__.py` paths translate to dotted module globs without losing the name."""
+    globs = _changed_to_globs({"interlocks/__init__.py"}, "interlocks")
+    assert globs == ["interlocks.__init__.*"]
+
+
+def test_changed_to_globs_returns_empty_when_no_src_files() -> None:
+    """Diff with only test-tree paths produces no globs (caller will skip)."""
+    globs = _changed_to_globs({"tests/x.py"}, "interlocks")
+    assert globs == []
+
+
+# ─────────────── cmd_mutation incremental wiring ─────────────────────
+
+
+def test_cmd_mutation_skips_when_no_changed_src(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--changed-only` with empty src diff → warn_skip + no mutmut launch."""
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.setattr(mutation_mod, "changed_py_files_vs", lambda _ref: {"tests/test_x.py"})
+
+    def _no_run(*_args: object, **_kwargs: object) -> tuple[bool, Path]:
+        pytest.fail("_run_mutmut should not run when no src files changed")
+
+    monkeypatch.setattr(mutation_mod, "_run_mutmut", _no_run)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+
+    cmd_mutation(changed_only=True)
+
+    captured = capsys.readouterr()
+    assert "no changed src files" in captured.out
+
+
+def test_cmd_mutation_passes_globs_to_mutmut(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--changed-only` with src diff → mutmut argv carries module globs."""
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(
+        mutation_mod,
+        "changed_py_files_vs",
+        lambda _ref: {"mypkg/mod.py", "mypkg/other.py"},
+    )
+
+    captured_argv: list[list[str]] = []
+
+    def _spy_run(argv: list[str], _timeout: int) -> tuple[bool, Path]:
+        captured_argv.append(argv)
+        return True, tmp_project / ".interlocks" / "mutation.log"
+
+    monkeypatch.setattr(mutation_mod, "_run_mutmut", _spy_run)
+    monkeypatch.setattr(
+        mutation_mod, "read_mutation_summary", lambda: None
+    )  # short-circuit before parsing
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+
+    cmd_mutation(changed_only=True)
+
+    assert captured_argv, "expected _run_mutmut to be called"
+    argv = captured_argv[0]
+    assert "mutmut" in " ".join(argv)
+    # globs sorted by _changed_to_globs; both modules surface as trailing args.
+    assert argv[-2:] == ["mypkg.mod.*", "mypkg.other.*"]

@@ -40,6 +40,24 @@ def _mutant_in_changed(mutant_key: str, changed: set[str]) -> bool:
     return any(c == rel or c.endswith("/" + rel) for c in changed)
 
 
+def _changed_to_globs(changed: set[str], src_dir: str) -> list[str]:
+    """`{"interlocks/tasks/foo.py"}` + `src_dir="interlocks"` -> `["interlocks.tasks.foo.*"]`.
+
+    Filters to entries under ``f"{src_dir}/"`` so test-file paths don't leak into mutmut.
+    Each glob matches mutmut keys like ``<module>.x_<func>__mutmut_<n>`` via fnmatch.
+    """
+    if not src_dir:
+        return []
+    prefix = f"{src_dir}/"
+    out: list[str] = []
+    for path in sorted(changed):
+        if not path.startswith(prefix) or not path.endswith(".py"):
+            continue
+        module = path[:-3].replace("/", ".")
+        out.append(f"{module}.*")
+    return out
+
+
 def _is_spinner_line(line: str) -> bool:
     s = line.lstrip()
     return bool(s) and s[0] in _BRAILLE_SPINNER
@@ -209,7 +227,16 @@ def cmd_mutation(
     changed_flag = changed_only if changed_only is not None else "--changed-only" in sys.argv
     changed = changed_py_files_vs(cfg.mutation_since_ref) if changed_flag else None
 
-    completed, log_path = _run_mutmut(python_m("mutmut"), timeout)
+    globs: list[str] = []
+    if changed_flag and changed is not None:
+        globs = _changed_to_globs(changed, cfg.src_dir_arg)
+        if not globs:
+            warn_skip(f"mutation: no changed src files vs {cfg.mutation_since_ref}")
+            return
+        if not ui.is_quiet():
+            print(f"  mutating {len(globs)} module(s) changed vs {cfg.mutation_since_ref}")
+
+    completed, log_path = _run_mutmut([*python_m("mutmut"), *globs], timeout)
 
     summary = read_mutation_summary()
     if summary is None:
