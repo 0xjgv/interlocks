@@ -4,10 +4,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from interlocks.acceptance_trace import (
+    _tracer,
     collect_trace_evidence,
     format_trace_evidence,
     load_trace_evidence,
@@ -15,6 +17,10 @@ from interlocks.acceptance_trace import (
     trace_evidence_path,
     trace_wrapper_cmd,
 )
+
+
+def _frame(name: str, globals_: dict[str, object]) -> SimpleNamespace:
+    return SimpleNamespace(f_code=SimpleNamespace(co_name=name), f_globals=globals_)
 
 
 def test_trace_can_wrap_command_requires_env_and_module_runner(
@@ -110,6 +116,55 @@ def test_collect_trace_evidence_returns_one_for_unrunnable_command(tmp_path: Pat
 def test_missing_trace_evidence_is_advisory_setup_hint(tmp_path: Path) -> None:
     assert load_trace_evidence(tmp_path) is None
     assert "advisory runtime detail" in format_trace_evidence(None)
+
+
+def test_tracer_records_call_event_with_matching_module() -> None:
+    reached: set[str] = set()
+    trace = _tracer(("pkg.mod:foo",), reached)
+
+    result = trace(_frame("foo", {"__name__": "pkg.mod"}), "call", None)
+
+    assert result is trace
+    assert reached == {"pkg.mod:foo"}
+
+
+def test_tracer_ignores_non_call_events() -> None:
+    reached: set[str] = set()
+    trace = _tracer(("pkg.mod:foo",), reached)
+
+    trace(_frame("foo", {"__name__": "pkg.mod"}), "line", None)
+
+    assert reached == set()
+
+
+def test_tracer_ignores_unknown_function_names() -> None:
+    reached: set[str] = set()
+    trace = _tracer(("pkg.mod:foo",), reached)
+
+    trace(_frame("bar", {"__name__": "pkg.mod"}), "call", None)
+
+    assert reached == set()
+
+
+def test_tracer_ignores_unknown_modules() -> None:
+    reached: set[str] = set()
+    trace = _tracer(("pkg.mod:foo",), reached)
+
+    trace(_frame("foo", {"__name__": "other.mod"}), "call", None)
+
+    assert reached == set()
+
+
+def test_tracer_matches_via_spec_name_when_globals_module_misses() -> None:
+    reached: set[str] = set()
+    trace = _tracer(("pkg.mod:foo",), reached)
+
+    class _Spec:
+        name = "pkg.mod"
+
+    trace(_frame("foo", {"__name__": "wrong", "__spec__": _Spec()}), "call", None)
+
+    assert reached == {"pkg.mod:foo"}
 
 
 def test_trace_evidence_reports_reached_and_unreached_symbols(tmp_path: Path) -> None:
