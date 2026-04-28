@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from interlocks import acceptance_symbols
 from interlocks import config as interlock_config
 
 _GIT_ENV_LEAKS = (
@@ -48,6 +49,7 @@ def _isolate_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
     from an enclosing `git commit` hook and corrupt the outer repo.
     """
     interlock_config.clear_cache()
+    acceptance_symbols._clear_cache()
     for var in _GIT_ENV_LEAKS:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)

@@ -10,32 +10,58 @@ Public attributes are top-level functions, classes, and ``staticmethod``
 objects whose ``__module__`` matches the containing module (re-exports do not
 count). Class methods are *not* enumerated separately — the class is the unit
 of granularity, matching the budget design (D3).
+
+Results are memoized per ``(project_root, src_dir)`` for the lifetime of the
+process. The walk + imports run once per CLI invocation that touches the
+budget, regardless of how many gates ask for them. Tests that mutate source
+files between two calls within the same project root must invoke
+:func:`_clear_cache`.
 """
 
 from __future__ import annotations
 
+import functools
 import importlib
 import inspect
 import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterator
     from pathlib import Path
     from types import ModuleType
 
     from interlocks.config import InterlockConfig
 
 
-def iter_public_symbols(cfg: InterlockConfig) -> Iterable[tuple[str, str]]:
-    """Yield ``(module_qualname, attribute_name)`` pairs for the public surface.
+def iter_public_symbols(cfg: InterlockConfig) -> list[tuple[str, str]]:
+    """Return ``(module_qualname, attribute_name)`` pairs for the public surface.
 
-    Modules whose import raises ``ImportError`` are skipped with a stderr
-    nudge; the iterator continues past the failure without raising and without
-    affecting the caller's exit code.
+    Modules whose import raises (any exception, see :func:`_safe_import`) are
+    skipped with a stderr nudge; the result excludes them but no exception
+    propagates and the caller's exit code is unaffected.
+
+    Result is cached per ``(project_root, src_dir)``; rerunning within the same
+    process is a dict lookup. Returns a fresh ``list`` each call so callers may
+    mutate freely.
     """
     project_root = cfg.project_root.resolve()
     src_dir = cfg.src_dir.resolve()
+    _ensure_sys_path(project_root, src_dir)
+    return list(_public_symbols_cached(project_root, src_dir))
+
+
+def _clear_cache() -> None:
+    """Drop the memoized symbol list. Use in tests that rewrite source mid-run."""
+    _public_symbols_cached.cache_clear()
+
+
+def _ensure_sys_path(project_root: Path, src_dir: Path) -> None:
+    """Idempotently prepend ``src_dir`` and ``project_root`` to :data:`sys.path`.
+
+    Runs every call so cached results don't depend on which caller arrived
+    first; the operation is cheap (membership check) and safe to repeat.
+    """
     src_path_str = str(src_dir)
     if src_path_str not in sys.path:
         sys.path.insert(0, src_path_str)
@@ -43,6 +69,11 @@ def iter_public_symbols(cfg: InterlockConfig) -> Iterable[tuple[str, str]]:
     if project_path_str not in sys.path:
         sys.path.insert(0, project_path_str)
 
+
+@functools.lru_cache(maxsize=8)
+def _public_symbols_cached(project_root: Path, src_dir: Path) -> tuple[tuple[str, str], ...]:
+    """Walk ``src_dir`` once and return the public-symbol pairs as a tuple."""
+    pairs: list[tuple[str, str]] = []
     for path in sorted(src_dir.rglob("*.py")):
         qualname = _module_qualname(path, project_root)
         if qualname is None:
@@ -50,7 +81,8 @@ def iter_public_symbols(cfg: InterlockConfig) -> Iterable[tuple[str, str]]:
         module = _safe_import(qualname)
         if module is None:
             continue
-        yield from _iter_module_symbols(module, qualname)
+        pairs.extend(_iter_module_symbols(module, qualname))
+    return tuple(pairs)
 
 
 def _module_qualname(path: Path, project_root: Path) -> str | None:
