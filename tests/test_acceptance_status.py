@@ -11,6 +11,7 @@ from interlocks.acceptance_status import (
     count_scenarios,
     feature_files,
     remediation_message,
+    required_acceptance_failure_task,
 )
 from interlocks.config import InterlockConfig, clear_cache, load_config
 
@@ -106,6 +107,26 @@ def test_classify_runnable_with_scenario_when_required(tmp_path: Path) -> None:
     assert classify_acceptance(cfg) is AcceptanceStatus.RUNNABLE
 
 
+def test_classify_missing_behavior_coverage_when_required(tmp_path: Path) -> None:
+    features = tmp_path / "tests" / "features"
+    _write_feature(
+        features / "ok.feature",
+        "Feature: ok\n  Scenario: a thing happens\n    Given precondition\n",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "interlocks"\nversion = "0.0.0"\n',
+        encoding="utf-8",
+    )
+    clear_cache()
+    cfg = replace(
+        load_config(tmp_path),
+        project_root=tmp_path,
+        features_dir=features,
+        require_acceptance=True,
+    )
+    assert classify_acceptance(cfg) is AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE
+
+
 # ─────────────── feature_files + count_scenarios ─────────────────────
 
 
@@ -188,3 +209,15 @@ def test_remediation_for_disabled_is_empty() -> None:
 
 def test_remediation_for_optional_missing_is_empty() -> None:
     assert remediation_message(AcceptanceStatus.OPTIONAL_MISSING, None) == ""
+
+
+def test_required_acceptance_failure_task_exits_with_remediation(tmp_path: Path) -> None:
+    task = required_acceptance_failure_task(
+        AcceptanceStatus.MISSING_FEATURE_FILES, tmp_path / "features"
+    )
+
+    payload = task.cmd[-1]
+    assert task.description == "Acceptance (required)"
+    assert "no `.feature` files" in payload
+    assert "features" in payload
+    assert "sys.exit(1)" in payload

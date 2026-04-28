@@ -7,8 +7,8 @@ import time
 from interlocks import ui
 from interlocks.acceptance_status import (
     AcceptanceStatus,
-    classify_acceptance,
-    required_acceptance_failure_task,
+    acceptance_failure_task,
+    classify_acceptance_with_details,
 )
 from interlocks.config import load_config
 from interlocks.reports.suppressions import print_suppressions_report
@@ -44,19 +44,13 @@ def cmd_check() -> None:
         else:
             parallel.append(test_task)
         if cfg.run_acceptance_in_check:
-            acceptance_status = classify_acceptance(cfg)
-            if acceptance_status in {
-                AcceptanceStatus.MISSING_FEATURES_DIR,
-                AcceptanceStatus.MISSING_FEATURE_FILES,
-                AcceptanceStatus.MISSING_SCENARIOS,
-            }:
-                parallel.append(
-                    required_acceptance_failure_task(acceptance_status, cfg.features_dir)
-                )
-            elif acceptance_status is AcceptanceStatus.RUNNABLE:
-                acceptance = task_acceptance()
-                if acceptance is not None:
-                    parallel.append(acceptance)
+            acceptance = classify_acceptance_with_details(cfg)
+            if acceptance.is_required_failure:
+                parallel.append(acceptance_failure_task(acceptance))
+            elif acceptance.status is AcceptanceStatus.RUNNABLE:
+                acceptance_task = task_acceptance()
+                if acceptance_task is not None:
+                    parallel.append(acceptance_task)
         run_tasks(parallel)
         ui.section("Advisory")
         run(task_deps(), no_exit=True)

@@ -302,6 +302,31 @@ def test_check_appends_required_failure_when_both_flags_true(
     assert "Acceptance (required)" in descriptions
 
 
+def test_check_appends_required_failure_when_behavior_coverage_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_require_acceptance_check_project(tmp_path, run_acceptance_in_check=True)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            'name = "check-req-acc"', 'name = "interlocks"'
+        )
+        + 'features_dir = "tests/features"\n',
+        encoding="utf-8",
+    )
+    features = tmp_path / "tests" / "features"
+    features.mkdir(parents=True)
+    (features / "smoke.feature").write_text(
+        "Feature: smoke\n  Scenario: it works\n    Given a thing\n",
+        encoding="utf-8",
+    )
+
+    descriptions = _capture_check_parallel_descriptions(tmp_path, monkeypatch)
+
+    assert "Acceptance (required)" in descriptions
+    assert "Acceptance (pytest-bdd)" not in descriptions
+
+
 def test_check_fails_when_tests_fail(tmp_project: Path) -> None:
     failing = textwrap.dedent(
         '''\

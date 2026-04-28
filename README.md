@@ -196,7 +196,7 @@ Correctness:
 - `lint` / `format-check`: read-only equivalents for CI.
 - `typecheck`: basedpyright.
 - `test`: pytest or unittest, auto-detected.
-- `acceptance`: Gherkin via pytest-bdd or behave.
+- `acceptance`: Gherkin via pytest-bdd or behave. When `require_acceptance = true`, registered public behavior IDs must be covered by runnable scenarios.
 
 Hygiene:
 
@@ -230,6 +230,21 @@ Utility:
 
 Drop `.feature` files under `tests/features/` and step definitions under `tests/step_defs/`; `interlocks acceptance` runs them via pytest-bdd and shares coverage with `test`. Or run `interlocks init-acceptance` for a working example.
 
+Behavior coverage uses explicit IDs for observable public behavior. For interlocks itself, IDs live in `interlocks/behavior_coverage.py` near public-boundary inventory entries. Downstream projects with no registry keep zero-config behavior.
+
+Mark scenarios with either syntax immediately above `Scenario` or `Scenario Outline`:
+
+```gherkin
+# req: task-coverage
+@req-stage-ci
+Scenario: quality gates run
+  Given a project
+```
+
+Multiple IDs may attach to one scenario. Comments or tags inside scenario steps do not count. Under `require_acceptance = true`, runnable projects fail when a live behavior ID is uncovered, a scenario marker is stale, or duplicate live IDs exist. Remediation names the behavior ID and suggests adding `# req: <id>` or `@req-<id>`.
+
+Advisory trace evidence is separate from behavior markers. Set `INTERLOCKS_ACCEPTANCE_TRACE=1` to request runtime public-symbol evidence; trace failures, missing evidence, or newly untraced symbols are diagnostic-only in this release and do not change `acceptance`, `ci`, or `check` exit codes.
+
 Runner detection order:
 
 1. `acceptance_runner` in config (`"pytest-bdd"`, `"behave"`, or `"off"`).
@@ -237,7 +252,7 @@ Runner detection order:
 3. `behave` declared as a dependency but not `pytest-bdd`.
 4. Default to pytest-bdd.
 
-Acceptance always runs in `interlocks ci` when a features directory exists. It is opt-in for `interlocks check` via `run_acceptance_in_check = true`. Set `require_acceptance = true` under `[tool.interlocks]` to make missing Gherkin coverage a stage failure; the `strict` preset enables this by default. `check` enforces only when `run_acceptance_in_check = true`.
+Acceptance always runs in `interlocks ci` when a features directory exists. It is opt-in for `interlocks check` via `run_acceptance_in_check = true`. Set `require_acceptance = true` under `[tool.interlocks]` to make missing Gherkin scenarios and missing behavior markers stage failures; the `strict` preset enables this by default. `check` enforces only when `run_acceptance_in_check = true`.
 
 ## Bundled Tool Defaults
 

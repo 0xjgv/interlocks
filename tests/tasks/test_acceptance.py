@@ -151,6 +151,28 @@ def test_task_acceptance_off_override_skips(
     assert mod.task_acceptance() is None
 
 
+def test_task_acceptance_wraps_trace_when_enabled(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    _scaffold_feature(tmp_project, _PASSING_FEATURE)
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT.replace('name = "acc-probe"', 'name = "interlocks"'),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("INTERLOCKS_ACCEPTANCE_TRACE", "1")
+    monkeypatch.setenv("INTERLOCKS_ACCEPTANCE_TRACE_IN_PROCESS", "1")
+    monkeypatch.chdir(tmp_project)
+    clear_cache()
+
+    task = mod.task_acceptance()
+
+    assert task is not None
+    assert task.cmd[:3] == [sys.executable, "-m", "interlocks.acceptance_trace"]
+
+
 def test_task_acceptance_behave_branch(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from interlocks.config import clear_cache
     from interlocks.tasks import acceptance as mod
@@ -210,6 +232,32 @@ def test_cmd_acceptance_required_missing_exits_one(
         mod.cmd_acceptance()
     assert exc.value.code == 1
     assert "interlocks init-acceptance" in capsys.readouterr().out
+
+
+def test_cmd_acceptance_required_behavior_gap_exits_one(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    _scaffold_feature(tmp_project, _PASSING_FEATURE)
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT.replace('name = "acc-probe"', 'name = "interlocks"')
+        + "\n[tool.interlocks]\nrequire_acceptance = true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    clear_cache()
+
+    with pytest.raises(SystemExit) as exc:
+        mod.cmd_acceptance()
+
+    out = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "uncovered behavior ID" in out
+    assert "# req:" in out
 
 
 def test_cmd_acceptance_runnable_calls_run(

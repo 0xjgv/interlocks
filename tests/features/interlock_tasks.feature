@@ -51,3 +51,31 @@ Feature: interlocks task commands run against a real tmp project
     When I run "interlocks acceptance" in that project
     Then the exit code is not 0
     And the output contains "interlocks init-acceptance"
+
+  # req: task-acceptance-behavior-success
+  Scenario: acceptance passes when required behavior IDs are covered
+    Given a tmp project with layout "require-acceptance-behavior-covered"
+    When I run "interlocks acceptance" in that project
+    Then the exit code is 0
+    And the output contains "[acceptance]"
+
+  # req: task-acceptance-behavior-uncovered
+  Scenario: acceptance reports uncovered behavior IDs when markers are missing
+    Given a tmp project with layout "require-acceptance-behavior-uncovered"
+    When I run "interlocks acceptance" in that project
+    Then the exit code is not 0
+    And the output contains "uncovered behavior ID"
+
+  # req: task-acceptance-behavior-stale
+  Scenario: acceptance reports stale behavior IDs when markers drift
+    Given a tmp project with layout "require-acceptance-behavior-stale"
+    When I run "interlocks acceptance" in that project
+    Then the exit code is not 0
+    And the output contains "stale behavior ID"
+
+  # req: task-acceptance-trace-advisory
+  Scenario: advisory trace evidence does not block passing acceptance coverage
+    Given a tmp project with layout "require-acceptance-trace-advisory"
+    When I run "interlocks acceptance" in that project
+    Then the exit code is 0
+    And the output contains "[acceptance]"

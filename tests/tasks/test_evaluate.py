@@ -223,6 +223,20 @@ def test_acceptance_disabled_scores_as_not_ci_wired(
     )
 
 
+def test_behavior_coverage_gap_drives_acceptance_score(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pyproject = _pyproject().replace('name = "pkg"', 'name = "interlocks"')
+    project = _project(make_tmp_project, pyproject=pyproject, feature=_UNTRACED_FEATURE)
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "acceptance")
+
+    assert item.score == 1
+    assert item.next_action is not None
+    assert "# req: cli-commands" in item.next_action
+
+
 def test_scenario_without_traceability_tag_lowers_acceptance_score(
     make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -496,6 +510,28 @@ def test_deps_absent_from_ci_lowers_security_score(
 
 
 # ─────────────── added gap-closure policies ─────────────────────
+
+
+def test_evaluate_reports_advisory_trace_detail(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    trace_path = project / ".interlocks" / "acceptance-trace.json"
+    trace_path.write_text(
+        json.dumps({
+            "symbols": [
+                {"symbol": "pkg:checkout", "reached": True},
+                {"symbol": "pkg:cancel", "reached": False},
+            ]
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "acceptance")
+
+    assert "advisory trace (1/2 reached)" in item.detail
+    assert item.score == 3
 
 
 def test_partial_acceptance_traceability_reports_missing_count(

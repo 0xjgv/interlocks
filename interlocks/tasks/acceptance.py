@@ -10,7 +10,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from interlocks.acceptance_status import AcceptanceStatus, classify_acceptance, remediation_message
+from interlocks.acceptance_status import (
+    AcceptanceStatus,
+    classify_acceptance,
+    classify_acceptance_with_details,
+    remediation_message,
+)
+from interlocks.acceptance_trace import (
+    trace_can_wrap_command,
+    trace_enabled,
+    trace_wrapper_cmd,
+)
+from interlocks.behavior_coverage import behavior_registry_for_config
 from interlocks.config import InterlockConfig, invoker_prefix, load_config
 from interlocks.detect import detect_acceptance_runner
 from interlocks.runner import Task, fail_skip, run, warn_skip
@@ -35,27 +46,29 @@ def task_acceptance() -> Task | None:
     if runner is None or features_dir is None or features_arg is None:
         return None
     if runner == "behave":
-        return _behave_task(cfg, features_arg)
-    return _pytest_bdd_task(cfg, features_dir, features_arg)
+        return _maybe_trace_task(cfg, _behave_task(cfg, features_arg))
+    return _maybe_trace_task(cfg, _pytest_bdd_task(cfg, features_dir, features_arg))
 
 
 def cmd_acceptance() -> None:
     cfg = load_config()
-    status = classify_acceptance(cfg)
-    if status is AcceptanceStatus.DISABLED:
+    classification = classify_acceptance_with_details(cfg)
+    if classification.status is AcceptanceStatus.DISABLED:
         warn_skip("acceptance: disabled via acceptance_runner = 'off'")
         return
-    if status is AcceptanceStatus.OPTIONAL_MISSING:
+    if classification.status is AcceptanceStatus.OPTIONAL_MISSING:
         warn_skip(
             "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
         )
         return
-    if status in {
-        AcceptanceStatus.MISSING_FEATURES_DIR,
-        AcceptanceStatus.MISSING_FEATURE_FILES,
-        AcceptanceStatus.MISSING_SCENARIOS,
-    }:
-        fail_skip(remediation_message(status, cfg.features_dir))
+    if classification.is_required_failure:
+        fail_skip(
+            remediation_message(
+                classification.status,
+                classification.features_dir,
+                classification.behavior_result,
+            )
+        )
         return
     task = task_acceptance()
     if task is None:
@@ -64,6 +77,29 @@ def cmd_acceptance() -> None:
         )
         return
     run(task)
+
+
+def _maybe_trace_task(cfg: InterlockConfig, task: Task) -> Task:
+    if not trace_enabled() or not trace_can_wrap_command(task.cmd):
+        return task
+    symbols = tuple(
+        sorted({
+            behavior.public_symbol
+            for behavior in behavior_registry_for_config(cfg).behaviors
+            if behavior.public_symbol is not None
+        })
+    )
+    if not symbols:
+        return task
+    return Task(
+        task.description,
+        trace_wrapper_cmd(cfg.project_root, symbols, task.cmd),
+        pre_cmds=task.pre_cmds,
+        test_summary=task.test_summary,
+        allowed_rcs=task.allowed_rcs,
+        label=task.label,
+        display=task.display,
+    )
 
 
 def _pytest_bdd_task(cfg: InterlockConfig, features_dir: Path, features_arg: str) -> Task:

@@ -8,8 +8,8 @@ import time
 from interlocks import ui
 from interlocks.acceptance_status import (
     AcceptanceStatus,
-    classify_acceptance,
-    required_acceptance_failure_task,
+    acceptance_failure_task,
+    classify_acceptance_with_details,
 )
 from interlocks.config import InterlockConfig, MutationCIMode, load_config
 from interlocks.runner import run_tasks
@@ -45,17 +45,13 @@ def cmd_ci() -> None:
     arch = task_arch()
     if arch is not None:
         tasks.append(arch)
-    acceptance_status = classify_acceptance(cfg)
-    if acceptance_status in {
-        AcceptanceStatus.MISSING_FEATURES_DIR,
-        AcceptanceStatus.MISSING_FEATURE_FILES,
-        AcceptanceStatus.MISSING_SCENARIOS,
-    }:
-        tasks.append(required_acceptance_failure_task(acceptance_status, cfg.features_dir))
-    elif acceptance_status is AcceptanceStatus.RUNNABLE:
-        acceptance = task_acceptance()
-        if acceptance is not None:
-            tasks.append(acceptance)
+    acceptance = classify_acceptance_with_details(cfg)
+    if acceptance.is_required_failure:
+        tasks.append(acceptance_failure_task(acceptance))
+    elif acceptance.status is AcceptanceStatus.RUNNABLE:
+        acceptance_task = task_acceptance()
+        if acceptance_task is not None:
+            tasks.append(acceptance_task)
     # DISABLED + OPTIONAL_MISSING → skip silently (preserve current CI behavior)
     exit_code = 0
     try:

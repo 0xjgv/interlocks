@@ -14,7 +14,7 @@
 - Deps: `interlocks deps` — dependency hygiene (unused/missing/transitive) via deptry; auto-passes `--known-first-party` from `src_dir`. Override with `[tool.deptry]` in pyproject.
 - Deps freshness: `interlocks deps-freshness` — explicit package-index freshness check (not in default PR CI); `evaluate_dependency_freshness = true` makes policy count in `evaluate`
 - Arch: `interlocks arch` — architectural contracts via import-linter. Uses `[tool.importlinter]` when present; otherwise runs a default contract forbidding `src_dir` from importing `test_dir`. Skips with a nudge if `test_dir` isn't a Python package.
-- Acceptance: `interlocks acceptance` — Gherkin scenarios via pytest-bdd (default, shares coverage with `test`). Falls back to behave when `features/steps/` + `features/environment.py` are present or `acceptance_runner = "behave"`. No-ops silently when no `features/` directory exists. `run_acceptance_in_check = true` opts the `check` stage into running it. Blocking in `ci`.
+- Acceptance: `interlocks acceptance` — Gherkin scenarios via pytest-bdd (default, shares coverage with `test`). Falls back to behave when `features/steps/` + `features/environment.py` are present or `acceptance_runner = "behave"`. No-ops silently when no `features/` directory exists. `run_acceptance_in_check = true` opts the `check` stage into running it. Blocking in `ci`; when `require_acceptance = true`, registered public behavior IDs need `# req:` or `@req-*` scenario markers. `INTERLOCKS_ACCEPTANCE_TRACE=1` enables advisory trace evidence only.
 - Scaffold: `interlocks init-acceptance` — writes `tests/features/example.feature`, `tests/step_defs/test_example.py`, `tests/step_defs/conftest.py`. Refuses to overwrite.
 - Coverage: `interlocks coverage --min=0` — coverage.py with threshold + uncovered listing
 - CRAP: `interlocks crap --max=30` — complexity × coverage gate (blocking by default; `enforce_crap = false` to stay advisory)
@@ -61,7 +61,7 @@ enforce_mutation = false       # mutation exits 1 when score < mutation_min_scor
 acceptance_runner = "pytest-bdd" # "pytest-bdd" | "behave" | "off" (auto if unset)
 features_dir = "tests/features"  # auto: tests/features/, features/, <test_dir>/features/
 run_acceptance_in_check = false  # true → run scenarios inside `interlocks check`
-require_acceptance = false       # true → fail stages when no Gherkin scenarios are present
+require_acceptance = false       # true → fail stages when no Gherkin scenarios or required behavior markers are present
 
 # Evaluation policy / cached evidence
 evaluate_dependency_freshness = false        # true → score explicit freshness policy

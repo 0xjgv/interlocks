@@ -5,7 +5,6 @@ from __future__ import annotations
 import configparser
 import json
 import math
-import re
 import time
 from dataclasses import dataclass
 from functools import lru_cache
@@ -14,19 +13,22 @@ from typing import Any, Literal
 
 from interlocks import ui
 from interlocks.acceptance_status import feature_files as _shared_feature_files
+from interlocks.acceptance_trace import format_trace_evidence, load_trace_evidence
+from interlocks.behavior_coverage import (
+    BehaviorCoverageValidationResult,
+    FeatureBehaviorParse,
+    behavior_coverage_for_parsed_features,
+    behavior_registry_for_config,
+    parse_feature_behaviors,
+    traceable_totals_for_parsed_features,
+)
 from interlocks.config import InterlockConfig, coerce_float, load_optional_config
 from interlocks.defaults_path import has_project_config
-from interlocks.setup_state import (
-    CI_ACTION_NEEDLES,
-    acceptance_scaffold_present,
-    iter_workflow_bodies,
-)
+from interlocks.setup_state import CI_ACTION_NEEDLES, iter_workflow_bodies
 
 Status = Literal["ok", "warn", "fail"]
 ClosureKind = Literal["task", "stage"]
 
-_REQ_MARKER = re.compile(r"(?:^|\s)@req-[A-Za-z0-9_.:-]+|#\s*req\s*:", re.IGNORECASE)
-_SCENARIO = re.compile(r"^Scenario(?: Outline)?:")
 _CONTRACT_TYPES = frozenset({"forbidden", "layers", "acyclic", "independence"})
 _ITEM_COUNT = 11
 _MAX_TOTAL = _ITEM_COUNT * 3
@@ -139,28 +141,7 @@ def _feature_files(cfg: InterlockConfig) -> list[Path]:
 
 
 def _feature_scenarios_with_traceability(feature_file: Path) -> tuple[int, int]:
-    total = 0
-    traced = 0
-    pending_req = False
-
-    for line in feature_file.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        has_req = _REQ_MARKER.search(stripped) is not None
-        if _SCENARIO.match(stripped):
-            total += 1
-            traced += int(pending_req or has_req)
-            pending_req = False
-            continue
-        if not stripped:
-            pending_req = False
-            continue
-        if has_req:
-            pending_req = True
-            continue
-        if stripped.startswith(("@", "#")):
-            continue
-        pending_req = False
-    return total, traced
+    return traceable_totals_for_parsed_features(parse_feature_behaviors([feature_file]))
 
 
 def _test_files(cfg: InterlockConfig) -> list[Path]:
@@ -202,9 +183,9 @@ def _importlinter_contracts(cfg: InterlockConfig) -> list[dict[str, object]]:
 
 def _acceptance_item(cfg: InterlockConfig) -> EvaluationItem:
     feature_files = _feature_files(cfg)
-    scenario_total, traced = _traceability_totals(feature_files)
-    ci_wired = acceptance_scaffold_present(cfg)
-    detail = "feature files + traceability tags"
+    parsed_features = parse_feature_behaviors(feature_files)
+    scenario_total, traced = traceable_totals_for_parsed_features(parsed_features)
+    detail = _acceptance_detail(cfg)
 
     if not feature_files:
         return _item(
@@ -224,7 +205,29 @@ def _acceptance_item(cfg: InterlockConfig) -> EvaluationItem:
             f"Add at least one Scenario under {cfg.features_dir_arg or 'features/'}.",
             closure=_ACCEPTANCE_TRACE,
         )
-    if traced == scenario_total and ci_wired:
+    return _score_acceptance(cfg, parsed_features, scenario_total, traced, detail)
+
+
+def _score_acceptance(
+    cfg: InterlockConfig,
+    parsed_features: FeatureBehaviorParse,
+    scenario_total: int,
+    traced: int,
+    detail: str,
+) -> EvaluationItem:
+    behavior_result = behavior_coverage_for_parsed_features(cfg, parsed_features)
+    has_registry = bool(behavior_registry_for_config(cfg).behaviors)
+    ci_wired = cfg.acceptance_runner != "off"
+
+    if has_registry and not behavior_result.is_complete:
+        return _item(
+            "acceptance",
+            1,
+            detail,
+            _behavior_coverage_action(behavior_result),
+            closure=_ACCEPTANCE_TRACE,
+        )
+    if ci_wired and (has_registry or traced == scenario_total):
         return _item("acceptance", 3, detail)
     if not ci_wired:
         return _item(
@@ -244,6 +247,29 @@ def _acceptance_item(cfg: InterlockConfig) -> EvaluationItem:
         f"Add @req-* tags or # req: comments to {missing} acceptance scenario(s).",
         closure=_ACCEPTANCE_TRACE,
     )
+
+
+def _acceptance_detail(cfg: InterlockConfig) -> str:
+    evidence = load_trace_evidence(cfg.project_root)
+    if evidence is None:
+        return format_trace_evidence(None)
+    reached = len(evidence.reached_symbols)
+    total = reached + len(evidence.unreached_symbols)
+    if evidence.failure is not None:
+        return f"behavior markers + advisory trace failed ({reached}/{total} reached)"
+    return f"behavior markers + advisory trace ({reached}/{total} reached)"
+
+
+def _behavior_coverage_action(result: BehaviorCoverageValidationResult) -> str:
+    if result.uncovered_behavior_ids:
+        behavior_id = result.uncovered_behavior_ids[0]
+        return f"Add `# req: {behavior_id}` or `@req-{behavior_id}` to a runnable Scenario."
+    if result.stale_scenario_behaviors:
+        scenario = result.stale_scenario_behaviors[0]
+        return f"Update stale behavior marker `{scenario.behavior_id}` in {scenario.feature_path}."
+    if result.duplicate_behavior_ids:
+        return f"Remove duplicate behavior ID `{result.duplicate_behavior_ids[0]}` from registry."
+    return "Add or update Gherkin behavior markers."
 
 
 def _unit_tests_item(cfg: InterlockConfig) -> EvaluationItem:
@@ -544,13 +570,7 @@ def _format_action(item: EvaluationItem) -> str:
 
 
 def _traceability_totals(feature_files: list[Path]) -> tuple[int, int]:
-    total = 0
-    traced = 0
-    for feature_file in feature_files:
-        file_total, file_traced = _feature_scenarios_with_traceability(feature_file)
-        total += file_total
-        traced += file_traced
-    return total, traced
+    return traceable_totals_for_parsed_features(parse_feature_behaviors(feature_files))
 
 
 def _read_ci_evidence(cfg: InterlockConfig) -> CIEvidence | None:
@@ -580,18 +600,32 @@ def _tool_section(pyproject: dict[str, Any], name: str) -> object:
 
 
 def _complexity_score_action(cfg: InterlockConfig) -> tuple[int, str | None]:
-    has_thresholds = _has_complexity_thresholds(cfg)
-    has_crap = _positive_finite(cfg.crap_max)
+    thresholds_ready = _complexity_thresholds_ready(cfg)
     ci_wired = _complexity_ci_wired()
 
-    if has_thresholds and has_crap and cfg.enforce_crap and ci_wired:
+    if thresholds_ready and cfg.enforce_crap and ci_wired:
         return 3, None
-    if not has_thresholds or not has_crap:
-        score = 1 if has_thresholds or has_crap else 0
-        return score, "Set positive complexity_max_* and crap_max thresholds."
+    if not thresholds_ready:
+        return _missing_complexity_threshold_action(cfg)
     if not cfg.enforce_crap:
-        return 2 if ci_wired else 1, "Set enforce_crap = true."
+        return _advisory_complexity_action(ci_wired)
     return 2, "Wire task_complexity() and cmd_crap() into `interlocks ci`."
+
+
+def _complexity_thresholds_ready(cfg: InterlockConfig) -> bool:
+    return _has_complexity_thresholds(cfg) and _positive_finite(cfg.crap_max)
+
+
+def _missing_complexity_threshold_action(cfg: InterlockConfig) -> tuple[int, str]:
+    has_any_threshold = _has_complexity_thresholds(cfg) or _positive_finite(cfg.crap_max)
+    return (
+        1 if has_any_threshold else 0,
+        "Set positive complexity_max_* and crap_max thresholds.",
+    )
+
+
+def _advisory_complexity_action(ci_wired: bool) -> tuple[int, str]:
+    return 2 if ci_wired else 1, "Set enforce_crap = true."
 
 
 def _complexity_ci_wired() -> bool:

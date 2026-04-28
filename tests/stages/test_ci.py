@@ -376,6 +376,35 @@ def test_ci_runs_acceptance_when_runnable(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert "Acceptance (required)" not in descriptions
 
 
+def test_ci_appends_required_failure_task_when_behavior_coverage_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_require_acceptance_project(
+        tmp_path,
+        body='features_dir = "tests/features"\n',
+    )
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            'name = "ci-req-acc"', 'name = "interlocks"'
+        ),
+        encoding="utf-8",
+    )
+    features = tmp_path / "tests" / "features"
+    features.mkdir(parents=True)
+    (features / "smoke.feature").write_text(
+        "Feature: smoke\n  Scenario: it works\n    Given a thing\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+
+    descriptions = _capture_ci_task_descriptions(monkeypatch)
+
+    assert "Acceptance (required)" in descriptions
+    assert "Acceptance (pytest-bdd)" not in descriptions
+
+
 def test_ci_skips_acceptance_when_optional_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -8,6 +8,7 @@ exit-code + output shape.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -15,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then, when
+
+from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_tasks.feature"))
 
@@ -199,11 +202,70 @@ _REQUIRE_ACCEPTANCE_PYPROJECT = textwrap.dedent(
     """
 )
 
+_INTERLOCKS_REQUIRE_ACCEPTANCE_PYPROJECT = _REQUIRE_ACCEPTANCE_PYPROJECT.replace(
+    'name = "req-acc-probe"', 'name = "interlocks"'
+)
+
+
+_FEATURE_STEP_DEFS = textwrap.dedent(
+    """\
+    from pytest_bdd import given, scenarios
+
+    scenarios("../features/behavior.feature")
+
+    @given("a thing")
+    def _thing():
+        return None
+    """
+)
+
 
 def _make_require_acceptance_no_features(root: Path) -> None:
     """`require_acceptance = true` but no `tests/features/` — `acceptance` must fail."""
     (root / "pyproject.toml").write_text(_REQUIRE_ACCEPTANCE_PYPROJECT, encoding="utf-8")
     (root / "tests").mkdir()
+
+
+def _make_require_acceptance_behavior(
+    root: Path, *, omit: str | None = None, extra: str | None = None
+) -> None:
+    (root / "pyproject.toml").write_text(
+        _INTERLOCKS_REQUIRE_ACCEPTANCE_PYPROJECT, encoding="utf-8"
+    )
+    features = root / "tests" / "features"
+    features.mkdir(parents=True)
+    markers = [
+        f"  # req: {behavior.behavior_id}\n"
+        for behavior in INTERLOCKS_REGISTRY.behaviors
+        if behavior.behavior_id != omit
+    ]
+    if extra is not None:
+        markers.append(f"  # req: {extra}\n")
+    feature = (
+        "Feature: behavior coverage\n\n"
+        + "".join(markers)
+        + ("  Scenario: behavior coverage\n    Given a thing\n")
+    )
+    (features / "behavior.feature").write_text(feature, encoding="utf-8")
+    step_defs = root / "tests" / "step_defs"
+    step_defs.mkdir()
+    (step_defs / "test_behavior.py").write_text(_FEATURE_STEP_DEFS, encoding="utf-8")
+
+
+def _make_require_acceptance_behavior_covered(root: Path) -> None:
+    _make_require_acceptance_behavior(root)
+
+
+def _make_require_acceptance_behavior_uncovered(root: Path) -> None:
+    _make_require_acceptance_behavior(root, omit="task-acceptance-behavior-uncovered")
+
+
+def _make_require_acceptance_behavior_stale(root: Path) -> None:
+    _make_require_acceptance_behavior(root, extra="task-removed-behavior")
+
+
+def _make_require_acceptance_trace_advisory(root: Path) -> None:
+    _make_require_acceptance_behavior(root)
 
 
 _LAYOUTS = {
@@ -214,6 +276,10 @@ _LAYOUTS = {
     "crap": _make_crap,
     "mutation": _make_mutation,
     "require-acceptance-no-features": _make_require_acceptance_no_features,
+    "require-acceptance-behavior-covered": _make_require_acceptance_behavior_covered,
+    "require-acceptance-behavior-uncovered": _make_require_acceptance_behavior_uncovered,
+    "require-acceptance-behavior-stale": _make_require_acceptance_behavior_stale,
+    "require-acceptance-trace-advisory": _make_require_acceptance_trace_advisory,
 }
 
 
@@ -236,9 +302,19 @@ def _tmp_project(layout: str, tmp_path: Path) -> Path:
 def _run_in_project(cmd: str, project_root: Path) -> CliResult:
     # cmd starts with "interlocks <subcmd> …"; drop the "interlocks" sentinel.
     _, *argv = cmd.split()
+    env = None
+    if (
+        project_root
+        .joinpath("pyproject.toml")
+        .read_text(encoding="utf-8")
+        .find('name = "interlocks"')
+        >= 0
+    ):
+        env = {**os.environ, "INTERLOCKS_ACCEPTANCE_TRACE": "1"}
     result = subprocess.run(
         [sys.executable, "-m", "interlocks.cli", *argv],
         cwd=project_root,
+        env=env,
         capture_output=True,
         text=True,
         check=False,
