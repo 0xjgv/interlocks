@@ -9,7 +9,11 @@ wheels/
 .venv
 
 # >>> interlocks managed >>>
-.interlocks/
+.interlocks/*
+# Acceptance trace + budget are tracked artefacts (small, deterministic) so the
+# budget gate can ratchet across PRs without each clone re-baselining.
+!.interlocks/trace.json
+!.interlocks/acceptance_budget.json
 .import_linter_cache/
 .pytest_cache/
 .ruff_cache/

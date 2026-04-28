@@ -1,0 +1,261 @@
+{
+  "version": 1,
+  "baseline_at": "2026-04-28T10:31:12Z",
+  "untraced": {
+    "interlocks.acceptance_budget": [
+      "Budget",
+      "compute_untraced",
+      "prune_stale",
+      "verify_signature"
+    ],
+    "interlocks.acceptance_gate": [
+      "GateOutcome",
+      "evaluate_acceptance_budget"
+    ],
+    "interlocks.acceptance_identity": [
+      "Scenario",
+      "iter_scenarios",
+      "scenario_identity"
+    ],
+    "interlocks.acceptance_status": [
+      "AcceptanceStatus",
+      "classify_acceptance",
+      "count_scenarios",
+      "feature_files",
+      "remediation_message",
+      "required_acceptance_failure_task"
+    ],
+    "interlocks.acceptance_symbols": [
+      "iter_public_symbols"
+    ],
+    "interlocks.acceptance_trace_plugin": [
+      "pytest_bdd_before_scenario",
+      "pytest_configure",
+      "pytest_sessionfinish"
+    ],
+    "interlocks.cli": [
+      "cmd_help",
+      "cmd_presets",
+      "main"
+    ],
+    "interlocks.config": [
+      "ConfigKeyDoc",
+      "InterlockConfig",
+      "InterlockConfigError",
+      "build_coverage_test_command",
+      "build_test_command",
+      "clear_cache",
+      "coerce_float",
+      "find_project_root",
+      "invoker_prefix",
+      "kv_with_source",
+      "load_config",
+      "load_optional_config",
+      "preset_defaults",
+      "preset_description",
+      "require_pyproject",
+      "supported_presets"
+    ],
+    "interlocks.defaults.scaffold_test_example": [
+      "test_smoke"
+    ],
+    "interlocks.defaults_path": [
+      "config_flag_if_absent",
+      "has_project_config"
+    ],
+    "interlocks.detect": [
+      "detect_acceptance_runner",
+      "detect_features_dir",
+      "detect_src_dir",
+      "detect_target_interpreter",
+      "detect_test_dir",
+      "detect_test_invoker",
+      "detect_test_runner",
+      "expected_target_interpreter"
+    ],
+    "interlocks.git": [
+      "changed_py_files",
+      "changed_py_files_vs",
+      "changed_py_files_vs_main",
+      "stage",
+      "staged_py_files"
+    ],
+    "interlocks.github_action": [
+      "main",
+      "run_command",
+      "write_summary"
+    ],
+    "interlocks.metrics": [
+      "CrapRow",
+      "FunctionStats",
+      "MutationSummary",
+      "compute_crap_rows",
+      "coverage_line_rate",
+      "function_coverage",
+      "iter_py_files",
+      "lizard_functions",
+      "parse_coverage",
+      "read_mutation_summary"
+    ],
+    "interlocks.pyproject_edit": [
+      "patched_mutmut_paths"
+    ],
+    "interlocks.reports.suppressions": [
+      "print_suppressions_report"
+    ],
+    "interlocks.runner": [
+      "RunResult",
+      "Task",
+      "arg_value",
+      "capture",
+      "fail",
+      "fail_skip",
+      "generate_coverage_xml",
+      "ok",
+      "preflight",
+      "python_m",
+      "reset_results",
+      "results_snapshot",
+      "run",
+      "run_tasks",
+      "section",
+      "tool",
+      "warn_skip"
+    ],
+    "interlocks.setup_state": [
+      "acceptance_scaffold_present",
+      "ci_workflow_present",
+      "claude_stop_hook_installed",
+      "interlock_config_block_present",
+      "is_post_edit_command",
+      "iter_workflow_bodies",
+      "pre_commit_hook_installed"
+    ],
+    "interlocks.stages.check": [
+      "cmd_check"
+    ],
+    "interlocks.stages.ci": [
+      "cmd_ci"
+    ],
+    "interlocks.stages.clean": [
+      "cmd_clean"
+    ],
+    "interlocks.stages.nightly": [
+      "cmd_nightly"
+    ],
+    "interlocks.stages.post_edit": [
+      "cmd_post_edit"
+    ],
+    "interlocks.stages.pre_commit": [
+      "cmd_pre_commit"
+    ],
+    "interlocks.stages.setup_hooks": [
+      "cmd_hooks"
+    ],
+    "interlocks.tasks.acceptance": [
+      "cmd_acceptance",
+      "task_acceptance"
+    ],
+    "interlocks.tasks.arch": [
+      "cmd_arch",
+      "task_arch"
+    ],
+    "interlocks.tasks.audit": [
+      "cmd_audit",
+      "task_audit"
+    ],
+    "interlocks.tasks.complexity": [
+      "cmd_complexity",
+      "task_complexity"
+    ],
+    "interlocks.tasks.config": [
+      "cmd_config"
+    ],
+    "interlocks.tasks.coverage": [
+      "cmd_coverage",
+      "task_coverage"
+    ],
+    "interlocks.tasks.crap": [
+      "cmd_crap",
+      "cmd_crap_cached_advisory"
+    ],
+    "interlocks.tasks.deps": [
+      "cmd_deps",
+      "task_deps"
+    ],
+    "interlocks.tasks.deps_freshness": [
+      "cmd_deps_freshness",
+      "freshness_cmd"
+    ],
+    "interlocks.tasks.doctor": [
+      "CheckRow",
+      "cmd_doctor",
+      "task_doctor"
+    ],
+    "interlocks.tasks.evaluate": [
+      "CIEvidence",
+      "ClosurePath",
+      "EvaluationItem",
+      "EvaluationReport",
+      "cmd_evaluate",
+      "evaluate"
+    ],
+    "interlocks.tasks.fix": [
+      "cmd_fix",
+      "task_fix"
+    ],
+    "interlocks.tasks.format": [
+      "cmd_format",
+      "task_format"
+    ],
+    "interlocks.tasks.format_check": [
+      "cmd_format_check",
+      "task_format_check"
+    ],
+    "interlocks.tasks.init": [
+      "cmd_init",
+      "task_init"
+    ],
+    "interlocks.tasks.init_acceptance": [
+      "cmd_init_acceptance"
+    ],
+    "interlocks.tasks.lint": [
+      "cmd_lint",
+      "task_lint"
+    ],
+    "interlocks.tasks.mutation": [
+      "cmd_mutation"
+    ],
+    "interlocks.tasks.stats": [
+      "TestInspection",
+      "TrustReport",
+      "cmd_trust"
+    ],
+    "interlocks.tasks.test": [
+      "cmd_test",
+      "task_test"
+    ],
+    "interlocks.tasks.typecheck": [
+      "cmd_typecheck",
+      "task_typecheck"
+    ],
+    "interlocks.tasks.version": [
+      "cmd_version",
+      "task_version"
+    ],
+    "interlocks.ui": [
+      "banner",
+      "command_banner",
+      "command_footer",
+      "is_quiet",
+      "kv_block",
+      "message_list",
+      "row",
+      "section",
+      "stage_footer",
+      "use_color"
+    ]
+  },
+  "untraced_count": 157,
+  "signature": "sha256:dddaabb49250e1d1b1e983c527284484eb5d6684f89159104aa8c14fedf112b9"
+}

@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "computed_at": "2026-04-28T10:51:04Z",
+  "scenarios": {
+    "75e0b75b25e305d4": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "`interlocks acceptance baseline` writes a signed budget",
+      "symbols": [
+        "interlocks.acceptance_budget:load_budget",
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "4c1469870b00b208": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "`interlocks acceptance baseline` refuses to overwrite without --force",
+      "symbols": [
+        "interlocks.acceptance_budget:compute_signature",
+        "interlocks.acceptance_budget:derive_repo_secret",
+        "interlocks.acceptance_budget:write_budget",
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "156b322c632d5296": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "budget gate fails when a new untraced public symbol appears",
+      "symbols": [
+        "interlocks.acceptance_budget:compute_signature",
+        "interlocks.acceptance_budget:derive_repo_secret",
+        "interlocks.acceptance_budget:write_budget",
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "7c9dc335f8ade7c4": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "budget gate shrinks budget when a previously-untraced symbol gains coverage",
+      "symbols": [
+        "interlocks.acceptance_budget:compute_signature",
+        "interlocks.acceptance_budget:derive_repo_secret",
+        "interlocks.acceptance_budget:load_budget",
+        "interlocks.acceptance_budget:write_budget",
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "5b7f074494caebe6": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "`interlocks acceptance status` prints the expected summary fields",
+      "symbols": [
+        "interlocks.acceptance_budget:compute_signature",
+        "interlocks.acceptance_budget:derive_repo_secret",
+        "interlocks.acceptance_budget:write_budget",
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "98e2eac1fe727920": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "`interlocks acceptance status` names the behave gap",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "f6847ef1a536653a": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_acceptance_budget.feature",
+      "title": "budget gate detects hand-edited (tampered) budget files",
+      "symbols": [
+        "interlocks.acceptance_budget:compute_signature",
+        "interlocks.acceptance_budget:derive_repo_secret",
+        "interlocks.acceptance_budget:write_budget",
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "62233018162363bd": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_cli.feature",
+      "title": "Core commands are advertised",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "59a25865b1f8350e": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_cli.feature",
+      "title": "interlocks version prints 0.1.2",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "bc8140d6dfb459e6": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_cli.feature",
+      "title": "interlocks help --quiet skips banner and section headers",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "8425d11f269f15b8": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_cli.feature",
+      "title": "Agent reads config reference",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "eefc20c4e0c586fc": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_cli.feature",
+      "title": "Evaluate gap guidance includes closure command",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "76952a8efc99644c": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_doctor.feature",
+      "title": "Doctor reports adoption readiness",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "8a274981b55e03f1": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_doctor.feature",
+      "title": "Setup Checklist surfaces artifact rows with tag labels",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "87ba732bc497e1ca": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_init.feature",
+      "title": "Empty directory is scaffolded",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "7fb4bc373c31cbe5": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_init.feature",
+      "title": "Existing pyproject.toml is preserved",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "4556613b92ed9f55": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_meta.feature",
+      "title": "help runs cleanly without a project",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "94e74dc590542d29": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_meta.feature",
+      "title": "Acceptance is a silent no-op when features/ is missing",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "bfa1839cd41cbe70": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_meta.feature",
+      "title": "init-acceptance scaffolds the canonical layout and refuses to overwrite",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "241d8d20c901595f": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_meta.feature",
+      "title": "setup-hooks installs an executable pre-commit hook",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "6af0c862c8b7a37c": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_stages.feature",
+      "title": "`interlocks check` greenlights a clean project",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "3e3d0d0296426b92": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_stages.feature",
+      "title": "`interlocks pre-commit` no-ops when nothing is staged",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "13fd06091541a9c8": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_stages.feature",
+      "title": "`interlocks ci` runs the full verification pipeline",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "6988c1dd719d28c1": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_stages.feature",
+      "title": "`interlocks nightly` runs coverage + mutation (bounded runtime)",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "fa221f2abb25ce0b": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "audit reports no vulnerabilities for a project with no deps",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "b34326426e065b55": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "deps flags a declared-but-unused dependency",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "c728dc09d55ef1d4": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "arch passes with the default contract when src and tests are packages",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "38aaccd4f5224c46": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "coverage passes when a trivial test exercises the module",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "8a5b0b546f826465": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "crap passes when no function exceeds the threshold",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "2e95e60d0bdb1f9e": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "mutation skips cleanly without coverage data",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    },
+    "7c0f79a93144e253": {
+      "feature": "/Users/juan/Code/interlocks/.claude/worktrees/acceptance-coverage-ratchet/tests/features/interlock_tasks.feature",
+      "title": "acceptance fails when require_acceptance is true and features dir is missing",
+      "symbols": [
+        "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+      ]
+    }
+  },
+  "traced_symbols_index": [
+    "interlocks.acceptance_budget:compute_signature",
+    "interlocks.acceptance_budget:derive_repo_secret",
+    "interlocks.acceptance_budget:load_budget",
+    "interlocks.acceptance_budget:write_budget",
+    "interlocks.acceptance_trace_plugin:pytest_bdd_after_scenario"
+  ]
+}
