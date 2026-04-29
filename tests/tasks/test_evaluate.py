@@ -234,7 +234,8 @@ def test_behavior_coverage_gap_drives_acceptance_score(
 
     assert item.score == 1
     assert item.next_action is not None
-    assert "# req: cli-commands" in item.next_action
+    assert "# req: " in item.next_action
+    assert "@req-" in item.next_action
 
 
 def test_scenario_without_traceability_tag_lowers_acceptance_score(

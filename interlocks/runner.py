@@ -32,6 +32,7 @@ _DUMP_TAIL_LINES = 20
 
 # Commands that must work without a project — diagnostics, scaffolding, meta.
 PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
+    "agents",
     "config",
     "doctor",
     "evaluate",

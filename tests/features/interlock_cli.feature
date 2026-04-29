@@ -19,6 +19,7 @@ Feature: interlocks CLI surface area
     And the output lists the command "acceptance"
     And the output lists the command "init"
     And the output lists the command "init-acceptance"
+    And the output lists the command "agents"
     And the output lists the command "coverage"
     And the output lists the command "crap"
     And the output lists the command "mutation"

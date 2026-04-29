@@ -86,6 +86,7 @@ pr_ci_runtime_budget_seconds = 600
 markers = [
     "slow: marks tests that take multiple seconds (deselect with -m 'not slow')",
     # Acceptance feature areas (pytest-bdd auto-promotes Gherkin tags to markers).
+    "agents: agent-doc registration acceptance scenarios",
     "cli: CLI surface acceptance scenarios",
     "doctor: doctor diagnostic acceptance scenarios",
     "init: greenfield scaffolding acceptance scenarios",

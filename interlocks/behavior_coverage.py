@@ -13,7 +13,9 @@ if TYPE_CHECKING:
 
     from interlocks.config import InterlockConfig
 
-BehaviorKind = Literal["cli", "config", "stage", "task", "doctor", "init", "meta", "evaluate"]
+BehaviorKind = Literal[
+    "cli", "config", "stage", "task", "doctor", "init", "meta", "evaluate", "agents"
+]
 
 _ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*")
 _REQ_COMMENT_RE = re.compile(r"#\s*req\s*:\s*(?P<body>.*)$", re.IGNORECASE)
@@ -144,6 +146,24 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "init",
         "init preserves existing project files",
         "interlocks.tasks.init:cmd_init",
+    ),
+    Behavior(
+        "agents-create-missing",
+        "agents",
+        "agents creates AGENTS.md and CLAUDE.md when absent",
+        "interlocks.tasks.agents:cmd_agents",
+    ),
+    Behavior(
+        "agents-append-when-missing",
+        "agents",
+        "agents appends the canonical block to docs without an interlocks reference",
+        "interlocks.tasks.agents:cmd_agents",
+    ),
+    Behavior(
+        "agents-idempotent",
+        "agents",
+        "agents leaves docs unchanged when an interlocks reference already exists",
+        "interlocks.tasks.agents:cmd_agents",
     ),
     Behavior(
         "meta-help-no-project", "meta", "help runs without project config", "interlocks.cli:main"

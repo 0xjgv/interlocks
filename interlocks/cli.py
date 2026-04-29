@@ -27,6 +27,7 @@ from interlocks.stages.post_edit import cmd_post_edit
 from interlocks.stages.pre_commit import cmd_pre_commit
 from interlocks.stages.setup_hooks import cmd_hooks
 from interlocks.tasks.acceptance import cmd_acceptance
+from interlocks.tasks.agents import cmd_agents
 from interlocks.tasks.arch import cmd_arch
 from interlocks.tasks.audit import cmd_audit
 from interlocks.tasks.config import cmd_config
@@ -306,6 +307,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             ),
             "doctor": (cmd_doctor, "Preflight diagnostic: paths, tools, venv"),
             "init": (cmd_init, "Scaffold a greenfield pyproject.toml + tests/ in CWD"),
+            "agents": (
+                cmd_agents,
+                "Register interlocks block in AGENTS.md / CLAUDE.md (idempotent)",
+            ),
             "presets": (cmd_presets, "Show preset options or set one with `presets set <preset>`"),
             "version": (cmd_version, "print interlocks version"),
         },
