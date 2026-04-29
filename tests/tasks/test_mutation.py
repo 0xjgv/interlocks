@@ -6,6 +6,7 @@ import io
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -17,8 +18,10 @@ from interlocks.config import InterlockConfig
 from interlocks.tasks import mutation as mutation_mod
 from interlocks.tasks.mutation import (
     _changed_to_globs,
+    _make_pulse_thread,
     _mutant_in_changed,
     _print_survivors,
+    _PulseState,
     _resolve_min_score,
     _run_mutmut,
     cmd_mutation,
@@ -550,6 +553,22 @@ def test_pulse_silent_when_non_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     # Final progress line emission preserved.
     assert "5/100" in out
     assert out.endswith("\n")
+
+
+def test_make_pulse_thread_returns_none_when_inactive() -> None:
+    """`active=False` short-circuits the helper before allocating a Thread."""
+    state = _PulseState(active=False)
+    stop = threading.Event()
+    assert _make_pulse_thread(lambda: None, stop, state) is None
+
+
+def test_make_pulse_thread_returns_thread_when_active() -> None:
+    """`active=True` returns a daemon Thread that exits when `stop` is set."""
+    state = _PulseState(active=True)
+    stop = threading.Event()
+    thread = _make_pulse_thread(lambda: None, stop, state)
+    assert thread is not None
+    assert thread.daemon is True
 
 
 def test_pulse_silent_when_verbose(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
