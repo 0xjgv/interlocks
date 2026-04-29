@@ -6,7 +6,9 @@ import io
 import subprocess
 import sys
 import textwrap
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
@@ -16,9 +18,12 @@ from interlocks.config import InterlockConfig
 from interlocks.tasks import mutation as mutation_mod
 from interlocks.tasks.mutation import (
     _changed_to_globs,
+    _make_pulse_thread,
     _mutant_in_changed,
     _print_survivors,
+    _PulseState,
     _resolve_min_score,
+    _run_mutmut,
     cmd_mutation,
 )
 
@@ -436,3 +441,152 @@ def test_cmd_mutation_full_run_uses_run_subcommand(
 
     assert captured_argv, "expected _run_mutmut to be called"
     assert captured_argv[0][-1] == "run"
+
+
+# ─────────────── live progress pulse (`_run_mutmut`) ───────────────────
+
+
+class _SlowStdout:
+    """Iterable stdout that sleeps between yields to give the pulse thread time to fire."""
+
+    def __init__(self, lines: Iterable[str], delay: float) -> None:
+        self._lines = list(lines)
+        self._delay = delay
+
+    def __iter__(self) -> _SlowStdout:
+        return self
+
+    def __next__(self) -> str:
+        if not self._lines:
+            raise StopIteration
+        time.sleep(self._delay)
+        return self._lines.pop(0)
+
+    def close(self) -> None:
+        self._lines = []
+
+
+class _FakePopen:
+    """Minimal `subprocess.Popen` stand-in that streams `lines` then exits 0."""
+
+    def __init__(self, lines: Iterable[str], delay: float = 0.05) -> None:
+        self.stdout = _SlowStdout(lines, delay)
+        self._lines = list(lines)
+        self.returncode = 0
+
+    def wait(self, timeout: float | None = None) -> int:
+        # Block until the reader has drained stdout. The fake stdout sleeps between
+        # yields, so the pulse thread fires while we wait here.
+        deadline = time.monotonic() + (timeout if timeout is not None else 60.0)
+        while self.stdout._lines and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return 0
+
+    def terminate(self) -> None:
+        self.stdout._lines = []
+
+    def kill(self) -> None:
+        self.stdout._lines = []
+
+
+_PULSE_LINES = [
+    "1/100  🎉 0 🫥 1\n",
+    "2/100  🎉 0 🫥 2\n",
+    "3/100  🎉 0 🫥 3\n",
+    "4/100  🎉 0 🫥 4\n",
+    "5/100  🎉 0 🫥 5\n",
+]
+
+
+def _install_fake_popen(
+    monkeypatch: pytest.MonkeyPatch, lines: list[str], delay: float = 0.05
+) -> None:
+    def _factory(*_args: object, **_kwargs: object) -> _FakePopen:
+        return _FakePopen(lines, delay=delay)
+
+    monkeypatch.setattr(mutation_mod.subprocess, "Popen", _factory)
+
+
+def test_pulse_emits_periodically_to_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """TTY path: pulse refreshes the in-place progress line at least once before final newline."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutation_mod, "VERBOSE", False)
+    monkeypatch.setattr("interlocks.runner.VERBOSE", False)
+    monkeypatch.setattr(mutation_mod, "_PULSE_SECONDS", 0.02)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+
+    buf = io.StringIO()
+    buf.isatty = lambda: True  # type: ignore[method-assign]
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    _install_fake_popen(monkeypatch, _PULSE_LINES, delay=0.05)
+    completed, _log_path = _run_mutmut(["fake-mutmut"], timeout=10)
+
+    out = buf.getvalue()
+    assert completed is True
+    # At least one `\r…/…` write occurred BEFORE the final `\n`.
+    assert "\r" in out
+    cr_index = out.index("\r")
+    final_nl = out.rfind("\n")
+    assert cr_index < final_nl
+    # Final newline emission preserved.
+    assert out.endswith("\n")
+    # The last progress line is still printed at the end.
+    assert "5/100" in out
+
+
+def test_pulse_silent_when_non_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-tty path: NO `\\r` writes — output bit-identical to pre-pulse behavior."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutation_mod, "VERBOSE", False)
+    monkeypatch.setattr("interlocks.runner.VERBOSE", False)
+    monkeypatch.setattr(mutation_mod, "_PULSE_SECONDS", 0.02)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+
+    buf = io.StringIO()
+    buf.isatty = lambda: False  # type: ignore[method-assign]
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    _install_fake_popen(monkeypatch, _PULSE_LINES, delay=0.02)
+    _run_mutmut(["fake-mutmut"], timeout=10)
+
+    out = buf.getvalue()
+    assert "\r" not in out
+    # Final progress line emission preserved.
+    assert "5/100" in out
+    assert out.endswith("\n")
+
+
+def test_make_pulse_thread_returns_none_when_inactive() -> None:
+    """`active=False` short-circuits the helper before allocating a Thread."""
+    state = _PulseState(active=False)
+    stop = threading.Event()
+    assert _make_pulse_thread(lambda: None, stop, state) is None
+
+
+def test_make_pulse_thread_returns_thread_when_active() -> None:
+    """`active=True` returns a daemon Thread that exits when `stop` is set."""
+    state = _PulseState(active=True)
+    stop = threading.Event()
+    thread = _make_pulse_thread(lambda: None, stop, state)
+    assert thread is not None
+    assert thread.daemon is True
+
+
+def test_pulse_silent_when_verbose(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verbose path: pulse disabled even on a tty — raw stream passes through, no `\\r` writes."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutation_mod, "VERBOSE", True)
+    monkeypatch.setattr("interlocks.runner.VERBOSE", True)
+    monkeypatch.setattr(mutation_mod, "_PULSE_SECONDS", 0.02)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--verbose"])
+
+    buf = io.StringIO()
+    buf.isatty = lambda: True  # type: ignore[method-assign]
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    _install_fake_popen(monkeypatch, _PULSE_LINES, delay=0.02)
+    _run_mutmut(["fake-mutmut"], timeout=10)
+
+    out = buf.getvalue()
+    assert "\r" not in out

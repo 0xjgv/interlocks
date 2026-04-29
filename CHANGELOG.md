@@ -60,6 +60,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so PR runtime scales with the diff (was: only filtered survivor display
   while mutmut still ran the full suite). Empty diff skips cleanly.
 
+### Changed
+
+- `mutation` — live progress refresh during `mutmut run` (was: silent until
+  completion). TTY-only; CI logs unchanged.
+
 ## [0.1.2] - 2026-04-27
 
 ### Added

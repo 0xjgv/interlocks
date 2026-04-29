@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import threading
+from dataclasses import dataclass
 from typing import IO, TYPE_CHECKING
 
 from interlocks import ui
@@ -13,6 +14,7 @@ from interlocks.config import InterlockConfig, find_project_root, load_config
 from interlocks.git import changed_py_files_vs
 from interlocks.metrics import MutationSummary, coverage_line_rate, read_mutation_summary
 from interlocks.runner import (
+    _PRINT_LOCK,
     VERBOSE,
     arg_value,
     fail,
@@ -25,7 +27,25 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+
+@dataclass
+class _PulseState:
+    """Shared state between the reader and pulse threads.
+
+    `active` and `max_width` are both read by the reader's `on_line` (to clear
+    the in-place pulse line before printing a keep-line). Mutations to
+    `max_width` happen under `_PRINT_LOCK` so the reader can't observe a stale
+    width mid-update.
+    """
+
+    active: bool = False
+    max_width: int = 0
+
+
 _BRAILLE_SPINNER = frozenset("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏⠟⠯⠷⠾⠽⠻")
+
+# Watchdog tick when refreshing in-place progress lines.
+_PULSE_SECONDS = 2.0
 
 
 def _mutant_in_changed(mutant_key: str, changed: set[str]) -> bool:
@@ -96,6 +116,64 @@ def _ensure_log_path() -> Path:
     return log_dir / "mutation.log"
 
 
+def _make_pulse_thread(
+    get_progress: Callable[[], str | None],
+    stop_event: threading.Event,
+    state: _PulseState,
+) -> threading.Thread | None:
+    """Daemon thread that refreshes the in-place progress line every `_PULSE_SECONDS`.
+
+    Returns ``None`` when pulses are disabled (verbose/quiet/non-tty already
+    decided by the caller via `state.active`). The thread mutates
+    ``state.max_width`` and the on-screen line under ``_PRINT_LOCK`` so the
+    reader thread can clear the line atomically before printing keep-lines.
+    """
+    if not state.active:
+        return None
+
+    last_emitted: str | None = None
+
+    def _pulse() -> None:
+        nonlocal last_emitted
+        while not stop_event.wait(_PULSE_SECONDS):
+            current = get_progress()
+            if current is None or current == last_emitted:
+                continue
+            text = f"  {current}"
+            with _PRINT_LOCK:
+                state.max_width = max(state.max_width, len(text))
+                sys.stdout.write(f"\r{text}")
+                sys.stdout.flush()
+            last_emitted = current
+
+    return threading.Thread(target=_pulse, daemon=True)
+
+
+def _finalize_progress(last_progress: str | None, max_width: int) -> None:
+    """Clear any in-place pulse line and emit the final progress newline."""
+    if max_width:
+        with _PRINT_LOCK:
+            sys.stdout.write("\r" + " " * max_width + "\r")
+            sys.stdout.flush()
+    if last_progress is not None:
+        sys.stdout.write(f"  {last_progress}\n")
+
+
+def _wait_for_proc(proc: subprocess.Popen[str], timeout: int) -> bool:
+    """Wait for `proc`; SIGTERM (then SIGKILL) on timeout. Returns completion flag."""
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        return False
+    return True
+
+
 def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
     """Run mutmut, SIGTERM after `timeout`. Capture+filter output.
 
@@ -111,6 +189,7 @@ def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
     env = {**os.environ, "PYTHONWARNINGS": "ignore::DeprecationWarning"}
 
     last_progress: str | None = None
+    pulse = _PulseState(active=not VERBOSE and not quiet and sys.stdout.isatty())
 
     def on_line(line: str) -> None:
         nonlocal last_progress
@@ -127,9 +206,13 @@ def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
             last_progress = stripped
             return
         if _is_keep_line(stripped):
-            sys.stdout.write(line)
+            with _PRINT_LOCK:
+                if pulse.max_width:
+                    sys.stdout.write("\r" + " " * pulse.max_width + "\r")
+                sys.stdout.write(line)
+                sys.stdout.flush()
 
-    completed = True
+    pulse_stop = threading.Event()
     with log_path.open("w", encoding="utf-8") as log:
         proc = subprocess.Popen(
             mutmut,
@@ -143,22 +226,21 @@ def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
             raise RuntimeError("subprocess stdout pipe missing")
         reader = threading.Thread(target=_drain, args=(proc.stdout, on_line), daemon=True)
         reader.start()
+        pulse_thread = _make_pulse_thread(lambda: last_progress, pulse_stop, pulse)
+        if pulse_thread is not None:
+            pulse_thread.start()
         try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.terminate()
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            completed = False
-        # Close stdout to unblock the reader, then drain it before the log file
-        # exits scope — otherwise late writes hit a closed file.
-        proc.stdout.close()
-        reader.join(timeout=5)
-        if last_progress and not quiet and not VERBOSE:
-            sys.stdout.write(f"  {last_progress}\n")
+            completed = _wait_for_proc(proc, timeout)
+            # Close stdout to unblock the reader, then drain it before the log file
+            # exits scope — otherwise late writes hit a closed file.
+            proc.stdout.close()
+            reader.join(timeout=5)
+        finally:
+            pulse_stop.set()
+            if pulse_thread is not None:
+                pulse_thread.join(timeout=1)
+        if not quiet and not VERBOSE:
+            _finalize_progress(last_progress, pulse.max_width)
     return completed, log_path
 
 
