@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from interlocks.defaults_path import path as defaults_path
+
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_meta.feature"))
 
 
@@ -72,6 +74,11 @@ def _project_with_git(tmp_project: Path) -> Path:
     return tmp_project
 
 
+@given("a bare tmp project", target_fixture="project")
+def _project_bare(tmp_project: Path) -> Path:
+    return tmp_project
+
+
 @when(parsers.parse('I run "interlocks {subcmd}" in the tmp project'))
 @when(parsers.parse('I run "interlocks {subcmd}" in the tmp project a second time'))
 def _run_cmd(
@@ -116,3 +123,12 @@ def _pre_commit_executable(project: Path) -> None:
     hook = project / ".git" / "hooks" / "pre-commit"
     mode = hook.stat().st_mode
     assert mode & 0o111, f"expected executable bit on {hook}; mode={mode:o}"
+
+
+@then("the SKILL.md in the tmp project matches the bundled copy")
+def _skill_matches_bundled(project: Path) -> None:
+    bundled = defaults_path("skill/SKILL.md").read_text(encoding="utf-8")
+    installed = (project / ".claude" / "skills" / "interlocks" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert installed == bundled, "installed SKILL.md does not match bundled copy"

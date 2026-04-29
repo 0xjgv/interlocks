@@ -187,6 +187,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.stages.setup_hooks:cmd_setup_hooks",
     ),
     Behavior(
+        "meta-setup-skill-installs",
+        "meta",
+        "setup-skill writes the bundled SKILL.md",
+        "interlocks.tasks.setup_skill:cmd_setup_skill",
+    ),
+    Behavior(
+        "meta-setup-skill-idempotent",
+        "meta",
+        "setup-skill is idempotent on re-run",
+        "interlocks.tasks.setup_skill:cmd_setup_skill",
+    ),
+    Behavior(
         "stage-check",
         "stage",
         "check runs local quality loop",

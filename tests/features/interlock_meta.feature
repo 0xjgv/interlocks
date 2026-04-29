@@ -35,3 +35,20 @@ Feature: interlocks meta commands
     Then the command exits successfully
     And the pre-commit hook exists in the tmp project
     And the pre-commit hook is executable
+
+  # req: meta-setup-skill-installs
+  Scenario: setup-skill writes the bundled SKILL.md
+    Given a bare tmp project
+    When I run "interlocks setup-skill" in the tmp project
+    Then the command exits successfully
+    And the file ".claude/skills/interlocks/SKILL.md" exists in the tmp project
+    And the SKILL.md in the tmp project matches the bundled copy
+
+  # req: meta-setup-skill-idempotent
+  Scenario: setup-skill is idempotent on re-run
+    Given a bare tmp project
+    When I run "interlocks setup-skill" in the tmp project
+    Then the command exits successfully
+    When I run "interlocks setup-skill" in the tmp project a second time
+    Then the command exits successfully
+    And the SKILL.md in the tmp project matches the bundled copy

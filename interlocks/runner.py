@@ -38,6 +38,7 @@ PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
     "evaluate",
     "init",
     "presets",
+    "setup-skill",
     "version",
     "help",
 })

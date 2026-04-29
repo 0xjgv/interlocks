@@ -43,6 +43,7 @@ from interlocks.tasks.init import cmd_init
 from interlocks.tasks.init_acceptance import cmd_init_acceptance
 from interlocks.tasks.lint import cmd_lint
 from interlocks.tasks.mutation import cmd_mutation
+from interlocks.tasks.setup_skill import cmd_setup_skill
 from interlocks.tasks.stats import cmd_trust
 from interlocks.tasks.test import cmd_test
 from interlocks.tasks.typecheck import cmd_typecheck
@@ -310,6 +311,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             "agents": (
                 cmd_agents,
                 "Register interlocks block in AGENTS.md / CLAUDE.md (idempotent)",
+            ),
+            "setup-skill": (
+                cmd_setup_skill,
+                "Install bundled Claude Code SKILL.md (idempotent)",
             ),
             "presets": (cmd_presets, "Show preset options or set one with `presets set <preset>`"),
             "version": (cmd_version, "print interlocks version"),
