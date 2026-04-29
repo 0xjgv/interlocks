@@ -84,6 +84,39 @@ def test_changed_py_files_vs_missing_ref_returns_empty(repo: Path) -> None:
     assert changed_py_files_vs("does-not-exist") == set()
 
 
+def test_changed_py_files_vs_includes_unstaged(repo: Path) -> None:
+    """Uncommitted edits to a tracked file surface vs the same ref."""
+    (repo / "interlocks" / "base.py").write_text("x = 2\n", encoding="utf-8")
+
+    assert changed_py_files_vs("HEAD") == {"interlocks/base.py"}
+
+
+def test_changed_py_files_vs_includes_staged(repo: Path) -> None:
+    """Staged-but-uncommitted additions surface vs the same ref."""
+    (repo / "interlocks" / "added.py").write_text("y = 2\n", encoding="utf-8")
+    _git("add", "interlocks/added.py", cwd=repo)
+
+    assert changed_py_files_vs("HEAD") == {"interlocks/added.py"}
+
+
+def test_changed_py_files_vs_includes_untracked(repo: Path) -> None:
+    """Untracked .py files under src/test dirs surface vs the same ref."""
+    (repo / "interlocks" / "new.py").write_text("z = 3\n", encoding="utf-8")
+
+    assert changed_py_files_vs("HEAD") == {"interlocks/new.py"}
+
+
+def test_changed_py_files_vs_ignores_ref_advancing_past_head(repo: Path) -> None:
+    """Commits on the ref after branch-off don't leak in (merge-base scoping)."""
+    _git("checkout", "-q", "-b", "feature", cwd=repo)
+    _git("checkout", "-q", "main", cwd=repo)
+    (repo / "interlocks" / "on_main.py").write_text("m = 1\n", encoding="utf-8")
+    _commit_all(repo, "advance main")
+    _git("checkout", "-q", "feature", cwd=repo)
+
+    assert changed_py_files_vs("main") == set()
+
+
 def test_changed_py_files_vs_main_wrapper(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Wrapper delegates to changed_py_files_vs('origin/main')."""
     calls: list[str] = []

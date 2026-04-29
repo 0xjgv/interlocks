@@ -36,9 +36,9 @@ Feature: interlocks CLI surface area
 
   @smoke
   # req: cli-version
-  Scenario: interlocks version prints 0.1.2
+  Scenario: interlocks version prints 0.1.3
     Given I run "interlocks version"
-    Then the output contains "0.1.2"
+    Then the output contains "0.1.3"
 
   # req: cli-quiet
   Scenario: interlocks help --quiet skips banner and section headers

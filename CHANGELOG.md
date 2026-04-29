@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-04-29
+
 ### Added
 
 - `interlocks evaluate` — read-only static quality checklist scoring 8
@@ -52,18 +54,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same warn-skip semantics.
 - Stages call `cmd_mutation(changed_only=..., min_score_default=...)`
   directly instead of mutating `sys.argv` across module boundaries.
-
-### Changed
-
 - `mutation_ci_mode = "incremental"` now scopes `mutmut run` to module globs
   derived from files changed vs `mutation_since_ref` (default `origin/main`),
   so PR runtime scales with the diff (was: only filtered survivor display
   while mutmut still ran the full suite). Empty diff skips cleanly.
-
-### Changed
-
 - `mutation` — live progress refresh during `mutmut run` (was: silent until
   completion). TTY-only; CI logs unchanged.
+
+### Fixed
+
+- `crap` — cached advisory reports stay non-blocking when `enforce_crap = false`.
+- Incremental mutation diffs include staged, unstaged, and untracked Python files,
+  while ignoring unrelated commits added to the base ref after branch-off.
 
 ## [0.1.2] - 2026-04-27
 

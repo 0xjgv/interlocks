@@ -38,14 +38,23 @@ def changed_py_files() -> list[str]:
 
 
 def changed_py_files_vs(ref: str) -> set[str]:
-    """Return .py files changed vs ``ref`` on the current branch (renames followed).
+    """Return .py files changed vs ``ref`` — committed, staged, unstaged, and untracked.
 
-    Filtered by the project's configured src/test dirs, matching the
-    behaviour of ``staged_py_files`` and ``changed_py_files``.
+    Uses the merge-base of ``ref`` and ``HEAD`` so commits landing on ``ref``
+    after branch-off don't pollute the result, and a two-dot diff against the
+    working tree so uncommitted edits surface to incremental gates. Filtered
+    by the project's configured src/test dirs.
     """
-    res = capture(["git", "diff", "--name-only", "--find-renames=90%", f"{ref}...HEAD"])
+    # pragma: no mutate start — argv literals: case-toggles survive on case-insensitive FS
+    base = capture(["git", "merge-base", ref, "HEAD"]).stdout.strip()
+    if not base:
+        return set()
+    diff = capture(["git", "diff", "--name-only", "--find-renames=90%", base])
+    untracked = capture(["git", "ls-files", "--others", "--exclude-standard"])
+    # pragma: no mutate end
+    files = set(diff.stdout.splitlines()) | set(untracked.stdout.splitlines())
     prefixes = _src_test_prefixes()
-    return {f for f in res.stdout.splitlines() if f.endswith(".py") and f.startswith(prefixes)}
+    return {f for f in files if f.endswith(".py") and f.startswith(prefixes)}
 
 
 def changed_py_files_vs_main() -> set[str]:
