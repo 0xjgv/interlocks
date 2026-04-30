@@ -86,3 +86,24 @@ Feature: interlocks task commands run against a real tmp project
     When I run "interlocks acceptance" in that project
     Then the exit code is 0
     And the output contains "[acceptance]"
+
+  # req: task-behavior-attribution-success
+  Scenario: behavior-attribution passes when every claim reaches its symbol
+    Given a tmp project with layout "behavior-attribution-success"
+    When I run "interlocks behavior-attribution" in that project
+    Then the exit code is 0
+    And the output contains "[attribution]"
+
+  # req: task-behavior-attribution-unattributed
+  Scenario: behavior-attribution flags a mis-attributed scenario claim
+    Given a tmp project with layout "behavior-attribution-unattributed"
+    When I run "interlocks behavior-attribution" in that project
+    Then the exit code is not 0
+    And the output contains "mis-attributed"
+
+  # req: task-behavior-attribution-unresolved
+  Scenario: behavior-attribution flags unresolved behavior symbols
+    Given a tmp project with layout "behavior-attribution-unresolved"
+    When I run "interlocks attribution" in that project
+    Then the exit code is not 0
+    And the output contains "unresolved behavior symbols"

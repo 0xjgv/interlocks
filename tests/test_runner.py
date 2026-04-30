@@ -180,6 +180,38 @@ def test_run_tasks_verbose_streams_stdout_live(
     assert "[Verbose] err" in out
 
 
+def test_task_env_is_passed_to_command(capsys: pytest.CaptureFixture[str]) -> None:
+    task = Task(
+        "EnvCheck",
+        [sys.executable, "-c", "import os; print(os.environ['INTERLOCKS_ENV_PROBE'])"],
+        env=(("INTERLOCKS_ENV_PROBE", "ok"),),
+    )
+
+    run_tasks([task])
+
+    assert _row_has(_strip(capsys.readouterr().out), "envcheck", "ok")
+
+
+def test_task_env_is_passed_to_pre_cmd(tmp_path: Path) -> None:
+    marker = tmp_path / "env.txt"
+    task = Task(
+        "EnvPre",
+        [sys.executable, "-c", "pass"],
+        pre_cmds=(
+            [
+                sys.executable,
+                "-c",
+                f"import os, pathlib; pathlib.Path({str(marker)!r}).write_text(os.environ['X'])",
+            ],
+        ),
+        env=(("X", "from-pre"),),
+    )
+
+    run_tasks([task])
+
+    assert marker.read_text(encoding="utf-8") == "from-pre"
+
+
 def test_task_explicit_label_and_display_override_defaults(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

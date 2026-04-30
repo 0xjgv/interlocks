@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING
 from interlocks import ui
 from interlocks.config import load_config
 from interlocks.git import changed_py_files_vs_main
-from interlocks.metrics import compute_crap_rows, iter_py_files, lizard_functions, parse_coverage
+from interlocks.metrics import (
+    compute_crap_rows,
+    iter_py_files,
+    lizard_functions,
+    newer_than,
+    parse_coverage,
+)
 from interlocks.runner import arg_value, generate_coverage_xml
 
 if TYPE_CHECKING:
@@ -109,7 +115,7 @@ def _coverage_cache_is_stale(cov_cache: Path, cfg: InterlockConfig) -> bool:
         cov_mtime = cov_cache.stat().st_mtime
     except OSError:
         return True
-    return any(_newer_than(path, cov_mtime) for path in _coverage_inputs(cfg))
+    return any(newer_than(path, cov_mtime) for path in _coverage_inputs(cfg))
 
 
 def _coverage_inputs(cfg: InterlockConfig) -> Iterator[Path]:
@@ -119,10 +125,3 @@ def _coverage_inputs(cfg: InterlockConfig) -> Iterator[Path]:
             yield root
         elif root.is_dir():
             yield from iter_py_files(root)
-
-
-def _newer_than(path: Path, mtime: float) -> bool:
-    try:
-        return path.stat().st_mtime > mtime
-    except OSError:
-        return False

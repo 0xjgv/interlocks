@@ -128,15 +128,15 @@ def collect_trace_evidence(
 
 
 def _tracer(public_symbols: tuple[str, ...], reached: set[str]) -> Any:
-    symbols_by_function = _symbols_by_function(public_symbols)
+    symbol_index = symbols_by_function(public_symbols)
 
     def trace(frame: Any, event: str, _arg: object) -> Any:
         if event != "call":
             return trace
-        candidates = symbols_by_function.get(frame.f_code.co_name)
+        candidates = symbol_index.get(frame.f_code.co_name)
         if not candidates:
             return trace
-        for module in _frame_module_names(frame):
+        for module in frame_module_names(frame):
             symbol = candidates.get(module)
             if symbol is not None:
                 reached.add(symbol)
@@ -146,7 +146,7 @@ def _tracer(public_symbols: tuple[str, ...], reached: set[str]) -> Any:
     return trace
 
 
-def _frame_module_names(frame: Any) -> tuple[str, ...]:
+def frame_module_names(frame: Any) -> tuple[str, ...]:
     names: list[str] = []
     module = frame.f_globals.get("__name__")
     if isinstance(module, str):
@@ -158,7 +158,7 @@ def _frame_module_names(frame: Any) -> tuple[str, ...]:
     return tuple(dict.fromkeys(names))
 
 
-def _symbols_by_function(public_symbols: tuple[str, ...]) -> dict[str, dict[str, str]]:
+def symbols_by_function(public_symbols: tuple[str, ...]) -> dict[str, dict[str, str]]:
     grouped: dict[str, dict[str, str]] = {}
     for symbol in public_symbols:
         module, separator, function = symbol.rpartition(":")

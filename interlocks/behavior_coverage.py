@@ -190,7 +190,7 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "meta-setup-hooks",
         "meta",
         "setup-hooks installs local hooks",
-        "interlocks.stages.setup_hooks:cmd_setup_hooks",
+        "interlocks.stages.setup_hooks:cmd_hooks",
     ),
     Behavior(
         "meta-setup-skill-installs",
@@ -288,6 +288,24 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "task",
         "acceptance trace evidence remains advisory",
         "interlocks.tasks.acceptance:cmd_acceptance",
+    ),
+    Behavior(
+        "task-behavior-attribution-success",
+        "task",
+        "behavior-attribution exits 0 when every scenario claim is attributed",
+        "interlocks.tasks.behavior_attribution:cmd_behavior_attribution",
+    ),
+    Behavior(
+        "task-behavior-attribution-unattributed",
+        "task",
+        "behavior-attribution flags a scenario whose body did not reach the claimed symbol",
+        "interlocks.tasks.behavior_attribution:cmd_behavior_attribution",
+    ),
+    Behavior(
+        "task-behavior-attribution-unresolved",
+        "task",
+        "behavior-attribution flags a behavior symbol that no claiming scenario reached",
+        "interlocks.tasks.behavior_attribution:cmd_behavior_attribution",
     ),
 )
 

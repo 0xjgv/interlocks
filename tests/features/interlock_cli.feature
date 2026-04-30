@@ -17,6 +17,7 @@ Feature: interlocks CLI surface area
     And the output lists the command "deps-freshness"
     And the output lists the command "arch"
     And the output lists the command "acceptance"
+    And the output lists the command "behavior-attribution"
     And the output lists the command "init"
     And the output lists the command "init-acceptance"
     And the output lists the command "setup"

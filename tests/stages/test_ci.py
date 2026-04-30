@@ -162,6 +162,11 @@ def test_ci_in_process_queues_all_tasks(
         ci_mod, "run_tasks", lambda tasks: parallel.extend(t.description for t in tasks)
     )
     monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(
+        ci_mod,
+        "cmd_behavior_attribution",
+        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+    )
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
 
     ci_mod.cmd_ci()
@@ -178,7 +183,9 @@ def test_ci_in_process_queues_all_tasks(
         "Architecture (import-linter)",
         "Acceptance (pytest-bdd)",
     ]
-    expected_sequential = ["CRAP"] + (["Mutation"] if cfg.run_mutation_in_ci else [])
+    expected_sequential = ["CRAP", "Attribution:False"] + (
+        ["Mutation"] if cfg.run_mutation_in_ci else []
+    )
     assert sequential == expected_sequential
     assert "CI Checks" in capsys.readouterr().out
 
@@ -242,10 +249,15 @@ def test_ci_in_process_includes_mutation_when_enabled(
     sequential: list[str] = []
     monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
     monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(
+        ci_mod,
+        "cmd_behavior_attribution",
+        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+    )
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
 
     ci_mod.cmd_ci()
-    assert sequential == ["CRAP", "Mutation"]
+    assert sequential == ["CRAP", "Attribution:False", "Mutation"]
 
 
 # ─────────────── mutation_ci_mode dispatch ─────────────────────
@@ -271,10 +283,14 @@ def _write_mode_project(tmp_path: Path, table: str) -> None:
 @pytest.mark.parametrize(
     ("table", "expected_sequential", "expected_changed_only"),
     [
-        ('mutation_ci_mode = "off"', ["CRAP"], None),
-        ('mutation_ci_mode = "full"', ["CRAP", "Mutation"], False),
-        ('mutation_ci_mode = "incremental"', ["CRAP", "Mutation"], True),
-        ("run_mutation_in_ci = true", ["CRAP", "Mutation"], False),
+        ('mutation_ci_mode = "off"', ["CRAP", "Attribution:False"], None),
+        ('mutation_ci_mode = "full"', ["CRAP", "Attribution:False", "Mutation"], False),
+        (
+            'mutation_ci_mode = "incremental"',
+            ["CRAP", "Attribution:False", "Mutation"],
+            True,
+        ),
+        ("run_mutation_in_ci = true", ["CRAP", "Attribution:False", "Mutation"], False),
     ],
     ids=["off", "full", "incremental", "legacy-bool"],
 )
@@ -296,6 +312,11 @@ def test_ci_mode_dispatches_mutation(
     captured_kwargs: list[dict[str, object]] = []
     monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
     monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(
+        ci_mod,
+        "cmd_behavior_attribution",
+        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+    )
 
     def fake_mutation(**kwargs: object) -> None:
         sequential.append("Mutation")

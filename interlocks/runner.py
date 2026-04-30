@@ -80,7 +80,9 @@ def python_m(module: str, *args: str) -> list[str]:
     return [sys.executable, "-m", module, *args]
 
 
-def capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def capture(
+    cmd: list[str], *, env: tuple[tuple[str, str], ...] = ()
+) -> subprocess.CompletedProcess[str]:
     """Run ``cmd`` silently; return the CompletedProcess (never raises on non-zero rc).
 
     Subprocess kwargs here are pragma'd: ``check=False``/``None`` are equivalent,
@@ -88,7 +90,13 @@ def capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     survivors on those kwargs would be fake-confidence noise, not real gaps.
     """
     # pragma: no mutate start
-    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_merged_env(env),
+    )
     # pragma: no mutate end
 
 
@@ -162,6 +170,8 @@ class Task:
     # Compact command string shown in the row's middle column. Falls back to a
     # basename-stripped rendering of ``cmd``.
     display: str | None = None
+    # Environment overrides merged into os.environ for this task's subprocesses.
+    env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -215,7 +225,7 @@ def _execute(task: Task) -> RunResult:
     stderr_parts: list[str] = []
     rc = 0
     for cmd in (*task.pre_cmds, task.cmd):
-        rc, out, err = _run_one(cmd, task.description)
+        rc, out, err = _run_one(cmd, task.description, env=task.env)
         stdout_parts.append(out)
         stderr_parts.append(err)
         if rc != 0:
@@ -225,14 +235,18 @@ def _execute(task: Task) -> RunResult:
     )
 
 
-def _run_one(cmd: list[str], tag: str) -> tuple[int, str, str]:
+def _run_one(
+    cmd: list[str], tag: str, *, env: tuple[tuple[str, str], ...] = ()
+) -> tuple[int, str, str]:
     if VERBOSE:
-        return _run_one_streamed(cmd, tag)
-    result = capture(cmd)
+        return _run_one_streamed(cmd, tag, env=env)
+    result = capture(cmd, env=env)
     return result.returncode, result.stdout, result.stderr
 
 
-def _run_one_streamed(cmd: list[str], tag: str) -> tuple[int, str, str]:
+def _run_one_streamed(
+    cmd: list[str], tag: str, *, env: tuple[tuple[str, str], ...] = ()
+) -> tuple[int, str, str]:
     with _PRINT_LOCK:
         print(f"  -> [{tag}] {' '.join(cmd)}")
     with subprocess.Popen(
@@ -241,6 +255,7 @@ def _run_one_streamed(cmd: list[str], tag: str) -> tuple[int, str, str]:
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=_merged_env(env),
     ) as proc:
         out_buf = io.StringIO()
         err_buf = io.StringIO()
@@ -254,6 +269,12 @@ def _run_one_streamed(cmd: list[str], tag: str) -> tuple[int, str, str]:
         for t in threads:
             t.join()
         return rc, out_buf.getvalue(), err_buf.getvalue()
+
+
+def _merged_env(env: tuple[tuple[str, str], ...]) -> dict[str, str] | None:
+    if not env:
+        return None
+    return {**os.environ, **dict(env)}
 
 
 def _pump(stream: IO[str] | None, tag: str, sink: io.StringIO) -> None:

@@ -23,6 +23,14 @@ def _tmp_project(tmp_path: Path) -> Path:
     return make_tmp_project(tmp_path)
 
 
+@given("a tmp project with behavior-attribution failure", target_fixture="tmp_project")
+def _tmp_project_with_attribution_failure(tmp_path: Path) -> Path:
+    from tests.step_defs.test_interlock_tasks import _make_behavior_attribution_unattributed
+
+    _make_behavior_attribution_unattributed(tmp_path)
+    return tmp_path
+
+
 @when(
     parsers.parse('I run "interlocks {stage}" in the tmp project'),
     target_fixture="stage_result",

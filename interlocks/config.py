@@ -14,6 +14,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any, Literal
 
+from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
 from interlocks.detect import (
     detect_features_dir,
     detect_src_dir,
@@ -205,6 +206,13 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
     ConfigKeyDoc("complexity_max_args", "int", "7", "lizard argument count cap", "Thresholds"),
     ConfigKeyDoc("complexity_max_loc", "int", "100", "lizard LOC cap per function", "Thresholds"),
     ConfigKeyDoc("enforce_crap", "bool", "true", "CRAP exits 1 on offenders", "Gates"),
+    ConfigKeyDoc(
+        "enforce_behavior_attribution",
+        "bool",
+        "auto",
+        "Behavior-attribution exits 1 on runtime attribution failures; auto-on for interlocks",
+        "Gates",
+    ),
     ConfigKeyDoc(
         "run_mutation_in_ci",
         "bool",
@@ -429,6 +437,7 @@ class InterlockConfig:
     mutation_max_runtime: int = 600
     mutation_min_score: float = 80.0
     enforce_crap: bool = True
+    enforce_behavior_attribution: bool = False
     run_mutation_in_ci: bool = False
     enforce_mutation: bool = False
     mutation_ci_mode: MutationCIMode = "off"
@@ -570,6 +579,13 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         _resolve_flags(table)
     )
     audit_severity_threshold = _audit_severity_threshold_override(table)
+    thresholds = _threshold_overrides(table)
+    if "enforce_behavior_attribution" not in thresholds:
+        thresholds["enforce_behavior_attribution"] = _default_enforce_behavior_attribution(
+            pyproject
+        )
+        if thresholds["enforce_behavior_attribution"]:
+            value_sources.setdefault("enforce_behavior_attribution", _SOURCE_AUTO)
     dependency_freshness_command = _string_value(
         table, "dependency_freshness_command", InterlockConfig.dependency_freshness_command
     )
@@ -610,8 +626,15 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         ci_evidence_path=ci_evidence_path,
         value_sources=_complete_value_sources(value_sources, table, overrides=overrides),
         unsupported_presets=unsupported_presets,
-        **_threshold_overrides(table),
+        **thresholds,
     )
+
+
+def _default_enforce_behavior_attribution(pyproject: dict[str, Any]) -> bool:
+    project = pyproject.get("project")
+    if not isinstance(project, dict) or project.get("name") != "interlocks":
+        return False
+    return any(behavior.public_symbol for behavior in INTERLOCKS_REGISTRY.behaviors)
 
 
 def _resolved_path[T](override: object, fallback: T, project_root: Path) -> Path | T:
@@ -767,6 +790,7 @@ _INT_THRESHOLDS = (
 _FLOAT_THRESHOLDS = ("crap_max", "mutation_min_coverage", "mutation_min_score")
 _BOOL_THRESHOLDS = (
     "enforce_crap",
+    "enforce_behavior_attribution",
     "run_mutation_in_ci",
     "enforce_mutation",
     "evaluate_dependency_freshness",

@@ -317,6 +317,33 @@ def test_main_dispatches_known_command(
     assert "Usage: interlocks <command>" in capsys.readouterr().out
 
 
+def test_main_dispatches_alias_to_canonical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake() -> None:
+        calls.append("ran")
+
+    monkeypatch.setitem(TASKS, "behavior-attribution", (fake, "Attribution"))
+    monkeypatch.setattr("interlocks.cli.preflight", lambda name: calls.append(f"preflight:{name}"))
+    monkeypatch.setattr(sys, "argv", ["interlocks", "attribution"])
+
+    main()
+
+    assert calls == ["preflight:behavior-attribution", "ran"]
+
+
+def test_cmd_help_lists_behavior_attribution_alias(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    cmd_help()
+
+    out = capsys.readouterr().out
+    assert "[behavior-attribution]" in out
+    assert "alias: attribution" in out
+
+
 def test_main_skips_flag_args(monkeypatch: pytest.MonkeyPatch) -> None:
     """Flags (starting with -) are filtered out before dispatch."""
     calls: list[str] = []

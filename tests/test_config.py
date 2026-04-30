@@ -90,6 +90,7 @@ def test_threshold_defaults_when_absent(tmp_project: Path) -> None:
     assert cfg.mutation_max_runtime == 600
     assert cfg.mutation_min_score == 80.0
     assert cfg.enforce_crap is True
+    assert cfg.enforce_behavior_attribution is False
     assert cfg.run_mutation_in_ci is False
     assert cfg.enforce_mutation is False
 
@@ -113,6 +114,7 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         mutation_max_runtime = 300
         mutation_min_score = 92.5
         enforce_crap = false
+        enforce_behavior_attribution = true
         run_mutation_in_ci = true
         enforce_mutation = true
         """,
@@ -128,6 +130,7 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert cfg.mutation_max_runtime == 300
     assert cfg.mutation_min_score == 92.5
     assert cfg.enforce_crap is False
+    assert cfg.enforce_behavior_attribution is True
     assert cfg.run_mutation_in_ci is True
     assert cfg.enforce_mutation is True
 
@@ -155,6 +158,57 @@ def test_invalid_threshold_types_fall_back_to_defaults(
 
 
 # ─────────────── require_acceptance flag ────────────────────────────
+
+
+def test_behavior_attribution_enforcement_auto_on_for_interlocks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "tests").mkdir()
+    _write(
+        tmp_path / "pyproject.toml",
+        """
+        [project]
+        name = "interlocks"
+        version = "0.0.0"
+        """,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+
+    assert cfg.enforce_behavior_attribution is True
+    assert cfg.value_sources["enforce_behavior_attribution"] == "auto-detected"
+
+
+def test_behavior_attribution_enforcement_default_false_downstream(
+    tmp_project: Path,
+) -> None:
+    assert load_config().enforce_behavior_attribution is False
+
+
+def test_behavior_attribution_enforcement_project_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / "tests").mkdir()
+    _write(
+        tmp_path / "pyproject.toml",
+        """
+        [project]
+        name = "interlocks"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        enforce_behavior_attribution = false
+        """,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+
+    assert cfg.enforce_behavior_attribution is False
+    assert cfg.value_sources["enforce_behavior_attribution"] == "project-configured"
 
 
 def test_require_acceptance_default_false(tmp_project: Path) -> None:

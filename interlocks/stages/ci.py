@@ -13,9 +13,10 @@ from interlocks.acceptance_status import (
 )
 from interlocks.config import InterlockConfig, MutationCIMode, load_config
 from interlocks.runner import run_tasks
-from interlocks.tasks.acceptance import task_acceptance
+from interlocks.tasks.acceptance import task_acceptance_with_attribution
 from interlocks.tasks.arch import task_arch
 from interlocks.tasks.audit import task_audit
+from interlocks.tasks.behavior_attribution import cmd_behavior_attribution
 from interlocks.tasks.complexity import task_complexity
 from interlocks.tasks.coverage import task_coverage
 from interlocks.tasks.crap import cmd_crap
@@ -49,7 +50,7 @@ def cmd_ci() -> None:
     if acceptance.is_required_failure:
         tasks.append(acceptance_failure_task(acceptance))
     elif acceptance.status is AcceptanceStatus.RUNNABLE:
-        acceptance_task = task_acceptance()
+        acceptance_task = task_acceptance_with_attribution(cfg)
         if acceptance_task is not None:
             tasks.append(acceptance_task)
     # DISABLED + OPTIONAL_MISSING → skip silently (preserve current CI behavior)
@@ -59,6 +60,7 @@ def cmd_ci() -> None:
         # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
         ui.section("Gates")
         cmd_crap()
+        cmd_behavior_attribution(refresh=False)
         if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
             cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental")
     except SystemExit as exc:

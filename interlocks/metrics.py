@@ -28,6 +28,13 @@ def iter_py_files(root: Path) -> Iterator[Path]:
                 yield Path(dirpath) / name
 
 
+def newer_than(path: Path, mtime: float) -> bool:
+    try:
+        return path.stat().st_mtime > mtime
+    except OSError:
+        return False
+
+
 @dataclass(frozen=True)
 class FunctionStats:
     """One row from lizard's `-w`-ish text output (NLOC, CCN, args, loc range, path)."""

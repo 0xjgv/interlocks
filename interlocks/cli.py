@@ -30,6 +30,7 @@ from interlocks.tasks.acceptance import cmd_acceptance
 from interlocks.tasks.agents import cmd_agents
 from interlocks.tasks.arch import cmd_arch
 from interlocks.tasks.audit import cmd_audit
+from interlocks.tasks.behavior_attribution import cmd_behavior_attribution
 from interlocks.tasks.config import cmd_config
 from interlocks.tasks.coverage import cmd_coverage
 from interlocks.tasks.crap import cmd_crap
@@ -70,7 +71,7 @@ def cmd_help() -> None:
         print(f"{group_name}:")
         for name, (_, description) in group.items():
             tag = f"[{name}]"
-            print(f"  {tag:<{width}}  {description}")
+            print(f"  {tag:<{width}}  {description}{_alias_suffix(name)}")
     _print_detected_block(cfg)
     ui.command_footer(start)
 
@@ -89,6 +90,7 @@ _PRESET_REPORTED_KEYS: tuple[str, ...] = (
     "mutation_max_runtime",
     "mutation_min_score",
     "enforce_crap",
+    "enforce_behavior_attribution",
     "run_mutation_in_ci",
     "enforce_mutation",
     "mutation_ci_mode",
@@ -204,6 +206,17 @@ def _write_project_preset(pyproject: Path, preset: str) -> None:
     pyproject.write_text(text[:body_start] + updated_body + text[body_end:], encoding="utf-8")
 
 
+ALIASES: dict[str, str] = {"attribution": "behavior-attribution"}
+
+
+def _alias_suffix(name: str) -> str:
+    aliases = sorted(alias for alias, canonical in ALIASES.items() if canonical == name)
+    if not aliases:
+        return ""
+    label = "alias" if len(aliases) == 1 else "aliases"
+    return f" ({label}: {', '.join(aliases)})"
+
+
 def _print_detected_block(cfg: InterlockConfig | None) -> None:
     if cfg is None:
         return
@@ -238,6 +251,7 @@ def _print_detected_block(cfg: InterlockConfig | None) -> None:
         ("mutation_max_runtime", str(cfg.mutation_max_runtime)),
         ("mutation_min_score", str(cfg.mutation_min_score)),
         ("enforce_crap", str(cfg.enforce_crap)),
+        ("enforce_behavior_attribution", str(cfg.enforce_behavior_attribution)),
         ("run_mutation_in_ci", str(cfg.run_mutation_in_ci)),
         ("enforce_mutation", str(cfg.enforce_mutation)),
     ])
@@ -262,6 +276,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             "acceptance": (
                 cmd_acceptance,
                 "Gherkin acceptance tests (pytest-bdd default; behave auto-detected)",
+            ),
+            "behavior-attribution": (
+                cmd_behavior_attribution,
+                "Verify BDD scenarios reach symbols declared by claimed behaviors",
             ),
             "init-acceptance": (
                 cmd_init_acceptance,
@@ -342,9 +360,10 @@ def main() -> None:
         cmd_help()
         return
 
-    task_name = args[0]
+    requested = args[0]
+    task_name = ALIASES.get(requested, requested)
     if task_name not in TASKS:
-        print(f"Unknown command: {task_name}", file=sys.stderr)
+        print(f"Unknown command: {requested}", file=sys.stderr)
         cmd_help()
         sys.exit(1)
 

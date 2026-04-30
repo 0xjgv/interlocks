@@ -13,7 +13,8 @@ from interlocks.acceptance_status import (
 from interlocks.config import load_config
 from interlocks.reports.suppressions import print_suppressions_report
 from interlocks.runner import reset_results, results_snapshot, run, run_tasks, warn_skip
-from interlocks.tasks.acceptance import task_acceptance
+from interlocks.tasks.acceptance import task_acceptance_with_attribution
+from interlocks.tasks.behavior_attribution import cmd_behavior_attribution_cached_advisory
 from interlocks.tasks.crap import cmd_crap_cached_advisory
 from interlocks.tasks.deps import task_deps
 from interlocks.tasks.fix import cmd_fix
@@ -48,13 +49,14 @@ def cmd_check() -> None:
             if acceptance.is_required_failure:
                 parallel.append(acceptance_failure_task(acceptance))
             elif acceptance.status is AcceptanceStatus.RUNNABLE:
-                acceptance_task = task_acceptance()
+                acceptance_task = task_acceptance_with_attribution(cfg)
                 if acceptance_task is not None:
                     parallel.append(acceptance_task)
         run_tasks(parallel)
         ui.section("Advisory")
         run(task_deps(), no_exit=True)
         cmd_crap_cached_advisory()
+        cmd_behavior_attribution_cached_advisory()
     finally:
         print_suppressions_report()
         _print_footer(time.monotonic() - start)

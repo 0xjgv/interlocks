@@ -8,10 +8,12 @@ exit-code + output shape.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 import textwrap
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -249,8 +251,9 @@ _FEATURE_STEP_DEFS = textwrap.dedent(
 
     scenarios("../features/behavior.feature")
 
+
     @given("a thing")
-    def _thing():
+    def _thing() -> None:
         return None
     """
 )
@@ -304,6 +307,108 @@ def _make_require_acceptance_trace_advisory(root: Path) -> None:
     _make_require_acceptance_behavior(root)
 
 
+_BEHAVIOR_ATTRIBUTION_PYPROJECT = textwrap.dedent(
+    """\
+    [project]
+    name = "interlocks"
+    version = "0.0.1"
+    requires-python = ">=3.13"
+
+    [tool.interlocks]
+    src_dir = "pkg"
+    test_dir = "tests"
+    features_dir = "tests/features"
+    require_acceptance = true
+    enforce_behavior_attribution = true
+    coverage_min = 0
+    crap_max = 1000.0
+    enforce_crap = false
+    mutation_ci_mode = "off"
+    """
+)
+
+
+def _behavior_attribution_feature() -> tuple[str, dict[str, tuple[int, str | None]]]:
+    lines = ["Feature: behavior attribution", ""]
+    scenario_meta: dict[str, tuple[int, str | None]] = {}
+    for idx, behavior in enumerate(INTERLOCKS_REGISTRY.behaviors, start=1):
+        lines.append(f"  # req: {behavior.behavior_id}")
+        scenario_line = len(lines) + 1
+        title = f"registry behavior {idx}"
+        lines.append(f"  Scenario: {title}")
+        lines.append("    Given a thing")
+        lines.append("")
+        scenario_meta[behavior.behavior_id] = (scenario_line, behavior.public_symbol)
+    return "\n".join(lines), scenario_meta
+
+
+def _write_attribution_evidence(
+    root: Path,
+    scenario_meta: dict[str, tuple[int, str | None]],
+    *,
+    omit_symbol_for: str | None = None,
+) -> None:
+    scenarios = []
+    feature_path = root / "tests" / "features" / "behavior_attribution.feature"
+    for behavior_id, (line, symbol) in sorted(scenario_meta.items()):
+        reached = [] if symbol is None or behavior_id == omit_symbol_for else [symbol]
+        scenarios.append({
+            "feature_path": str(feature_path.resolve()),
+            "scenario_line": line,
+            "reached_symbols": reached,
+        })
+    path = root / ".interlocks" / "behavior-attribution.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {"created_at": time.time(), "failure": None, "scenarios": scenarios},
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _make_behavior_attribution_layout(
+    root: Path,
+    *,
+    omit_symbol_for: str | None = None,
+) -> None:
+    (root / "pyproject.toml").write_text(_BEHAVIOR_ATTRIBUTION_PYPROJECT, encoding="utf-8")
+    pkg = root / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    features = root / "tests" / "features"
+    features.mkdir(parents=True)
+    feature_text, scenario_meta = _behavior_attribution_feature()
+    (features / "behavior_attribution.feature").write_text(feature_text, encoding="utf-8")
+    step_defs = root / "tests" / "step_defs"
+    step_defs.mkdir()
+    (step_defs / "test_behavior_attribution.py").write_text(
+        _FEATURE_STEP_DEFS.replace("behavior.feature", "behavior_attribution.feature"),
+        encoding="utf-8",
+    )
+    _write_attribution_evidence(root, scenario_meta, omit_symbol_for=omit_symbol_for)
+
+
+def _make_behavior_attribution_success(root: Path) -> None:
+    _make_behavior_attribution_layout(root)
+
+
+def _make_behavior_attribution_unattributed(root: Path) -> None:
+    _make_behavior_attribution_layout(
+        root,
+        omit_symbol_for="task-behavior-attribution-unattributed",
+    )
+
+
+def _make_behavior_attribution_unresolved(root: Path) -> None:
+    _make_behavior_attribution_layout(
+        root,
+        omit_symbol_for="task-behavior-attribution-unresolved",
+    )
+
+
 _LAYOUTS = {
     "audit": _make_audit,
     "deps": _make_deps,
@@ -317,6 +422,9 @@ _LAYOUTS = {
     "require-acceptance-behavior-uncovered": _make_require_acceptance_behavior_uncovered,
     "require-acceptance-behavior-stale": _make_require_acceptance_behavior_stale,
     "require-acceptance-trace-advisory": _make_require_acceptance_trace_advisory,
+    "behavior-attribution-success": _make_behavior_attribution_success,
+    "behavior-attribution-unattributed": _make_behavior_attribution_unattributed,
+    "behavior-attribution-unresolved": _make_behavior_attribution_unresolved,
 }
 
 
