@@ -1,3 +1,3 @@
 """interlocks — zero-config Python quality interlocks."""
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
