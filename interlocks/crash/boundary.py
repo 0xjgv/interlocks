@@ -9,9 +9,10 @@ The boundary is the single place where interlocks-internal bugs are routed.
   ``interlocks: <message>`` line to stderr, and exits 2 without capturing.
 * For any other ``Exception`` originating inside the ``interlocks/`` package,
   builds a redacted payload, writes it to ``~/.cache/interlocks/crashes/``,
-  consults the dedup window + consent gate, and (when allowed) submits a
-  pre-filled GitHub Issues URL via the browser. The original exception is
-  always re-raised so Python emits its canonical traceback and exits 1.
+  consults the dedup window, asks the user whether to report, and (when
+  accepted) opens a pre-filled GitHub Issues URL via the browser. The original
+  exception is always re-raised so Python emits its canonical traceback and
+  exits 1.
 
 Invariant I6: a bug inside the crash reporter MUST NOT mask the original
 exception. Capture / transport are wrapped in ``_safely`` which logs a single
@@ -26,8 +27,8 @@ import time
 from typing import TYPE_CHECKING
 
 from interlocks.config import InterlockUserError, load_config
-from interlocks.crash.consent import ConsentGate
 from interlocks.crash.payload import build_payload
+from interlocks.crash.prompt import prompt_for_report
 from interlocks.crash.scrubber import is_interlocks_frame
 from interlocks.crash.storage import (
     record_seen,
@@ -122,22 +123,24 @@ def _is_interlocks_exception(exc: BaseException) -> bool:
 
 
 def _capture_and_transport(exc: BaseException, subcommand: str) -> None:
-    """Capture → write → dedup → consent → transport → record-seen.
+    """Capture → write → dedup → prompt → transport → record-seen.
 
-    Local capture is unconditional; transport is gated separately. If the
-    dedup window suppresses or the consent gate blocks, we still leave the
-    local file on disk for forensic value.
+    Local capture is unconditional; reporting is gated separately. If the
+    dedup window suppresses, the terminal is non-interactive, or the user
+    declines, we still leave the local file on disk for forensic value.
     """
-    cfg, project_root = _safe_load_config()
+    _cfg, project_root = _safe_load_config()
     payload = build_payload(exc, subcommand=subcommand, project_root=project_root)
     local_path = write_crash(payload)
     fingerprint = payload["fingerprint"]
     now = time.time()
     if should_suppress_transport(fingerprint, now=now):
         return
-    if cfg is None:
+    decision = prompt_for_report(local_path=local_path)
+    if decision == "unavailable":
         return
-    if not ConsentGate.allow_transport(cfg, env=os.environ):
+    if decision == "skip":
+        record_seen(fingerprint, now=now)
         return
     BrowserTransport.submit(payload, repo=_REPO, local_path=local_path)
     record_seen(fingerprint, now=now)
@@ -146,9 +149,8 @@ def _capture_and_transport(exc: BaseException, subcommand: str) -> None:
 def _safe_load_config() -> tuple[InterlockConfig | None, Path | None]:
     """Best-effort config load. Returns ``(None, None)`` if anything fails.
 
-    A broken ``pyproject.toml`` should never block local capture. The consent
-    gate falls back to "no transport" when ``cfg`` is None — local file is
-    written, browser-open is skipped.
+    A broken ``pyproject.toml`` should never block local capture. When config
+    cannot load, path scrubbing falls back to the generic rules.
     """
     try:
         cfg = load_config()

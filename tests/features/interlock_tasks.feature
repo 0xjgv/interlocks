@@ -115,9 +115,3 @@ Feature: interlocks task commands run against a real tmp project
     Then the exit code is not 0
     And the output contains "unresolved behavior symbols"
 
-  # req: task-no-telemetry-imports
-  Scenario: no-telemetry-imports rejects a banned SDK import
-    Given a tmp project with layout "no-telemetry-imports"
-    When I run "interlocks no-telemetry-imports" in that project
-    Then the exit code is not 0
-    And the output contains "no_telemetry_imports"

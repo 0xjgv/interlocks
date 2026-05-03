@@ -45,12 +45,11 @@ Feature: interlocks CLI surface area
     Then the output contains "0.1.4"
 
   # req: cli-help-crash-reports
-  Scenario: help text surfaces the crash_reports key and cache directory
+  Scenario: help text surfaces crash report behavior and cache directory
     Given I run "interlocks help"
     Then the output contains "── Crash Reports"
     And the output contains "~/.cache/interlocks/crashes/"
-    And the output contains "crash_reports"
-    And the output contains "INTERLOCKS_CRASH_REPORTS overrides"
+    And the output contains "interactive terminals prompt before opening a GitHub issue"
 
   # req: cli-quiet
   Scenario: interlocks help --quiet skips banner and section headers
@@ -73,7 +72,6 @@ Feature: interlocks CLI surface area
     And the output contains "coverage_min"
     And the output contains "audit_severity_threshold"
     And the output contains "pr_ci_runtime_budget_seconds"
-    And the output contains "crash_reports"
     And the output contains "── Precedence"
     And the output contains "── Examples"
     And the output does not contain "user-global"

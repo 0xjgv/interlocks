@@ -417,35 +417,6 @@ def _make_behavior_attribution_unresolved(root: Path) -> None:
     )
 
 
-def _make_no_telemetry_imports(root: Path) -> None:
-    """Project containing an interlocks/ source dir with one banned-import line."""
-    (root / "pyproject.toml").write_text(
-        textwrap.dedent(
-            """\
-            [project]
-            name = "telemetry-probe"
-            version = "0.0.1"
-            requires-python = ">=3.13"
-
-            [tool.interlocks]
-            src_dir = "interlocks"
-            test_dir = "tests"
-            """
-        ),
-        encoding="utf-8",
-    )
-    (root / "interlocks").mkdir()
-    (root / "interlocks" / "__init__.py").write_text("", encoding="utf-8")
-    # Build the banned line at runtime so this fixture file itself doesn't
-    # match the very pattern it scaffolds.
-    sdk_name = "sentry" + "_sdk"
-    (root / "interlocks" / "telemetry.py").write_text(
-        f"import {sdk_name}\n",
-        encoding="utf-8",
-    )
-    (root / "tests").mkdir()
-
-
 _LAYOUTS = {
     "audit": _make_audit,
     "deps": _make_deps,
@@ -463,7 +434,6 @@ _LAYOUTS = {
     "behavior-attribution-success": _make_behavior_attribution_success,
     "behavior-attribution-unattributed": _make_behavior_attribution_unattributed,
     "behavior-attribution-unresolved": _make_behavior_attribution_unresolved,
-    "no-telemetry-imports": _make_no_telemetry_imports,
 }
 
 
@@ -500,11 +470,11 @@ def _run_in_project(cmd: str, project_root: Path) -> CliResult:
         >= 0
     ):
         env["INTERLOCKS_ACCEPTANCE_TRACE"] = "1"
-    # When a fixture contains a local ``interlocks/`` directory (e.g. the
-    # no-telemetry-imports layout) it would otherwise shadow the installed
-    # package via the implicit CWD on sys.path. Setting PYTHONSAFEPATH=1
-    # (3.11+) skips that, so the installed package wins. We only opt in for
-    # this case so other fixtures keep their CWD-relative imports.
+    # When a fixture contains a local ``interlocks/`` directory, it would
+    # otherwise shadow the installed package via the implicit CWD on sys.path.
+    # Setting PYTHONSAFEPATH=1 (3.11+) skips that, so the installed package
+    # wins. We only opt in for this case so other fixtures keep their
+    # CWD-relative imports.
     if (project_root / "interlocks").is_dir():
         env["PYTHONSAFEPATH"] = "1"
     result = subprocess.run(

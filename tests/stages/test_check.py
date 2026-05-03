@@ -153,7 +153,7 @@ def test_check_in_process_dispatches_stages(
     assert calls == [
         "fix",
         "format",
-        ("run_tasks", ["Type check", "No telemetry imports", "Run tests"]),
+        ("run_tasks", ["Type check", "Run tests"]),
         ("run", "Deps (deptry)", {"no_exit": True}),
         "cached-crap",
         "suppressions",

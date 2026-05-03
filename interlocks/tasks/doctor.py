@@ -177,7 +177,7 @@ def _collect_setup_rows(
         *_local_integration_rows(project_root),
         _ci_workflow_row(project_root),
         _acceptance_row(cfg),
-        _crash_reports_row(cfg),
+        _crash_report_cache_row(),
     ])
     return rows
 
@@ -264,31 +264,30 @@ def _acceptance_row(cfg: InterlockConfig) -> CheckRow:
     return CheckRow("acceptance", features_target, "not wired", "warn")
 
 
-def _crash_reports_row(cfg: InterlockConfig) -> CheckRow:
-    """Surface the crash-reports cache: count, consent, last-seen.
+def _crash_report_cache_row() -> CheckRow:
+    """Surface the crash-reports cache: count and last-seen.
 
     Reads ``~/.cache/interlocks/crashes/`` (XDG_CACHE_HOME-aware) without
     importing transport — we don't want doctor to lazily pull in the browser
     machinery just to count files.
     """
-    consent = cfg.crash_reports
     target = "~/.cache/interlocks/crashes/"
     try:
         directory = _crash_cache_dir()
     except OSError:
-        return CheckRow("crash reports", target, f"cache unreadable (consent: {consent})", "warn")
+        return CheckRow("crash reports", target, "cache unreadable", "warn")
 
     files = sorted(directory.glob("*.json"))
     count = len(files)
     if count == 0:
-        return CheckRow("crash reports", target, f"0 cached (consent: {consent})", "ok")
+        return CheckRow("crash reports", target, "0 cached", "ok")
 
     last_mtime = max(f.stat().st_mtime for f in files)
     last_seen = datetime.fromtimestamp(last_mtime, tz=UTC).strftime("%Y-%m-%d")
     return CheckRow(
         "crash reports",
         target,
-        f"{count} cached (consent: {consent}, last seen: {last_seen})",
+        f"{count} cached (last seen: {last_seen})",
         "ok",
     )
 

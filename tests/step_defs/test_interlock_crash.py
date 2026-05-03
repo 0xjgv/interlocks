@@ -6,7 +6,10 @@ observed end-to-end. Mirrors the pattern in ``test_interlock_cli.py``.
 
 from __future__ import annotations
 
+import errno
 import os
+import pty
+import select
 import subprocess
 import sys
 import textwrap
@@ -58,7 +61,6 @@ def _base_env(session: CrashSession) -> dict[str, str]:
     )
     env["XDG_CACHE_HOME"] = str(session.cache_root)
     env.pop("INTERLOCKS_CRASH_INJECT", None)
-    env.pop("INTERLOCKS_CRASH_REPORTS", None)
     # Suppress browser-open side effects in headless CI; transport prints stderr regardless.
     env.setdefault("BROWSER", "echo")
     return env
@@ -74,6 +76,70 @@ def _invoke(session: CrashSession, args: list[str], env: dict[str, str]) -> Cras
         env=env,
     )
     run = CrashRun(result.returncode, result.stdout, result.stderr)
+    session.last_run = run
+    return run
+
+
+def _read_pty(master_fd: int, proc: subprocess.Popen[bytes]) -> str:
+    chunks: list[bytes] = []
+    while True:
+        ready, _, _ = select.select([master_fd], [], [], 0.1)
+        if master_fd in ready:
+            try:
+                data = os.read(master_fd, 4096)
+            except OSError as exc:
+                if exc.errno == errno.EIO:
+                    break
+                raise
+            if not data:
+                break
+            chunks.append(data)
+        if proc.poll() is not None:
+            while True:
+                ready, _, _ = select.select([master_fd], [], [], 0)
+                if master_fd not in ready:
+                    break
+                try:
+                    data = os.read(master_fd, 4096)
+                except OSError as exc:
+                    if exc.errno == errno.EIO:
+                        break
+                    raise
+                if not data:
+                    break
+                chunks.append(data)
+            break
+    return b"".join(chunks).decode(errors="replace")
+
+
+def _invoke_interactive(
+    session: CrashSession,
+    args: list[str],
+    env: dict[str, str],
+    *,
+    response: str,
+) -> CrashRun:
+    master_fd, slave_fd = pty.openpty()
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "interlocks.cli", *args],
+            cwd=session.project_root,
+            stdin=slave_fd,
+            stdout=subprocess.PIPE,
+            stderr=slave_fd,
+            env=env,
+        )
+        os.close(slave_fd)
+        slave_fd = -1
+        os.write(master_fd, response.encode())
+        stderr = _read_pty(master_fd, proc)
+        stdout_bytes = proc.stdout.read() if proc.stdout is not None else b""
+        returncode = proc.wait()
+    finally:
+        if slave_fd != -1:
+            os.close(slave_fd)
+        os.close(master_fd)
+    run = CrashRun(returncode, stdout_bytes.decode(errors="replace"), stderr)
     session.last_run = run
     return run
 
@@ -142,25 +208,24 @@ def _run_with_inject(subcmd: str, target: str, crash_session: CrashSession) -> C
     _write_minimal_project(crash_session.project_root)
     env = _base_env(crash_session)
     env["INTERLOCKS_CRASH_INJECT"] = target
-    env["INTERLOCKS_CRASH_REPORTS"] = "on"
     return _invoke(crash_session, subcmd.split(), env)
 
 
 @given(
     parsers.parse(
         'I run "interlocks {subcmd}" with INTERLOCKS_CRASH_INJECT={target} '
-        "and INTERLOCKS_CRASH_REPORTS={consent}"
+        "and answer {answer} to the crash report prompt"
     ),
     target_fixture="crash_run",
 )
-def _run_with_inject_and_consent(
-    subcmd: str, target: str, consent: str, crash_session: CrashSession
+def _run_with_inject_and_prompt_answer(
+    subcmd: str, target: str, answer: str, crash_session: CrashSession
 ) -> CrashRun:
     _write_minimal_project(crash_session.project_root)
     env = _base_env(crash_session)
     env["INTERLOCKS_CRASH_INJECT"] = target
-    env["INTERLOCKS_CRASH_REPORTS"] = consent
-    return _invoke(crash_session, subcmd.split(), env)
+    response = "\n" if answer == "yes" else "n\n"
+    return _invoke_interactive(crash_session, subcmd.split(), env, response=response)
 
 
 @given("a project without a pyproject.toml")

@@ -340,16 +340,13 @@ What does **NOT** leave the machine — by construction:
 - No source code, file contents, or local variables
 - No environment variables or `sys.argv` values
 - No hostnames, usernames, or absolute paths (paths are scrubbed to `~/...` or project-relative)
-- No automatic HTTP requests — `socket`, `urllib.request`, `http.client`, `requests`, `httpx` are forbidden in `interlocks/crash/transport.py` and enforced by an introspection test
+- No automatic issue submission — interlocks opens a pre-filled GitHub issue in your browser only after you confirm
 
-How to opt out:
+How reporting works:
 
-```toml
-[tool.interlocks]
-crash_reports = "off"
-```
-
-Or per-invocation: `INTERLOCKS_CRASH_REPORTS=off interlocks <command>`. The env var beats config; config beats the default. The default (`"auto"`) suppresses the URL on CI and surfaces it locally.
+- Interactive terminals ask `Report this crash to the interlocks maintainers? Y/n`.
+- Press Enter, `y`, or `yes` to open the pre-filled GitHub issue in your browser.
+- Answer `n`/`no`, use a non-interactive shell, or run in CI to keep the report local only.
 
 Where local files live:
 

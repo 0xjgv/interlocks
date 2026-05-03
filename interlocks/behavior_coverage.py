@@ -126,7 +126,7 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     Behavior(
         "cli-help-crash-reports",
         "cli",
-        "help surfaces the crash_reports key and cache directory",
+        "help surfaces crash-report prompt behavior and cache directory",
         "interlocks.cli:main",
     ),
     Behavior(
@@ -346,8 +346,8 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     Behavior(
         "crash-consent-off-suppresses-transport",
         "crash",
-        "INTERLOCKS_CRASH_REPORTS=off suppresses the URL but still writes a local crash file",
-        "interlocks.crash.consent:ConsentGate",
+        "declining the crash-report prompt suppresses the URL but still writes a local crash file",
+        "interlocks.crash.prompt:prompt_for_report",
     ),
     Behavior(
         "crash-dedup-suppresses-transport",
@@ -360,12 +360,6 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "crash",
         "a subprocess gate failure exits via SystemExit without entering capture",
         "interlocks.crash.boundary:CrashBoundary",
-    ),
-    Behavior(
-        "task-no-telemetry-imports",
-        "task",
-        "no-telemetry-imports flags banned telemetry SDK imports in interlocks/",
-        "interlocks.tasks.no_telemetry_imports:cmd_no_telemetry_imports",
     ),
 )
 

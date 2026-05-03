@@ -5,9 +5,10 @@ Feature: interlocks CLI crash boundary
   So that the maintainer can fix the bug and I can keep shipping
 
   # req: crash-boundary-prints-issue-url
-  Scenario: Internal crash captures and prints a GitHub URL
-    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint
+  Scenario: Internal crash captures and opens a GitHub URL when accepted
+    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint and answer yes to the crash report prompt
     Then the exit code is 1
+    And stderr contains "Report this crash to the interlocks maintainers? Y/n"
     And stderr contains "github.com/0xjgv/interlocks/issues/new"
     And stderr contains "RuntimeError"
     And stderr contains "injected for crash boundary test"
@@ -23,16 +24,24 @@ Feature: interlocks CLI crash boundary
     And no crash file exists in the cache directory
 
   # req: crash-consent-off-suppresses-transport
-  Scenario: Consent off suppresses URL but writes local file
-    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint and INTERLOCKS_CRASH_REPORTS=off
+  Scenario: Declining the crash-report prompt suppresses URL but writes local file
+    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint and answer no to the crash report prompt
     Then the exit code is 1
     And stderr contains "RuntimeError"
     And stderr does not contain "github.com/0xjgv/interlocks/issues/new"
     And a crash file exists in the cache directory
 
+  Scenario: Non-interactive crash writes local file without reporting
+    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint
+    Then the exit code is 1
+    And stderr contains "RuntimeError"
+    And stderr does not contain "Report this crash to the interlocks maintainers? Y/n"
+    And stderr does not contain "github.com/0xjgv/interlocks/issues/new"
+    And a crash file exists in the cache directory
+
   # req: crash-dedup-suppresses-transport
   Scenario: Repeat crash within the dedup window suppresses transport
-    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint
+    Given I run "interlocks lint" with INTERLOCKS_CRASH_INJECT=lint and answer yes to the crash report prompt
     And the first run printed a GitHub issue URL
     When I run "interlocks lint" again with INTERLOCKS_CRASH_INJECT=lint and the same cache directory
     Then the exit code is 1

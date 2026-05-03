@@ -26,4 +26,4 @@ Feature: interlocks doctor adoption diagnostic
   Scenario: Setup Checklist surfaces the crash-reports cache state
     Given I run "interlocks doctor"
     Then the output contains "[crash reports]"
-    And the output contains "consent:"
+    And the output contains "cached"

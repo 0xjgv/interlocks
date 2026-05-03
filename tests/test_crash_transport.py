@@ -7,8 +7,8 @@ These tests pin the behavioral contract of ``BrowserTransport.submit``:
 * No network — we introspect the module source to assert no socket /
   ``urllib.request`` / ``http.client`` imports, since interlocks itself MUST
   NOT make HTTP requests on its own.
-* Stderr is the contract — the URL prints exactly once regardless of whether
-  ``webbrowser.open`` succeeds, fails, or raises.
+* Stderr is the contract — after reporting is accepted, the URL prints exactly
+  once regardless of whether ``webbrowser.open`` succeeds, fails, or raises.
 * Oversized payloads truncate cleanly with a pointer to the local file.
 """
 
@@ -94,6 +94,7 @@ def test_body_contains_exception_fingerprint_and_versions(
     assert "deadbeefcafebabe" in body
     assert "0.42.0" in body
     assert "3.13.1" in body
+    assert "Please add what you were trying to do before submitting." in body
     capsys.readouterr()
 
 
@@ -169,6 +170,8 @@ def test_url_printed_to_stderr_exactly_once_when_browser_returns_false(
 
     captured = capsys.readouterr()
     assert captured.err.count(url) == 1
+    assert "Open this pre-filled GitHub issue" in captured.err
+    assert "Review the issue in your browser before submitting it." in captured.err
 
 
 def test_browser_open_raising_does_not_propagate(

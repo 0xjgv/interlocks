@@ -20,7 +20,7 @@ By construction, interlocks does not transmit any of the following anywhere:
 - Credentials, tokens, or any value the user has not explicitly chosen to put in a URL/issue body
 - Telemetry, analytics events, or anonymized "metrics" of any kind
 
-There is **no opt-out toggle that enables network egress** — interlocks itself never opens a network connection. The only network actor that ever sees a crash payload is the user's browser, after the user clicks the link interlocks printed to stderr.
+There is **no opt-out toggle that enables background network egress** — interlocks itself never opens a network connection. The only network actor that ever sees a crash payload is the user's browser, after the user confirms the crash-report prompt and reviews the pre-filled GitHub issue.
 
 ### Always OK to do locally
 
@@ -31,12 +31,12 @@ There is **no opt-out toggle that enables network egress** — interlocks itself
 
 ### Crash reporting specifics
 
-Crash reports are user-driven, not automated:
+Crash reports are user-confirmed, not automated:
 
 1. The boundary classifier in `interlocks/crash/boundary.py` catches only interlocks-internal exceptions (frames whose `co_filename` is inside the installed `interlocks/` package). User errors like `InterlockUserError` and external tool failures never reach the capture path.
 2. The payload, defined in `interlocks/crash/payload.py`, is built from a fixed allowlist: `interlocks_version`, `python_version`, `platform_system`, `platform_machine`, `subcommand`, `exception_type`, `frames`, `timestamp_utc`, `ci`, `fingerprint`.
-3. The transport in `interlocks/crash/transport.py` builds a `https://github.com/.../issues/new?title=...&body=...&labels=crash-report` URL, prints it to stderr, and *attempts* `webbrowser.open`. The only HTTP client that ever runs is the user's browser. A regression fence (`interlocks/tasks/no_telemetry_imports.py`, plus an introspection test in `tests/test_crash_transport.py`) blocks any future telemetry SDK or stdlib HTTP import in `interlocks/crash/`.
-4. Consent is resolved by `interlocks/crash/consent.py` with this precedence: `INTERLOCKS_CRASH_REPORTS` env var > `crash_reports` in `[tool.interlocks]` > default. The default is `"auto"`: surface the URL locally, suppress it on CI (`CI=true`).
+3. Interactive terminals ask `Report this crash to the interlocks maintainers? Y/n`. Non-interactive runs skip reporting and keep the local payload only.
+4. The transport in `interlocks/crash/transport.py` builds a `https://github.com/.../issues/new?title=...&body=...&labels=crash-report` URL, prints it to stderr, and *attempts* `webbrowser.open` only after the user accepts. The only HTTP client that ever runs is the user's browser.
 5. Local files live at `~/.cache/interlocks/crashes/<fingerprint>.json` (mode 0600 in mode 0700 dir). A `dedup.json` window of 30 days prevents repeat URL prompts for the same fingerprint.
 
 ### Explicit non-goals

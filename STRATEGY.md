@@ -2,6 +2,11 @@
 
 ## Thesis
 
+- greenfield codebases: adopt interlocks early and enforces high quality code from day one
+- brownfield codebases: ratchet existing codebases to high quality
+- adoption: bring interlocks to a codebase through a skill, and let model adjust thresholds over time (towards the high quality preset)
+- how?
+
 interlocks should be positioned as an opinionated Python quality interlocks for platform and DevEx teams that manage many repositories. Its strongest promise is not “a wrapper around tools”; it is one enforceable quality workflow for linting, typechecking, tests, coverage, dependency hygiene, architecture checks, complexity, and stricter gates when teams are ready.
 
 The AI-era wedge is credible: teams adopting coding agents need hard merge gates because code volume rises faster than review capacity. But the buyer and first serious user is still likely a platform or DevEx owner who already feels CI drift across many Python services.
@@ -88,7 +93,7 @@ Defer hosted dashboards, mutation sophistication, multi-platform hook adapters, 
 
 ## Crash Reporting (Rejected: Default-On Sentry/PostHog)
 
-We considered shipping a third-party error-reporting SDK (Sentry or PostHog) wired in by default and rejected it. The CLI is a quality-gate tool that runs against private repos, on developer laptops and CI runners controlled by other organizations; a default-on SDK that captures locals, `sys.argv`, env vars, or hostnames would leak source-adjacent context to a vendor we do not control, even with allowlist filters that drift over time. It would also make adoption strictly harder — every new buyer with a security review would have to re-justify a network egress that the tool does not need to function. The shipped reporter is an in-process boundary that prints a pre-filled GitHub Issues URL to stderr and lets the user's browser handle the (optional) network egress. interlocks itself never opens a network connection; the regression fence in `interlocks no-telemetry-imports` keeps that property under continuous enforcement. Design rationale and the allowlisted payload schema live in `SECURITY.md` and `openspec/changes/add-crash-reporter/`.
+We considered shipping a third-party error-reporting SDK (Sentry or PostHog) wired in by default and rejected it. The CLI is a quality-gate tool that runs against private repos, on developer laptops and CI runners controlled by other organizations; a default-on SDK that captures locals, `sys.argv`, env vars, or hostnames would leak source-adjacent context to a vendor we do not control, even with allowlist filters that drift over time. It would also make adoption strictly harder — every new buyer with a security review would have to re-justify background network egress that the tool does not need to function. The shipped reporter is an in-process boundary that asks the user whether to report, then opens a pre-filled GitHub Issues URL in the user's browser when accepted. The user reviews and submits the issue through their own GitHub session; non-interactive runs keep the crash payload local only. Design rationale and the allowlisted payload schema live in `SECURITY.md` and `openspec/changes/add-crash-reporter/`.
 
 ## OSS vs Business
 

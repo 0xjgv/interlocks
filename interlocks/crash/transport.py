@@ -4,7 +4,7 @@ This module is the single, narrow place where interlocks turns a crash payload
 into a user-visible artifact. The contract is intentionally minimal:
 
 * Build a pre-filled GitHub Issues URL with the payload rendered as Markdown.
-* Print that URL to stderr unconditionally — that line is the contract.
+* Print that URL to stderr after the user accepts reporting.
 * Try to open the URL in the user's default browser as a convenience, but never
   let a browser failure mask the crash or raise out of ``submit``.
 
@@ -51,9 +51,10 @@ class BrowserTransport:
     ) -> str:
         """Build the issues URL, print it to stderr, try to open the browser.
 
-        Returns the URL string. Always prints exactly one line (the URL) to
-        stderr. Browser-open failures are swallowed — the URL on stderr is
-        the contract; the browser is convenience.
+        Returns the URL string. The raw URL is printed on its own line so it
+        remains easy to copy from headless or browser-open-failure paths.
+        Browser-open failures are swallowed — the URL on stderr is the
+        contract; the browser is convenience.
         """
         title = f"interlocks crash: {payload.get('exception_type', 'Unknown')}"
         body = _render_body(payload)
@@ -66,7 +67,9 @@ class BrowserTransport:
             f"&labels=crash-report"
         )
 
+        print("Open this pre-filled GitHub issue to report the crash:", file=sys.stderr)
         print(url, file=sys.stderr)
+        print("Review the issue in your browser before submitting it.", file=sys.stderr)
 
         # The URL on stderr is the contract; opening the browser is a
         # convenience that must never raise out of ``submit``.
@@ -130,6 +133,8 @@ def _render_body(payload: Mapping[str, Any]) -> str:
 
     lines = [
         "## Crash report",
+        "",
+        "Please add what you were trying to do before submitting.",
         "",
         f"- interlocks: {interlocks_version}",
         f"- python: {python_version}",
