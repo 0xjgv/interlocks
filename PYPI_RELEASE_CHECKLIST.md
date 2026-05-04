@@ -189,6 +189,8 @@ uv pip install --python /tmp/interlocks-smoke/bin/python --refresh interlocks=="
 
 Confirm output matches `${version}` for every command.
 
+Before publishing release notes or docs, confirm breaking behavior has migration guidance and CI/shared examples do not imply unpinned latest is safe for repeatable automation.
+
 ### Smoke-test uvx package and hook output
 
 ```bash

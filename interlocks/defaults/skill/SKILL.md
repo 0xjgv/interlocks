@@ -18,7 +18,7 @@ Quality gates run via `interlocks <subcommand>`. You drive the CLI; this skill s
 
 ## Invocation
 
-Prefer `uvx --from interlocks il <cmd>` over project install. Zero-config, no venv pollution, works in any Python repo:
+Prefer `uvx --from interlocks il <cmd>` over project install for agent runs. Zero-config, no venv pollution, works in any Python repo:
 
 ```sh
 uvx --from interlocks il check
@@ -27,7 +27,16 @@ uvx --from interlocks il config
 uvx --from interlocks il setup --check
 ```
 
-Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Use `il setup --check` for read-only verification; use `il doctor` for full project readiness.
+Unpinned `uvx` is acceptable for ad hoc or exploratory runs because it follows the latest PyPI release. Use pinned or range-pinned specs for repeatable prompts, CI snippets, and shared docs:
+
+```sh
+uvx --from 'interlocks>=0.1,<0.2' il ci
+uvx --from interlocks==0.1.5 il ci
+```
+
+For frequent local human use, `uv tool install interlocks` is appropriate; `pipx install interlocks` is the alternative installed path.
+
+Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Use `il setup --check` for read-only verification; use `il doctor` for full project readiness. Use `il version` to print the installed version.
 
 `il` is the short alias (`interlocks`/`ilocks`/`ilock`/`ils`/`il` all work). Drop to bare `interlocks <cmd>` only when the project lists `interlocks` as a dev dep.
 

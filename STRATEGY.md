@@ -33,11 +33,13 @@ Reduce configuration surface with one preset taxonomy before adding more knobs:
 
 Do not expand the feature matrix yet. Package a narrow adoption loop:
 
-1. Start without installation: `uvx --from interlocks interlocks doctor` or `pipx run --spec interlocks interlocks doctor`.
-2. `uvx --from interlocks interlocks check` or `pipx run --spec interlocks interlocks check` proves local value.
-3. If the tool sticks, install it permanently with `uv tool install interlocks` or `pipx install interlocks`.
-4. `interlocks ci` becomes the one-line CI command.
+1. Start without installation: `uvx --from interlocks il doctor`.
+2. `uvx --from interlocks il check` proves local value with the latest release.
+3. Shared automation uses pinned or range-pinned specs: `uvx --from 'interlocks>=0.1,<0.2' il ci`, exact `uvx --from interlocks==0.1.5 il ci`, or the GitHub Action `install-command` override.
+4. Frequent local users install it permanently with `uv tool install interlocks`; `pipx install interlocks` remains an alternative.
 5. A first-class GitHub Action makes adoption copy-pasteable and reports a concise job summary.
+
+Principle: latest for exploration; pinned or range-pinned for repeatability.
 
 PR annotations, PR comments, GitHub Apps, exception workflows, and hosted dashboards should wait until users prove they want the CI workflow in real repositories.
 
@@ -97,7 +99,7 @@ We considered shipping a third-party error-reporting SDK (Sentry or PostHog) wir
 
 ## OSS vs Business
 
-Launch the CLI as open source. A local developer quality tool needs trust, easy installation, and low-friction experimentation. `uvx` and `pipx run` should let teams try it immediately before deciding whether to install it permanently. OSS is the adoption wedge and credibility layer.
+Launch the CLI as open source. A local developer quality tool needs trust, easy installation, and low-friction experimentation. `uvx` should let teams try the latest release immediately before deciding whether to install it permanently; shared automation should pin or range-pin the package spec. OSS is the adoption wedge and credibility layer.
 
 Do not treat the CLI alone as the business. The commercial product should be the control plane around it: organization policies, GitHub integration, compliance reporting, exception workflows, repo health trends, and visibility into AI-generated-code risk.
 

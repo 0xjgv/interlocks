@@ -4,14 +4,22 @@ For DevEx and platform teams standardizing Python quality across repositories:
 
 ```bash
 cd your-python-project
-uvx --from interlocks interlocks doctor  # try without installing
-pipx install interlocks                  # or: uv tool install interlocks
-interlocks setup                         # local hooks, agent docs, Claude skill
-interlocks check                         # local edit loop
-interlocks ci                            # CI parity
+uvx --from interlocks il doctor  # try without installing
+uvx --from interlocks il check   # local edit loop
 ```
 
 interlocks gives one local/hook/CI command surface for ruff, basedpyright, coverage.py, mutmut, deptry, import-linter, pip-audit, and lizard, while driving the project's pytest/unittest tests and pytest-bdd or behave acceptance suite when available. New repositories can start with auto-detected paths and bundled tool defaults; mature repositories can opt into named presets or explicit `[tool.interlocks]` thresholds when they need stronger gates.
+
+## How to Run Interlocks
+
+| Use case | Command | Notes |
+| --- | --- | --- |
+| Exploration or ad hoc checks | `uvx --from interlocks il check` | Runs the latest PyPI release without installing. |
+| Repeatable CI or shared workflows | `uvx --from 'interlocks>=0.1,<0.2' il ci` or `uvx --from interlocks==0.1.5 il ci` | Range-pin within a compatible line, or exact-pin when you need full reproducibility. |
+| Frequent local use | `uv tool install interlocks`, then `il check` | Installs the CLI once for repeated local runs. |
+| Alternative installed path | `pipx install interlocks`, then `il check` | Use when `pipx` is your installed-tool manager. |
+
+Use latest `uvx` for exploration. Use pinned or range-pinned specs for repeatable CI, prompts, and shared docs. Check the installed version with `il version`.
 
 ## Who This Is For
 
@@ -21,15 +29,23 @@ It is not a hosted dashboard, a polyglot quality platform, or a replacement for 
 
 ## First-Run Adoption Loop
 
-### 1. Install
+### 1. Try Without Installing
 
 ```bash
-pipx install interlocks
-# or
-uv tool install interlocks
+uvx --from interlocks il doctor
+uvx --from interlocks il check
 ```
 
-The core quality tools ship with the CLI. Project-owned test runners and acceptance runners are invoked when the target repo already uses them.
+The core quality tools ship with the CLI. Project-owned test runners and acceptance runners are invoked when the target repo already uses them. Unpinned `uvx` follows the latest PyPI release, which is right for exploration; use a pinned or range-pinned spec for repeatable shared automation.
+
+For frequent local use, install once:
+
+```bash
+uv tool install interlocks
+il check
+```
+
+`pipx install interlocks` is also supported when `pipx` is your installed-tool manager.
 
 ### 2. Install Local Integrations
 
@@ -61,7 +77,15 @@ interlocks check
 
 ### 5. Wire CI
 
-The direct CI command is:
+For repeatable CI, pin or range-pin the package spec:
+
+```bash
+uvx --from 'interlocks>=0.1,<0.2' il ci
+# or exact-pin:
+uvx --from interlocks==0.1.5 il ci
+```
+
+If interlocks is installed in the CI environment, the direct command is:
 
 ```bash
 interlocks ci
@@ -85,7 +109,15 @@ jobs:
       - uses: 0xjgv/interlocks@v1
 ```
 
-The reusable action installs interlocks, runs `interlocks ci`, and writes a concise `GITHUB_STEP_SUMMARY` when GitHub provides the summary file. The action does not duplicate lint, typecheck, coverage, CRAP, dependency, architecture, acceptance, or mutation logic; the CLI remains the source of truth.
+The reusable action installs interlocks, runs `interlocks ci`, and writes a concise `GITHUB_STEP_SUMMARY` when GitHub provides the summary file. By default, it installs the latest PyPI release; when reproducibility matters, pin the package through the existing `install-command` input:
+
+```yaml
+      - uses: 0xjgv/interlocks@v1
+        with:
+          install-command: python -m pip install 'interlocks>=0.1,<0.2'
+```
+
+The action does not duplicate lint, typecheck, coverage, CRAP, dependency, architecture, acceptance, or mutation logic; the CLI remains the source of truth.
 
 ## Why This Matters for AI-Authored Code
 
