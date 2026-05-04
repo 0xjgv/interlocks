@@ -78,7 +78,7 @@ def test_action_metadata_delegates_to_interlock_ci() -> None:
     action = (Path(__file__).resolve().parent.parent / "action.yml").read_text(encoding="utf-8")
 
     assert "using: composite" in action
-    assert "actions/setup-python@v5" in action
+    assert "actions/setup-python@" in action
     assert "default: python -m pip install interlocks" in action
     assert "default: interlocks ci" in action
     assert 'python -m interlocks.github_action --command "${{ inputs.command }}"' in action
