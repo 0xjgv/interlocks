@@ -169,6 +169,7 @@ ignore = [
     "S101",     # assert usage (unittest uses self.assert*, but keep for flexibility)
     "S404",     # subprocess import (intentional — integration tests invoke the CLI)
     "S603",     # subprocess call without shell=true check (intentional)
+    "S607",     # partial executable path (intentional — git, gh, etc. on PATH in tests)
     "SIM105",   # contextlib.suppress suggestion
     "TCH",      # type-checking imports (fixtures need runtime types)
 ]

@@ -13,7 +13,7 @@ from interlocks.git import changed_py_files_vs
 
 
 def _git(*args: str, cwd: Path) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)  # noqa: S607 — git on PATH
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
 def _init_repo(root: Path) -> None:

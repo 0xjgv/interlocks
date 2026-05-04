@@ -72,7 +72,7 @@ def cmd_crap() -> None:
         sys.exit(1)
 
 
-def cmd_crap_cached_advisory() -> None:
+def cmd_crap_cached_advisory(changed: set[str] | None = None) -> None:
     """Print fast advisory CRAP output from fresh cached coverage, or a skip hint."""
     cfg = load_config()
     command = f"CRAP --max={cfg.crap_max}"
@@ -91,7 +91,7 @@ def cmd_crap_cached_advisory() -> None:
 
     cov_map = parse_coverage(cov_file)
     offenders = compute_crap_rows(
-        lizard_functions(cfg.src_dir_arg), cov_map, max_crap=cfg.crap_max
+        lizard_functions(cfg.src_dir_arg), cov_map, max_crap=cfg.crap_max, changed=changed
     )
     offenders.sort(key=lambda r: r.crap, reverse=True)
     if not offenders:

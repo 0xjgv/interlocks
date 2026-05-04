@@ -24,7 +24,7 @@ src_dir = "app"
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True)  # noqa: S607 — git on PATH
+    subprocess.run(["git", *args], cwd=cwd, check=True)
 
 
 @pytest.fixture

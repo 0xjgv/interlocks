@@ -137,6 +137,21 @@ def arg_value(flag: str, default: str) -> str:
     return next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith(flag)), default)
 
 
+def arg_flag_value(flag: str, default_when_bare: str) -> str | None:
+    """Return effective value of ``--flag[=<value>]`` in sys.argv.
+
+    ``--flag=<value>`` returns ``<value>`` (or ``default_when_bare`` if the value
+    is empty). Bare ``--flag`` returns ``default_when_bare``. Flag absent returns
+    ``None`` — lets callers distinguish "user opted in" from "user opted out".
+    """
+    for arg in sys.argv[1:]:
+        if arg == flag:
+            return default_when_bare
+        if arg.startswith(flag + "="):
+            return arg.split("=", 1)[1] or default_when_bare
+    return None
+
+
 def preflight(command: str) -> None:
     """Fail fast with exit code 2 when running a non-exempt command without a pyproject.
 

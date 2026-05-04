@@ -211,7 +211,7 @@ def test_install_subprocess_probe_skips_non_python_commands(
     token = _CURRENT_SCENARIO.set((tmp_path / "feature.feature", 4))
     try:
         _install_subprocess_probe(("pkg.mod:foo",), tmp_path / "events.jsonl")
-        result = subprocess.run(["git", "status"], check=False)  # noqa: S607
+        result = subprocess.run(["git", "status"], check=False)
     finally:
         _CURRENT_SCENARIO.reset(token)
 

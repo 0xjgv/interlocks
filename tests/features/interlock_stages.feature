@@ -52,3 +52,28 @@ Feature: interlocks stage commands on a minimal inline project
     When I run "interlocks ci" in the tmp project
     Then the stage exits 1
     And the stage output contains "behavior-attribution"
+
+  # req: stage-check
+  Scenario: `interlocks check --changed` short-circuits when no Python files changed
+    Given a minimal tmp project initialized as a git repo
+    When I run "interlocks check --changed=HEAD" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "no Python files changed"
+
+  # req: stage-check
+  Scenario: `interlocks check --changed` scopes file-level gates and skips graph-wide gates
+    Given a minimal tmp project initialized as a git repo
+    And the tmp project has a changed Python file
+    When I run "interlocks check --changed=HEAD" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "Scope"
+    And the stage output contains "changed vs HEAD"
+    And the stage output contains "skipped under --changed"
+
+  # req: stage-check
+  Scenario: `interlocks check --changed` honors changed_ref from pyproject
+    Given a minimal tmp project initialized as a git repo
+    And the tmp project sets changed_ref to "HEAD"
+    When I run "interlocks check --changed" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "changed vs HEAD"

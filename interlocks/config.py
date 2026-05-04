@@ -265,6 +265,13 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "Mutation",
     ),
     ConfigKeyDoc(
+        "changed_ref",
+        "str",
+        "origin/main",
+        "Base ref for `interlocks check --changed`",
+        "Gates",
+    ),
+    ConfigKeyDoc(
         "acceptance_runner",
         "pytest-bdd|behave|off",
         "auto",
@@ -450,6 +457,7 @@ class InterlockConfig:
     enforce_mutation: bool = False
     mutation_ci_mode: MutationCIMode = "off"
     mutation_since_ref: str = "origin/main"
+    changed_ref: str = "origin/main"
     # Acceptance (Gherkin) — all optional; resolved lazily by the task.
     acceptance_runner: AcceptanceRunner | None = None
     features_dir: Path | None = None
@@ -622,6 +630,7 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
     dependency_freshness_stage = _string_value(
         table, "dependency_freshness_stage", InterlockConfig.dependency_freshness_stage
     )
+    changed_ref = _string_value(table, "changed_ref", InterlockConfig.changed_ref)
     ci_evidence_path = _resolved_path(
         table.get("ci_evidence_path"),
         project_root / InterlockConfig.ci_evidence_path,
@@ -650,6 +659,7 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         require_acceptance=require_acceptance,
         mutation_ci_mode=mutation_ci_mode,
         mutation_since_ref=mutation_since_ref,
+        changed_ref=changed_ref,
         dependency_freshness_command=dependency_freshness_command,
         dependency_freshness_stage=dependency_freshness_stage,
         audit_severity_threshold=audit_severity_threshold,
@@ -701,6 +711,7 @@ _STRING_KEYS = (
     "src_dir",
     "test_dir",
     "mutation_since_ref",
+    "changed_ref",
     "features_dir",
     "dependency_freshness_command",
     "dependency_freshness_stage",
@@ -784,6 +795,7 @@ def _complete_value_sources(
         *_BOOL_THRESHOLDS,
         "mutation_ci_mode",
         "mutation_since_ref",
+        "changed_ref",
         "run_acceptance_in_check",
         "require_acceptance",
         "evaluate_dependency_freshness",

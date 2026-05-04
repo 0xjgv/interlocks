@@ -41,6 +41,8 @@ Do not expand the feature matrix yet. Package a narrow adoption loop:
 
 Principle: latest for exploration; pinned or range-pinned for repeatability.
 
+For legacy codebases that cannot accept the full quality bar in one PR, `interlocks check --changed[=<ref>]` scopes file-level gates (fix, format, typecheck, CRAP) to files changed vs the base ref (`changed_ref`, default `origin/main`). Graph-wide gates (deps, behavior-attribution, acceptance) and the test suite skip with a banner. This is the progressive-adoption mode: a team can land one diff at a time without drowning in pre-existing failures, while still tightening the gates over time.
+
 PR annotations, PR comments, GitHub Apps, exception workflows, and hosted dashboards should wait until users prove they want the CI workflow in real repositories.
 
 ## Hooks Strategy

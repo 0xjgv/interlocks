@@ -149,6 +149,15 @@ preset = "baseline"  # "baseline" | "strict" | "legacy"
 
 `agent-safe` is intentionally unsupported. If configured, `interlocks doctor` reports it as an unsupported preset instead of resolving agent-specific defaults.
 
+### Progressive Adoption: `--changed`
+
+```bash
+interlocks check --changed             # scope vs cfg.changed_ref (default origin/main)
+interlocks check --changed=HEAD~1      # scope vs explicit ref
+```
+
+For onboarding interlocks one PR at a time on a legacy codebase, `interlocks check --changed[=<ref>]` scopes file-level gates (fix, format, typecheck, CRAP) to the `.py` files changed vs the base ref. Graph-wide gates (deps, behavior-attribution, acceptance) and the test suite are skipped with a banner — running them under `--changed` would re-introduce the pre-existing failures that the flag is meant to filter out. Run `interlocks test` separately when you want the full suite. Override the default base with `[tool.interlocks] changed_ref = "main"` (or any git ref). `pre-commit` and `ci` are unchanged.
+
 ## Configuration
 
 Nothing is required. `interlocks` walks up from CWD to the nearest `pyproject.toml` and auto-detects:

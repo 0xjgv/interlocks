@@ -130,8 +130,8 @@ def test_check_in_process_dispatches_stages(
     from interlocks.stages import check as check_mod
 
     calls: list[object] = []
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda: calls.append("fix"))
-    monkeypatch.setattr(check_mod, "cmd_format", lambda: calls.append("format"))
+    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
+    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: calls.append("format"))
     monkeypatch.setattr(
         check_mod,
         "run_tasks",
@@ -142,7 +142,9 @@ def test_check_in_process_dispatches_stages(
         "run",
         lambda task, **kw: calls.append(("run", task.description, kw)),
     )
-    monkeypatch.setattr(check_mod, "cmd_crap_cached_advisory", lambda: calls.append("cached-crap"))
+    monkeypatch.setattr(
+        check_mod, "cmd_crap_cached_advisory", lambda *_a, **_k: calls.append("cached-crap")
+    )
     monkeypatch.setattr(
         check_mod, "print_suppressions_report", lambda: calls.append("suppressions")
     )
@@ -172,9 +174,9 @@ def test_check_in_process_runs_suppressions_on_failure(
     from interlocks.stages import check as check_mod
 
     calls: list[str] = []
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda: calls.append("fix"))
+    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
 
-    def boom() -> None:
+    def boom(*_a: object, **_k: object) -> None:
         raise SystemExit(2)
 
     monkeypatch.setattr(check_mod, "cmd_format", boom)
@@ -266,13 +268,13 @@ def _capture_check_parallel_descriptions(
     from interlocks.stages import check as check_mod
 
     captured: list[str] = []
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda: None)
-    monkeypatch.setattr(check_mod, "cmd_format", lambda: None)
+    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: None)
+    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: None)
     monkeypatch.setattr(
         check_mod, "run_tasks", lambda tasks: captured.extend(t.description for t in tasks)
     )
     monkeypatch.setattr(check_mod, "run", lambda task, **_kw: None)
-    monkeypatch.setattr(check_mod, "cmd_crap_cached_advisory", lambda: None)
+    monkeypatch.setattr(check_mod, "cmd_crap_cached_advisory", lambda *_a, **_k: None)
     monkeypatch.setattr(check_mod, "print_suppressions_report", lambda: None)
     monkeypatch.chdir(tmp_path)
     check_mod.cmd_check()

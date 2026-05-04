@@ -18,13 +18,14 @@ def _typecheck_project_args() -> list[str]:
     )
 
 
-def task_typecheck() -> Task:
+def task_typecheck(files: list[str] | None = None) -> Task:
     cfg = load_config()
+    targets = files if files else [cfg.src_dir_arg]
     return Task(
         "Type check",
-        tool("basedpyright", *_typecheck_project_args(), cfg.src_dir_arg),
+        tool("basedpyright", *_typecheck_project_args(), *targets),
         label="typecheck",
-        display=f"basedpyright {cfg.src_dir_arg}",
+        display=f"basedpyright {' '.join(targets)}",
     )
 
 
