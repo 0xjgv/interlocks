@@ -14,7 +14,11 @@ from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from tests.step_defs.conftest import make_tmp_project, run_interlock_in_cwd
+from tests.step_defs.conftest import (
+    make_flat_tmp_project,
+    make_tmp_project,
+    run_interlock_in_cwd,
+)
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_stages.feature"))
 
@@ -58,6 +62,31 @@ def _tmp_project_set_changed_ref(tmp_project: Path, ref: str) -> None:
         pyproject.read_text(encoding="utf-8") + f'changed_ref = "{ref}"\n',
         encoding="utf-8",
     )
+
+
+@given("a flat-layout tmp project initialized as a git repo", target_fixture="tmp_project")
+def _flat_tmp_project_git(tmp_path: Path) -> Path:
+    project = make_flat_tmp_project(tmp_path)
+    _git_init_with_baseline(project)
+    return project
+
+
+@given("a minimal tmp project that is not a git repo", target_fixture="tmp_project")
+def _tmp_project_no_git(tmp_path: Path) -> Path:
+    return make_tmp_project(tmp_path)
+
+
+@given("the tmp project has an untracked top-level Python file")
+def _tmp_project_untracked_top_level(tmp_project: Path) -> None:
+    (tmp_project / "added.py").write_text(
+        '"""Added top-level module."""\n\n\ndef bye() -> str:\n    return "bye"\n',
+        encoding="utf-8",
+    )
+
+
+@given("the tmp project has an untracked Markdown file")
+def _tmp_project_untracked_markdown(tmp_project: Path) -> None:
+    (tmp_project / "NOTES.md").write_text("# Notes\n\nNon-Python.\n", encoding="utf-8")
 
 
 def _git_init_with_baseline(project: Path) -> None:

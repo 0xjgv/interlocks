@@ -151,3 +151,28 @@ def test_src_test_prefixes_skips_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     """Empty src/test dirs are skipped — fall through to the `("",)` sentinel."""
     _stub_cfg(monkeypatch, "", "")
     assert git_mod._src_test_prefixes() == ("",)
+
+
+def test_src_test_prefixes_flat_src_matches_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flat layout: ``src=.`` means the project root is src — every ``.py`` qualifies.
+
+    Previously the `.` was dropped and only ``test_dir`` survived, filtering top-level
+    files out of ``--changed`` scope. Bug surfaced when running ``check --changed`` in
+    a partially-adopted repo: source edits weren't picked up.
+    """
+    _stub_cfg(monkeypatch, ".", "tests")
+    assert git_mod._src_test_prefixes() == ("",)
+
+
+def test_src_test_prefixes_flat_test_matches_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mirror of the flat-src case: ``test=.`` covers the whole project."""
+    _stub_cfg(monkeypatch, "src", ".")
+    assert git_mod._src_test_prefixes() == ("",)
+
+
+def test_src_test_prefixes_empty_src_with_tests_matches_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty src with a configured test dir still matches everything (no narrowing)."""
+    _stub_cfg(monkeypatch, "", "tests")
+    assert git_mod._src_test_prefixes() == ("",)

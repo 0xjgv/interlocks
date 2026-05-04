@@ -54,6 +54,60 @@ _TMP_PYPROJECT = textwrap.dedent(
 )
 
 
+_FLAT_PYPROJECT = textwrap.dedent(
+    """\
+    [project]
+    name = "tmp"
+    version = "0"
+    requires-python = ">=3.13"
+
+    [tool.ruff]
+    target-version = "py313"
+    line-length = 99
+
+    [tool.ruff.lint]
+    select = ["E", "F", "I"]
+
+    [tool.basedpyright]
+    pythonVersion = "3.13"
+    typeCheckingMode = "standard"
+    reportMissingTypeStubs = false
+
+    [tool.coverage.run]
+    branch = true
+
+    [tool.coverage.report]
+    fail_under = 0
+
+    [tool.interlocks]
+    coverage_min = 0
+    crap_max = 1000.0
+    enforce_crap = false
+    """
+)
+
+
+def make_flat_tmp_project(tmp_path: Path) -> Path:
+    """Materialize a flat-layout tmp project (no ``src/`` subdir).
+
+    Used to exercise ``--changed`` scoping when ``src_dir == "."`` — the case
+    where partial-adoption / un-configured repos live, and the case the prefix
+    bug regressed against.
+    """
+    (tmp_path / "pyproject.toml").write_text(_FLAT_PYPROJECT, encoding="utf-8")
+    (tmp_path / "main.py").write_text(
+        '"""Top-level module."""\n\n\ndef hello() -> str:\n    return "hi"\n',
+        encoding="utf-8",
+    )
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_ok.py").write_text(
+        '"""Trivial passing test."""\n\n\ndef test_ok() -> None:\n    assert True\n',
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
 def make_tmp_project(tmp_path: Path) -> Path:
     """Materialize a minimal clean project under ``tmp_path``.
 
