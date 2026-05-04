@@ -10,10 +10,11 @@ from interlocks.acceptance_status import (
     acceptance_failure_task,
     classify_acceptance_with_details,
 )
-from interlocks.config import load_config
+from interlocks.config import InterlockConfig, load_config
 from interlocks.git import changed_py_files_vs
 from interlocks.reports.suppressions import print_suppressions_report
 from interlocks.runner import (
+    Task,
     arg_flag_value,
     reset_results,
     results_snapshot,
@@ -64,39 +65,62 @@ def cmd_check() -> None:
         cmd_fix(scoped_files)
         cmd_format(scoped_files)
         ui.section("Parallel")
-        parallel = [task_typecheck(scoped_files)]
-        if scope_ref is None:
-            test_task = task_test()
-            if test_task is None:
-                warn_skip("test: no test dir detected — run `interlocks init` to scaffold tests/")
-            else:
-                parallel.append(test_task)
-        else:
-            _skip_under_changed("test", "run `interlocks test` for full suite")
-        if cfg.run_acceptance_in_check and scope_ref is None:
-            acceptance = classify_acceptance_with_details(cfg)
-            if acceptance.is_required_failure:
-                parallel.append(acceptance_failure_task(acceptance))
-            elif acceptance.status is AcceptanceStatus.RUNNABLE:
-                acceptance_task = task_acceptance_with_attribution(cfg)
-                if acceptance_task is not None:
-                    parallel.append(acceptance_task)
-        elif cfg.run_acceptance_in_check:
-            _skip_under_changed("acceptance", "scenario-level, not file-level")
-        run_tasks(parallel)
+        run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
         ui.section("Advisory")
-        if scope_ref is None:
-            run(task_deps(), no_exit=True)
-        else:
-            _skip_under_changed("deps", "graph-wide by construction")
-        cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None)
-        if scope_ref is None:
-            cmd_behavior_attribution_cached_advisory()
-        else:
-            _skip_under_changed("attribution", "registry-wide")
+        _run_advisory(scope_ref, scoped_files)
     finally:
         print_suppressions_report()
         _print_footer(time.monotonic() - start)
+
+
+def _parallel_tasks(
+    cfg: InterlockConfig, scope_ref: str | None, scoped_files: list[str] | None
+) -> list[Task]:
+    parallel = [task_typecheck(scoped_files)]
+    _maybe_append_test(parallel, scope_ref)
+    _maybe_append_acceptance(parallel, cfg, scope_ref)
+    return parallel
+
+
+def _maybe_append_test(parallel: list[Task], scope_ref: str | None) -> None:
+    if scope_ref is not None:
+        _skip_under_changed("test", "run `interlocks test` for full suite")
+        return
+    test_task = task_test()
+    if test_task is None:
+        warn_skip("test: no test dir detected — run `interlocks init` to scaffold tests/")
+        return
+    parallel.append(test_task)
+
+
+def _maybe_append_acceptance(
+    parallel: list[Task], cfg: InterlockConfig, scope_ref: str | None
+) -> None:
+    if not cfg.run_acceptance_in_check:
+        return
+    if scope_ref is not None:
+        _skip_under_changed("acceptance", "scenario-level, not file-level")
+        return
+    acceptance = classify_acceptance_with_details(cfg)
+    if acceptance.is_required_failure:
+        parallel.append(acceptance_failure_task(acceptance))
+        return
+    if acceptance.status is AcceptanceStatus.RUNNABLE:
+        acceptance_task = task_acceptance_with_attribution(cfg)
+        if acceptance_task is not None:
+            parallel.append(acceptance_task)
+
+
+def _run_advisory(scope_ref: str | None, scoped_files: list[str] | None) -> None:
+    if scope_ref is None:
+        run(task_deps(), no_exit=True)
+    else:
+        _skip_under_changed("deps", "graph-wide by construction")
+    cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None)
+    if scope_ref is None:
+        cmd_behavior_attribution_cached_advisory()
+    else:
+        _skip_under_changed("attribution", "registry-wide")
 
 
 def _skip_under_changed(label: str, reason: str) -> None:
