@@ -159,15 +159,23 @@ def preflight(command: str) -> None:
     ``pyproject.toml``; every downstream task would then operate against a bogus
     root. Gate execution here so users see one clear message instead of confusing
     tool-by-tool failures. ``doctor`` and ``init`` are exempt — they exist to
-    diagnose and bootstrap broken setups.
+    diagnose and bootstrap broken setups. ``check --changed`` is also exempt:
+    progressive adoption operates against git-changed files and degrades to a
+    clean "nothing to check" exit when neither git nor pyproject is set up.
     """
     if command in PREFLIGHT_EXEMPT:
+        return
+    if command == "check" and _has_changed_flag():
         return
     try:
         require_pyproject(load_config())
     except InterlockUserError as exc:
         print(f"interlocks: {exc}", file=sys.stderr)
         sys.exit(2)
+
+
+def _has_changed_flag() -> bool:
+    return any(arg == "--changed" or arg.startswith("--changed=") for arg in sys.argv[1:])
 
 
 @dataclass(frozen=True)

@@ -585,7 +585,11 @@ def require_pyproject(cfg: InterlockConfig) -> None:
     this at the CLI boundary to fail fast with an actionable message.
     """
     if not (cfg.project_root / "pyproject.toml").is_file():
-        raise InterlockConfigError("no pyproject.toml — run `interlocks init` to scaffold")
+        raise InterlockConfigError(
+            "no pyproject.toml found in the current tree. "
+            "For a new project, run `interlocks init`. "
+            "Otherwise, invoke from a Python project root."
+        )
 
 
 @cache

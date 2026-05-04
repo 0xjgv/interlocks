@@ -86,6 +86,23 @@ def test_preflight_exits_two_when_gated_command_has_no_pyproject(
     assert "no pyproject.toml" in captured.err
 
 
+@pytest.mark.parametrize("changed_arg", ["--changed", "--changed=origin/main"])
+def test_preflight_allows_check_changed_without_pyproject(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    changed_arg: str,
+) -> None:
+    """``check --changed`` is progressive adoption — must not block on missing pyproject."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", changed_arg])
+    clear_cache()
+    preflight("check")  # must not raise or exit
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
 # ─────────────── end-to-end via subprocess ──────────────────────────
 
 
