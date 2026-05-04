@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-05-04
+
+### Added
+
+- `interlocks check --changed[=<ref>]` — progressive-adoption mode that scopes
+  file-level gates (fix/format/typecheck/CRAP) to `.py` files changed vs
+  `<ref>` (default `cfg.changed_ref` = `origin/main`). Graph-wide gates
+  (deps, behavior-attribution, acceptance) and the test suite skip with a
+  banner; run `interlocks test` separately for the full suite.
+- `[tool.interlocks] changed_ref` — base ref used by `check --changed` when
+  invoked without an explicit value.
+
 ## [0.1.5] - 2026-05-03
 
 ### Changed

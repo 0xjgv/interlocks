@@ -40,9 +40,9 @@ Feature: interlocks CLI surface area
 
   @smoke
   # req: cli-version
-  Scenario: interlocks version prints 0.1.5
+  Scenario: interlocks version prints 0.1.6
     Given I run "interlocks version"
-    Then the output contains "0.1.5"
+    Then the output contains "0.1.6"
 
   # req: cli-help-crash-reports
   Scenario: help text surfaces crash report behavior and cache directory
