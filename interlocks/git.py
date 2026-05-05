@@ -7,12 +7,20 @@ from interlocks.runner import capture
 
 
 def _src_test_prefixes() -> tuple[str, ...]:
+    """Return path prefixes that identify "files we care about" for git filters.
+
+    When either ``src_dir`` or ``test_dir`` is the project root (``.``) or empty,
+    one of the two regions covers the whole tree, so we collapse to a match-all
+    sentinel ``("",)`` rather than letting the other prefix narrow the result.
+    Flat-layout repos ship src files at the top level; without this, ``--changed``
+    silently dropped them.
+    """
     cfg = load_config()
-    prefixes: list[str] = []
-    for name in (cfg.src_dir_arg, cfg.test_dir_arg):
-        if name and name != ".":
-            prefixes.append(f"{name}/")
-    return tuple(prefixes) or ("",)
+    src = cfg.src_dir_arg
+    test = cfg.test_dir_arg
+    if src in ("", ".") or test in ("", "."):
+        return ("",)
+    return (f"{src}/", f"{test}/")
 
 
 def staged_py_files() -> list[str]:

@@ -77,3 +77,27 @@ Feature: interlocks stage commands on a minimal inline project
     When I run "interlocks check --changed" in the tmp project
     Then the stage exits 0
     And the stage output contains "changed vs HEAD"
+
+  # req: stage-check
+  Scenario: `interlocks check --changed` includes top-level files in flat-layout projects
+    Given a flat-layout tmp project initialized as a git repo
+    And the tmp project has an untracked top-level Python file
+    When I run "interlocks check --changed=HEAD" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "Scope"
+    And the stage output contains "changed vs HEAD"
+
+  # req: stage-check
+  Scenario: `interlocks check --changed` ignores non-Python file changes
+    Given a minimal tmp project initialized as a git repo
+    And the tmp project has an untracked Markdown file
+    When I run "interlocks check --changed=HEAD" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "no Python files changed"
+
+  # req: stage-check
+  Scenario: `interlocks check --changed` exits cleanly outside a git repo
+    Given a minimal tmp project that is not a git repo
+    When I run "interlocks check --changed=HEAD" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "no Python files changed"
