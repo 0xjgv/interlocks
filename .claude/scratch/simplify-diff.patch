@@ -1,0 +1,2432 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index ca30699..e259563 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -11,8 +11,15 @@ jobs:
+     strategy:
+       fail-fast: false
+       matrix:
+-        os: [ubuntu-latest, macos-latest]
+-        python: ["3.13"]
++        include:
++          - os: ubuntu-latest
++            python: "3.11"
++          - os: ubuntu-latest
++            python: "3.12"
++          - os: ubuntu-latest
++            python: "3.13"
++          - os: macos-latest
++            python: "3.11"
+     runs-on: ${{ matrix.os }}
+     steps:
+       - uses: actions/checkout@v6
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index 854891e..e06b025 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -13,7 +13,7 @@ jobs:
+ 
+       - uses: astral-sh/setup-uv@v8.1.0
+         with:
+-          python-version: "3.13"
++          python-version: "3.11"
+ 
+       - name: Install project
+         run: uv sync
+diff --git a/.github/workflows/release-mutmut.yml b/.github/workflows/release-mutmut.yml
+index a2cb704..4265eaa 100644
+--- a/.github/workflows/release-mutmut.yml
++++ b/.github/workflows/release-mutmut.yml
+@@ -14,7 +14,7 @@ jobs:
+ 
+       - uses: astral-sh/setup-uv@v8.1.0
+         with:
+-          python-version: "3.13"
++          python-version: "3.11"
+ 
+       - name: Clone pinned upstream mutmut
+         run: |
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+index 0820288..71ce772 100644
+--- a/.github/workflows/release.yml
++++ b/.github/workflows/release.yml
+@@ -14,7 +14,7 @@ jobs:
+ 
+       - uses: astral-sh/setup-uv@v8.1.0
+         with:
+-          python-version: "3.13"
++          python-version: "3.11"
+ 
+       - name: Install project
+         run: uv sync
+@@ -40,7 +40,7 @@ jobs:
+ 
+       - uses: astral-sh/setup-uv@v8.1.0
+         with:
+-          python-version: "3.13"
++          python-version: "3.11"
+ 
+       - name: Build sdist and wheel
+         run: uv build
+@@ -66,7 +66,7 @@ jobs:
+ 
+       - uses: astral-sh/setup-uv@v8.1.0
+         with:
+-          python-version: "3.13"
++          python-version: "3.11"
+ 
+       - name: Verify tag matches project version
+         run: |
+diff --git a/AGENTS.md b/AGENTS.md
+index 463e227..eaeffe0 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -14,6 +14,8 @@ Tests live in `tests/`, with focused task and stage coverage under `tests/tasks/
+ - `uv run interlocks pre-commit` - staged-file checks used by the git hook.
+ - `uv run interlocks setup` - installs or refreshes local hooks, agent docs, and bundled Claude skill.
+ - `uv run interlocks setup --check` - verifies local integrations without writing.
++- `uv run interlocks setup --ci=github` - installs a GitHub Actions workflow only when no existing workflow invokes interlocks.
++- `uv run interlocks setup --ci=github --check` - verifies GitHub CI wiring read-only.
+ - `uv run interlocks doctor` - readiness diagnostic; static inspection only.
+ - `uv run interlocks evaluate` - read-only 11-check quality scorecard (0–33).
+ - `uv run interlocks help` / `interlocks config` / `interlocks presets` - resolved thresholds, full config key list, preset selector.
+@@ -21,7 +23,7 @@ Tests live in `tests/`, with focused task and stage coverage under `tests/tasks/
+ 
+ ## Coding Style & Naming Conventions
+ 
+-Target Python `3.13`. Use 4-space indentation, explicit type hints in production code, and `snake_case` for modules, functions, and variables. Keep task commands named `cmd_<task>` to match CLI dispatch.
++Target Python `3.11+`. Use 4-space indentation, explicit type hints in production code, and `snake_case` for modules, functions, and variables. Keep task commands named `cmd_<task>` to match CLI dispatch.
+ 
+ Ruff owns linting, import ordering, and formatting. Line length is `99`; first-party imports are `interlocks`. Avoid adding new tools unless already represented in `pyproject.toml`.
+ 
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 9608b97..8fad9c0 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -2,7 +2,7 @@
+ 
+ Zero-config Python quality CLI: lint, format, typecheck, test, coverage, acceptance, audit, deps, arch, CRAP, mutation. Self-dogfooded.
+ 
+-Python 3.13, uv-managed. Tools: ruff, basedpyright, coverage.py, pytest + pytest-bdd, interlock-mutmut, deptry, import-linter, pip-audit, lizard.
++Python 3.11+, uv-managed. Tools: ruff, basedpyright, coverage.py, pytest + pytest-bdd, interlock-mutmut, deptry, import-linter, pip-audit, lizard.
+ 
+ ## Project map
+ 
+@@ -31,6 +31,8 @@ You own this product and the codebase.
+ | `interlocks nightly` | Nightly cron stage |
+ | `interlocks setup` | Install local hooks, agent docs, Claude skill |
+ | `interlocks setup --check` | Verify local integrations read-only |
++| `interlocks setup --ci=github` | Install GitHub Actions workflow when absent |
++| `interlocks setup --ci=github --check` | Verify GitHub CI wiring read-only |
+ | `interlocks help` | List subcommands + thresholds |
+ | `interlocks config` | List config keys + resolved values |
+ </important>
+diff --git a/README.md b/README.md
+index 6dc0c8d..385fa6b 100644
+--- a/README.md
++++ b/README.md
+@@ -53,9 +53,11 @@ il check
+ cd your-python-project
+ interlocks setup
+ interlocks setup --check
++interlocks setup --ci=github --check   # optional CI readiness check
++interlocks setup --ci=github           # optional GitHub Actions installer
+ ```
+ 
+-`setup` idempotently installs local feedback loops: git pre-commit hook, Claude Code Stop hook, `AGENTS.md` / `CLAUDE.md` interlocks block, and bundled Claude skill at `.claude/skills/interlocks/SKILL.md`. `setup --check` is read-only and exits non-zero when any local integration is missing or stale.
++`setup` idempotently installs local feedback loops: git pre-commit hook, Claude Code Stop hook, `AGENTS.md` / `CLAUDE.md` interlocks block, and bundled Claude skill at `.claude/skills/interlocks/SKILL.md`. `setup --check` is read-only and exits non-zero when any local integration is missing or stale. CI is explicit: `setup --ci=github` creates `.github/workflows/interlocks.yml` only when no existing workflow invokes interlocks.
+ 
+ ### 3. Diagnose Readiness
+ 
+@@ -91,7 +93,7 @@ If interlocks is installed in the CI environment, the direct command is:
+ interlocks ci
+ ```
+ 
+-For GitHub Actions, copy this workflow:
++For GitHub Actions, either run `interlocks setup --ci=github` or copy this workflow:
+ 
+ ```yaml
+ name: interlocks
+@@ -193,6 +195,7 @@ mutation_max_runtime = 600
+ mutation_min_score = 80.0
+ 
+ # Gate behavior
++skip = []                         # e.g. ["typecheck"] for explicit project policy
+ enforce_crap = true
+ run_mutation_in_ci = false
+ enforce_mutation = false
+@@ -224,9 +227,37 @@ Precedence, lowest to highest:
+ 4. CLI flags inside tasks, such as `--min=`, `--max=`, `--max-runtime=`, `--min-score=`, and `--min-coverage=`.
+ 
+ Run `interlocks help` to see the active preset and resolved values.
++Run `interlocks config` to see every `[tool.interlocks]` key and source.
++Run `interlocks config show ruff|basedpyright|coverage|import-linter` to see whether a tool is using bundled defaults or project-owned native config.
+ Run `interlocks presets` to see preset options, their main thresholds, and copyable config.
+ Run `interlocks presets set baseline` to set a project preset from the CLI.
+ 
++## FAQ
++
++### What style rules are bundled?
++
++When a project has no native config, interlocks supplies bundled defaults for ruff, basedpyright, coverage.py, and import-linter. Those defaults are adoption defaults, not hidden project policy. Inspect them with `interlocks config show ruff`, `interlocks config show basedpyright`, `interlocks config show coverage`, or `interlocks config show import-linter`.
++
++### Do bundled defaults extend my project config?
++
++No. A project-owned `[tool.ruff]`, `ruff.toml`, `[tool.basedpyright]`, `pyrightconfig.json`, `[tool.coverage]`, `.coveragerc`, `[tool.importlinter]`, or `.importlinter` replaces the bundled default for that tool. `config show` reports the active source.
++
++### How do I ignore or skip checks?
++
++Prefer native tool ignores for narrow code-level exceptions. Use presets and thresholds for policy. Use `interlocks check --changed[=<ref>]` to scope first adoption to changed files. Use global skip only when you need an explicit gate-level escape hatch: `interlocks check --skip=typecheck`, `INTERLOCKS_SKIP=typecheck interlocks check`, or `[tool.interlocks] skip = ["typecheck"]`. Unknown skip labels exit 2, and skipped gates print warnings.
++
++### What did setup install, and what remains manual?
++
++`interlocks setup` installs local hooks, agent docs, and the bundled Claude skill. It does not silently add CI. For GitHub Actions, run `interlocks setup --ci=github --check` to detect wiring and `interlocks setup --ci=github` to create `.github/workflows/interlocks.yml` only when no existing workflow invokes interlocks.
++
++### Which Python versions are supported?
++
++interlocks installs on Python 3.11, 3.12, and 3.13. Python 3.11 is the floor because `tomllib` is required and bundled defaults target `py311` syntax.
++
++### Is it production-ready?
++
++Yes for Python repositories that want deterministic local/CI quality gates. The CLI is self-dogfooded, has a reusable GitHub Action, and keeps hosted state out of the trust path. It is still intentionally narrow: no dashboard, no polyglot orchestration, and no replacement for project-owned tests.
++
+ ## Stages
+ 
+ | Stage | When | What runs |
+@@ -236,11 +267,11 @@ Run `interlocks presets set baseline` to set a project preset from the CLI.
+ | `interlocks ci` | Pull requests and protected branches | format-check, lint, complexity, audit, deps, typecheck, coverage, arch, acceptance -> CRAP -> optional mutation (per `mutation_ci_mode`); writes `.interlocks/ci.json` timing evidence |
+ | `interlocks nightly` | Scheduled jobs | coverage -> audit (warn-skips on transient pip-audit failures) -> mutation, always blocking on `mutation_min_score` |
+ | `interlocks post-edit` | Editor/agent hook interface | advisory ruff fix + format on changed Python files |
+-| `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill |
++| `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill; `--ci=github` installs/checks GitHub CI wiring |
+ | `interlocks setup-hooks` | Narrow hook installer | writes hooks that call `interlocks pre-commit` and `interlocks post-edit` |
+ | `interlocks clean` | Local cleanup | removes caches, build artifacts, coverage output, mutation state, and `__pycache__/` |
+ 
+-`interlocks pre-commit` and `interlocks post-edit` are the stable hook interfaces. `interlocks setup` is the default local onboarding command. `interlocks setup --check` verifies hooks, agent docs, and the Claude skill without writing. Narrow commands (`setup-hooks`, `agents`, `setup-skill`) remain available as escape hatches.
++`interlocks pre-commit` and `interlocks post-edit` are the stable hook interfaces. `interlocks setup` is the default local onboarding command. `interlocks setup --check` verifies hooks, agent docs, and the Claude skill without writing. `interlocks setup --ci=github --check` verifies GitHub CI wiring separately. Narrow commands (`setup-hooks`, `agents`, `setup-skill`) remain available as escape hatches.
+ 
+ `mutation_ci_mode` picks how `interlocks ci` invokes mutmut:
+ 
+diff --git a/action.yml b/action.yml
+index 23ab1c1..1079d9c 100644
+--- a/action.yml
++++ b/action.yml
+@@ -5,7 +5,7 @@ inputs:
+   python-version:
+     description: Python version used to install interlocks and run interlocks.
+     required: false
+-    default: "3.13"
++    default: "3.11"
+   install-command:
+     description: Command that installs interlocks before running CI.
+     required: false
+diff --git a/interlocks/cli.py b/interlocks/cli.py
+index 15ece89..971c1be 100644
+--- a/interlocks/cli.py
++++ b/interlocks/cli.py
+@@ -20,6 +20,7 @@ from interlocks.config import (
+ )
+ from interlocks.crash import CrashBoundary
+ from interlocks.runner import fail_skip, ok, preflight
++from interlocks.skip import validate_cli_skip
+ from interlocks.stages.check import cmd_check
+ from interlocks.stages.ci import cmd_ci
+ from interlocks.stages.clean import cmd_clean
+@@ -388,6 +389,7 @@ def main() -> None:
+         cmd_task_help(task_name)
+         return
+ 
++    validate_cli_skip()
+     preflight(task_name)
+     boundary = CrashBoundary(subcommand=task_name)
+     with boundary:
+diff --git a/interlocks/config.py b/interlocks/config.py
+index 0115ceb..da968d0 100644
+--- a/interlocks/config.py
++++ b/interlocks/config.py
+@@ -12,7 +12,7 @@ import tomllib
+ from dataclasses import dataclass, field
+ from functools import cache
+ from pathlib import Path
+-from typing import Any, Literal
++from typing import Any, Literal, TypeVar
+ 
+ from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
+ from interlocks.detect import (
+@@ -36,6 +36,23 @@ _SOURCE_DEFAULT = "bundled-default"
+ _SOURCE_PRESET = "preset-derived"
+ _SOURCE_PROJECT = "project-configured"
+ 
++SKIP_LABELS: frozenset[str] = frozenset({
++    "acceptance",
++    "arch",
++    "attribution",
++    "audit",
++    "complexity",
++    "coverage",
++    "crap",
++    "deps",
++    "fix",
++    "format",
++    "lint",
++    "mutation",
++    "test",
++    "typecheck",
++})
++
+ _SUPPORTED_PRESETS: tuple[Preset, ...] = ("baseline", "strict", "legacy")
+ _PRESET_DESCRIPTIONS: dict[Preset, str] = {
+     "baseline": "adoption defaults; advisory CRAP; mutation off in CI; acceptance off in check",
+@@ -271,6 +288,13 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
+         "Base ref for `interlocks check --changed`",
+         "Gates",
+     ),
++    ConfigKeyDoc(
++        "skip",
++        "list[str]",
++        "[]",
++        "Stable gate labels skipped by every stage; CLI --skip and INTERLOCKS_SKIP win",
++        "Gates",
++    ),
+     ConfigKeyDoc(
+         "acceptance_runner",
+         "pytest-bdd|behave|off",
+@@ -458,6 +482,7 @@ class InterlockConfig:
+     mutation_ci_mode: MutationCIMode = "off"
+     mutation_since_ref: str = "origin/main"
+     changed_ref: str = "origin/main"
++    skip: frozenset[str] = frozenset()
+     # Acceptance (Gherkin) — all optional; resolved lazily by the task.
+     acceptance_runner: AcceptanceRunner | None = None
+     features_dir: Path | None = None
+@@ -598,28 +623,20 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
+     project_table = _interlock_table(pyproject)
+     table, value_sources, preset, unsupported_presets = _resolve_config_table(project_table)
+ 
+-    test_dir_override = table.get("test_dir")
+-    src_dir_override = table.get("src_dir")
+-    features_dir_override = table.get("features_dir")
++    paths = _resolved_paths(project_root, pyproject, table)
+     runner_override = _runner_override(table)
+     invoker_override = _invoker_override(table)
+     acceptance_runner = _acceptance_runner_override(table)
+     pytest_args = tuple(str(a) for a in (table.get("pytest_args") or ()))
+ 
+-    test_dir = _resolved_path(test_dir_override, detect_test_dir(project_root), project_root)
+-    src_dir = _resolved_path(
+-        src_dir_override, detect_src_dir(project_root, pyproject), project_root
+-    )
+-    features_dir = _resolved_path(
+-        features_dir_override, detect_features_dir(project_root, test_dir), project_root
+-    )
+     test_runner: TestRunner = runner_override or detect_test_runner(
+-        project_root, pyproject, test_dir
++        project_root, pyproject, paths.test_dir
+     )
+     test_invoker: TestInvoker = invoker_override or detect_test_invoker(project_root)
+     run_acceptance_in_check, require_acceptance, mutation_ci_mode, mutation_since_ref = (
+         _resolve_flags(table)
+     )
++    skip = frozenset(table.get("skip", ()))
+     audit_severity_threshold = _audit_severity_threshold_override(table)
+     thresholds = _threshold_overrides(table)
+     if "enforce_behavior_attribution" not in thresholds:
+@@ -642,28 +659,29 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
+     )
+ 
+     overrides = {
+-        "src_dir": src_dir_override,
+-        "test_dir": test_dir_override,
+-        "features_dir": features_dir_override,
++        "src_dir": paths.src_dir_override,
++        "test_dir": paths.test_dir_override,
++        "features_dir": paths.features_dir_override,
+         "test_runner": runner_override,
+         "test_invoker": invoker_override,
+         "acceptance_runner": acceptance_runner,
+     }
+     return InterlockConfig(
+         project_root=project_root,
+-        src_dir=src_dir,
+-        test_dir=test_dir,
++        src_dir=paths.src_dir,
++        test_dir=paths.test_dir,
+         test_runner=test_runner,
+         test_invoker=test_invoker,
+         preset=preset,
+         pytest_args=pytest_args,
+         acceptance_runner=acceptance_runner,
+-        features_dir=features_dir,
++        features_dir=paths.features_dir,
+         run_acceptance_in_check=run_acceptance_in_check,
+         require_acceptance=require_acceptance,
+         mutation_ci_mode=mutation_ci_mode,
+         mutation_since_ref=mutation_since_ref,
+         changed_ref=changed_ref,
++        skip=skip,
+         dependency_freshness_command=dependency_freshness_command,
+         dependency_freshness_stage=dependency_freshness_stage,
+         audit_severity_threshold=audit_severity_threshold,
+@@ -674,6 +692,39 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
+     )
+ 
+ 
++@dataclass(frozen=True)
++class ResolvedPaths:
++    test_dir_override: object
++    src_dir_override: object
++    features_dir_override: object
++    test_dir: Path
++    src_dir: Path
++    features_dir: Path | None
++
++
++def _resolved_paths(
++    project_root: Path, pyproject: dict[str, Any], table: dict[str, Any]
++) -> ResolvedPaths:
++    test_dir_override = table.get("test_dir")
++    src_dir_override = table.get("src_dir")
++    features_dir_override = table.get("features_dir")
++    test_dir = _resolved_path(test_dir_override, detect_test_dir(project_root), project_root)
++    src_dir = _resolved_path(
++        src_dir_override, detect_src_dir(project_root, pyproject), project_root
++    )
++    features_dir = _resolved_path(
++        features_dir_override, detect_features_dir(project_root, test_dir), project_root
++    )
++    return ResolvedPaths(
++        test_dir_override,
++        src_dir_override,
++        features_dir_override,
++        test_dir,
++        src_dir,
++        features_dir,
++    )
++
++
+ def _default_enforce_behavior_attribution(pyproject: dict[str, Any]) -> bool:
+     project = pyproject.get("project")
+     if not isinstance(project, dict) or project.get("name") != "interlocks":
+@@ -681,7 +732,12 @@ def _default_enforce_behavior_attribution(pyproject: dict[str, Any]) -> bool:
+     return any(behavior.public_symbol for behavior in INTERLOCKS_REGISTRY.behaviors)
+ 
+ 
+-def _resolved_path[T](override: object, fallback: T, project_root: Path) -> Path | T:
++_PathFallback = TypeVar("_PathFallback")
++
++
++def _resolved_path(
++    override: object, fallback: _PathFallback, project_root: Path
++) -> Path | _PathFallback:
+     """Resolve ``override`` against ``project_root`` when set; otherwise return ``fallback``."""
+     if isinstance(override, str):
+         return (project_root / override).resolve()
+@@ -763,6 +819,23 @@ def _preset_override(table: dict[str, Any]) -> Preset | None:
+     return None
+ 
+ 
++def _skip_override(raw: object) -> tuple[str, ...] | None:
++    if raw is None:
++        return None
++    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
++        raise InterlockConfigError("[tool.interlocks] skip must be a list of gate labels")
++    labels = tuple(label.strip().lower() for label in raw)
++    if any(not label for label in labels):
++        raise InterlockConfigError("[tool.interlocks] skip contains an empty gate label")
++    unknown = sorted(set(labels) - SKIP_LABELS)
++    if unknown:
++        known = ",".join(sorted(SKIP_LABELS))
++        raise InterlockConfigError(
++            f"unknown [tool.interlocks] skip label(s): {', '.join(unknown)} (known: {known})"
++        )
++    return tuple(dict.fromkeys(labels))
++
++
+ def _explicit_config_overrides(table: dict[str, Any]) -> dict[str, Any]:
+     overrides: dict[str, Any] = {}
+     for key in _STRING_KEYS:
+@@ -772,6 +845,9 @@ def _explicit_config_overrides(table: dict[str, Any]) -> dict[str, Any]:
+     value = table.get("pytest_args")
+     if isinstance(value, list):
+         overrides["pytest_args"] = value
++    skip = _skip_override(table.get("skip"))
++    if skip is not None:
++        overrides["skip"] = skip
+     for key, parser in _ENUM_PARSERS.items():
+         parsed = parser(table)
+         if parsed is not None:
+@@ -800,6 +876,7 @@ def _complete_value_sources(
+         "mutation_ci_mode",
+         "mutation_since_ref",
+         "changed_ref",
++        "skip",
+         "run_acceptance_in_check",
+         "require_acceptance",
+         "evaluate_dependency_freshness",
+diff --git a/interlocks/defaults/agents_block.md b/interlocks/defaults/agents_block.md
+index 2aff3c5..37e9745 100644
+--- a/interlocks/defaults/agents_block.md
++++ b/interlocks/defaults/agents_block.md
+@@ -1,13 +1,18 @@
+-<important if="you need to run quality gates, tests, or inspect config">
++<important if="you need to run quality gates, tests, inspect config, or diagnose failures">
++
++`interlocks setup` installs local feedback loops: git pre-commit hook, Claude Code Stop hook, agent docs, and the bundled Claude skill. CI still needs explicit project wiring; use `interlocks setup --ci=github` when available, or add CI manually.
+ 
+ | Command | What it does |
+ |---|---|
+-| `interlocks check` | Run after edits |
+-| `interlocks pre-commit` | Pre-commit stage (auto via hook) |
+-| `interlocks ci` | PR/CI stage |
+-| `interlocks nightly` | Nightly cron stage |
+-| `interlocks setup` | Install local hooks, agent docs, Claude skill |
++| `interlocks check` | First command after edits: fix, format, typecheck, tests, advisory gates |
++| `interlocks doctor` | Diagnose paths, tools, config, and setup state when checks fail |
++| `interlocks pre-commit` | Pre-commit stage, normally run by the installed git hook |
++| `interlocks ci` | PR/CI stage with blocking verification |
++| `interlocks nightly` | Scheduled long-running coverage/audit/mutation stage |
++| `interlocks setup` | Install local hooks, agent docs, and Claude skill |
+ | `interlocks setup --check` | Verify local integrations read-only |
+-| `interlocks help` | List subcommands + thresholds |
+-| `interlocks config` | List config keys + resolved values |
++| `interlocks config` | List `[tool.interlocks]` keys, resolved values, and sources |
++| `interlocks help` | List commands and active thresholds |
++
++Blocking gates fail the command; advisory gates print warnings without masking the main result. Change gate policy in `[tool.interlocks]` only after inspecting `interlocks config` and keeping CLI, hooks, CI, and agents aligned.
+ </important>
+diff --git a/interlocks/defaults/ruff.toml b/interlocks/defaults/ruff.toml
+index 0d8e4f9..2838bb9 100644
+--- a/interlocks/defaults/ruff.toml
++++ b/interlocks/defaults/ruff.toml
+@@ -5,7 +5,7 @@
+ # Project-local configs (per-file-ignores, isort.known-first-party) are
+ # intentionally omitted — they belong to the downstream repo.
+ 
+-target-version = "py313"
++target-version = "py311"
+ line-length = 99
+ preview = true
+ 
+diff --git a/interlocks/defaults/scaffold_pyproject.toml b/interlocks/defaults/scaffold_pyproject.toml
+index 3170c79..d049995 100644
+--- a/interlocks/defaults/scaffold_pyproject.toml
++++ b/interlocks/defaults/scaffold_pyproject.toml
+@@ -1,7 +1,7 @@
+ [project]
+ name = "{project_name}"
+ version = "0.0.0"
+-requires-python = ">=3.13"
++requires-python = ">=3.11"
+ dependencies = []
+ 
+ [dependency-groups]
+diff --git a/interlocks/defaults/skill/SKILL.md b/interlocks/defaults/skill/SKILL.md
+index 031c703..b14a33a 100644
+--- a/interlocks/defaults/skill/SKILL.md
++++ b/interlocks/defaults/skill/SKILL.md
+@@ -36,7 +36,7 @@ uvx --from interlocks==0.1.5 il ci
+ 
+ For frequent local human use, `uv tool install interlocks` is appropriate; `pipx install interlocks` is the alternative installed path.
+ 
+-Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Use `il setup --check` for read-only verification; use `il doctor` for full project readiness. Use `il version` to print the installed version.
++Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Use `il setup --check` for read-only verification. Use `il setup --ci=github` when GitHub Actions should be installed and no existing workflow invokes interlocks. First useful check after setup is `il check`; use `il doctor` when readiness or failures need diagnosis. Use `il version` to print the installed version.
+ 
+ `il` is the short alias (`interlocks`/`ilocks`/`ilock`/`ils`/`il` all work). Drop to bare `interlocks <cmd>` only when the project lists `interlocks` as a dev dep.
+ 
+@@ -61,7 +61,7 @@ Branch on intent:
+ - **Pre-commit** → automated via hook. If missing, run `uvx --from interlocks il pre-commit`.
+ - **Pre-PR / verifying CI parity** → `uvx --from interlocks il ci`. Adds coverage, CRAP, audit, deps, arch.
+ - **Investigating one failure** → run the single gate: `il lint`, `il typecheck`, `il coverage`, etc.
+-- **Setting up a fresh repo** → `il doctor` → `il init` (greenfield only) → `il setup` → `il setup --check`.
++- **Setting up a fresh repo** → `il init` (greenfield only) → `il setup` → `il check` → `il doctor` if blocked → optional `il setup --ci=github`.
+ - **Long-running gates** → `il nightly` (full coverage + mutation).
+ 
+ ## Reading the output
+@@ -69,7 +69,7 @@ Branch on intent:
+ - **Symbols**: `✓` ok, `✗` fail, `⚠` skip.
+ - **Exit codes**: `0` pass, `1` blocking gate failed, `2` preflight (no `pyproject.toml` reachable).
+ - **Advisory ≠ blocking**: a red `✗` does not always mean exit 1. CRAP and mutation default to advisory. Check exit code, not just symbol.
+-- **Skips are signals**: `⚠` usually means a tool isn't installed or a config key is unset. Fix env, don't ignore.
++- **Skips are signals**: `⚠` can mean optional scope, missing evidence, or an explicit global skip. Fix env or config; don't ignore silent gaps.
+ 
+ ## Recovery patterns
+ 
+@@ -92,7 +92,7 @@ Don't read defaults inline.
+ 
+ - All overrides: `[tool.interlocks]` in `pyproject.toml`.
+ - Precedence: CLI flag > `[tool.interlocks]` > preset > bundled default.
+-- Inspect: `uvx --from interlocks il config` (full key list with current values).
++- Inspect: `uvx --from interlocks il config` (full key list with current values); `il config show ruff|basedpyright|coverage|import-linter` for bundled/project tool config provenance.
+ - Common knobs: `coverage_min`, `crap_max`, `enforce_crap`, `enforce_mutation`, `mutation_ci_mode`, `preset` (`baseline`|`strict`|`legacy`).
+ - Switching presets: `il presets set strict`. Don't hand-edit each threshold.
+ 
+@@ -106,6 +106,6 @@ Don't read defaults inline.
+ 
+ - Lowering a threshold (`coverage_min`, `crap_max`, `mutation_min_score`).
+ - Preset downgrade (`strict` → `baseline` → `legacy`).
+-- Disabling enforcement (`enforce_crap=false`, `enforce_mutation=false`).
++- Disabling enforcement (`enforce_crap=false`, `enforce_mutation=false`) or adding global `skip` labels.
+ - Bypassing a hook (`git commit --no-verify`, force-push).
+ - Adding a new gate or task — refer to `CLAUDE.md` "adding a new gate" block in the interlocks repo.
+diff --git a/interlocks/defaults_path.py b/interlocks/defaults_path.py
+index 118508f..2077df5 100644
+--- a/interlocks/defaults_path.py
++++ b/interlocks/defaults_path.py
+@@ -10,6 +10,7 @@ from __future__ import annotations
+ 
+ import atexit
+ from contextlib import ExitStack
++from dataclasses import dataclass
+ from functools import cache
+ from importlib.resources import as_file, files
+ from pathlib import Path
+@@ -24,6 +25,48 @@ _extractor = ExitStack()
+ atexit.register(_extractor.close)
+ 
+ 
++@dataclass(frozen=True)
++class ToolConfigSpec:
++    tool: str
++    section: str
++    filename: str
++    flag: str
++    sidecars: tuple[str, ...] = ()
++
++
++TOOL_CONFIG_SPECS: dict[str, ToolConfigSpec] = {
++    "ruff": ToolConfigSpec("ruff", "ruff", "ruff.toml", "--config", ("ruff.toml", ".ruff.toml")),
++    "basedpyright": ToolConfigSpec(
++        "basedpyright",
++        "basedpyright",
++        "pyrightconfig.json",
++        "--project",
++        ("pyrightconfig.json", "pyrightconfig.toml"),
++    ),
++    "coverage": ToolConfigSpec("coverage", "coverage", "coveragerc", "--rcfile", (".coveragerc",)),
++    "import-linter": ToolConfigSpec(
++        "import-linter",
++        "importlinter",
++        "importlinter_template.ini",
++        "--config",
++        (".importlinter", "setup.cfg"),
++    ),
++}
++
++
++@dataclass(frozen=True)
++class ToolConfigSource:
++    tool: str
++    source: str
++    path: Path
++    bundled_path: Path
++    flag: str
++
++    @property
++    def is_bundled(self) -> bool:
++        return self.source == "bundled"
++
++
+ @cache
+ def path(name: str) -> Path:
+     """Return a real filesystem path to ``interlocks/defaults/<name>``.
+@@ -42,9 +85,29 @@ def has_project_config(cfg: InterlockConfig, section: str, sidecars: Iterable[st
+     Checks for ``[tool.<section>]`` in the project's pyproject.toml, then for
+     any of ``sidecars`` (e.g. ``ruff.toml``, ``.ruff.toml``) in the project root.
+     """
++    return project_config_source(cfg, section, sidecars=sidecars) is not None
++
++
++def project_config_source(
++    cfg: InterlockConfig, section: str, sidecars: Iterable[str] = ()
++) -> tuple[str, Path] | None:
+     if section in cfg.pyproject.get("tool", {}):
+-        return True
+-    return any((cfg.project_root / name).is_file() for name in sidecars)
++        return (f"pyproject.toml [tool.{section}]", cfg.project_root / "pyproject.toml")
++    for name in sidecars:
++        candidate = cfg.project_root / name
++        if candidate.is_file():
++            return (name, candidate)
++    return None
++
++
++def tool_config_source(cfg: InterlockConfig, tool: str) -> ToolConfigSource:
++    spec = TOOL_CONFIG_SPECS[tool]
++    bundled = path(spec.filename)
++    project = project_config_source(cfg, spec.section, sidecars=spec.sidecars)
++    if project is not None:
++        label, project_path = project
++        return ToolConfigSource(tool, f"project: {label}", project_path, bundled, spec.flag)
++    return ToolConfigSource(tool, "bundled", bundled, bundled, spec.flag)
+ 
+ 
+ def config_flag_if_absent(
+diff --git a/interlocks/hook_setup.py b/interlocks/hook_setup.py
+index ded387d..3e0aa3e 100644
+--- a/interlocks/hook_setup.py
++++ b/interlocks/hook_setup.py
+@@ -6,14 +6,15 @@ import json
+ import shlex
+ import sys
+ from pathlib import Path
++from typing import TypeVar
+ 
+ from interlocks.runner import ok
+ from interlocks.setup_state import is_post_edit_command
+ 
++_Container = TypeVar("_Container", dict[str, object], list[object])
+ 
+-def _reset_invalid_container[T: (dict[str, object], list[object])](
+-    parent: dict[str, object], key: str, empty: T
+-) -> T:
++
++def _reset_invalid_container(parent: dict[str, object], key: str, empty: _Container) -> _Container:
+     """Return ``parent[key]`` when it matches ``type(empty)``; reset to ``empty`` otherwise."""
+     value = parent.setdefault(key, empty)
+     if isinstance(value, type(empty)):
+diff --git a/interlocks/runner.py b/interlocks/runner.py
+index ac671a7..959dc8d 100644
+--- a/interlocks/runner.py
++++ b/interlocks/runner.py
+@@ -17,6 +17,8 @@ from typing import IO, NoReturn
+ 
+ from interlocks import ui
+ from interlocks.config import InterlockUserError, load_config, require_pyproject
++from interlocks.skip import filter_tasks
++from interlocks.task_labels import default_label
+ 
+ # Re-exported for historical callers (e.g. tasks/stats.py).
+ GREEN = "\033[32m"
+@@ -209,6 +211,9 @@ class RunResult:
+ 
+ def run(task: Task, *, no_exit: bool = False) -> None:
+     """Run ``task`` silently; print a status row. Exit on failure unless ``no_exit``."""
++    tasks = _filter_skipped_tasks([task])
++    if not tasks:
++        return
+     result = _execute(task)
+     _print_status(result, elapsed_suffix=False)
+     if result.returncode in task.allowed_rcs:
+@@ -225,6 +230,7 @@ def run_tasks(tasks: list[Task]) -> None:
+     after the status block, and we ``sys.exit`` with the *first-in-task-list*
+     failure's returncode (deterministic; matches sequential semantics).
+     """
++    tasks = _filter_skipped_tasks(tasks)
+     if not tasks:
+         return
+     results: list[RunResult | None] = [None] * len(tasks)
+@@ -242,6 +248,10 @@ def run_tasks(tasks: list[Task]) -> None:
+         sys.exit(failures[0].returncode)
+ 
+ 
++def _filter_skipped_tasks(tasks: list[Task]) -> list[Task]:
++    return filter_tasks(tasks)
++
++
+ def _execute(task: Task) -> RunResult:
+     """Run each command in ``task``, stopping at the first non-zero."""
+     start = time.monotonic()
+@@ -320,7 +330,7 @@ def _pump(stream: IO[str] | None, tag: str, sink: io.StringIO) -> None:
+ 
+ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
+     task = result.task
+-    label = task.label or _default_label(task.description)
++    label = task.label or default_label(task.description)
+     command = task.display or _default_display(task.cmd)
+     status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
+     _RESULTS.append((label, state == "ok"))
+@@ -341,12 +351,6 @@ def _status(result: RunResult, *, elapsed_suffix: bool) -> tuple[str, str | None
+     return ("ok", None, "ok")
+ 
+ 
+-def _default_label(description: str) -> str:
+-    """First word of ``description`` lowercased (e.g. `Fix lint errors` → `fix`)."""
+-    head = description.split(" ", 1)[0]
+-    return head.lower().rstrip(":")
+-
+-
+ def _default_display(cmd: list[str]) -> str:
+     """Compact one-line rendering of ``cmd``: basename + key flags, no absolute paths."""
+     if not cmd:
+diff --git a/interlocks/setup_state.py b/interlocks/setup_state.py
+index 635d86e..0a832f5 100644
+--- a/interlocks/setup_state.py
++++ b/interlocks/setup_state.py
+@@ -16,7 +16,7 @@ from interlocks.acceptance_status import AcceptanceStatus, classify_acceptance,
+ from interlocks.defaults_path import path as defaults_path
+ 
+ if TYPE_CHECKING:
+-    from collections.abc import Callable
++    from collections.abc import Callable, Iterator
+ 
+     from interlocks.config import InterlockConfig
+ 
+@@ -54,18 +54,20 @@ class SetupArtifactStatus:
+ 
+ def iter_workflow_bodies(project_root: Path) -> list[str]:
+     """Read every ``.github/workflows/*.y*ml`` file body. Empty list when dir is absent."""
++    return list(_iter_workflow_bodies(project_root))
++
++
++def _iter_workflow_bodies(project_root: Path) -> Iterator[str]:
+     workflows_dir = project_root / ".github" / "workflows"
+     if not workflows_dir.is_dir():
+-        return []
+-    bodies: list[str] = []
++        return
+     for path in sorted(workflows_dir.iterdir()):
+         if path.suffix not in (".yml", ".yaml"):
+             continue
+         try:
+-            bodies.append(path.read_text(encoding="utf-8"))
++            yield path.read_text(encoding="utf-8")
+         except OSError:
+             continue
+-    return bodies
+ 
+ 
+ def is_post_edit_command(command: object) -> bool:
+@@ -122,7 +124,7 @@ def ci_workflow_present(project_root: Path) -> bool:
+     """True when any ``.github/workflows/*.y*ml`` references ``interlocks ci`` or the action."""
+     return any(
+         any(needle in body for needle in _CI_WORKFLOW_NEEDLES)
+-        for body in iter_workflow_bodies(project_root)
++        for body in _iter_workflow_bodies(project_root)
+     )
+ 
+ 
+@@ -157,6 +159,10 @@ def skill_installed(project_root: Path) -> bool:
+         return False
+ 
+ 
++CI_ARTIFACTS: tuple[SetupArtifact, ...] = (
++    SetupArtifact("github ci", ".github/workflows/*.yml", ci_workflow_present),
++)
++
+ SETUP_ARTIFACTS: tuple[SetupArtifact, ...] = (
+     SetupArtifact("git hook", ".git/hooks/pre-commit", pre_commit_hook_installed),
+     SetupArtifact("claude hook", ".claude/settings.json → Stop", claude_stop_hook_installed),
+@@ -165,13 +171,22 @@ SETUP_ARTIFACTS: tuple[SetupArtifact, ...] = (
+ )
+ 
+ 
+-def setup_artifact_statuses(project_root: Path) -> list[SetupArtifactStatus]:
++def artifact_statuses(
++    artifacts: tuple[SetupArtifact, ...], project_root: Path
++) -> list[SetupArtifactStatus]:
+     return [
+-        SetupArtifactStatus(artifact, artifact.detector(project_root))
+-        for artifact in SETUP_ARTIFACTS
++        SetupArtifactStatus(artifact, artifact.detector(project_root)) for artifact in artifacts
+     ]
+ 
+ 
++def setup_artifact_statuses(project_root: Path) -> list[SetupArtifactStatus]:
++    return artifact_statuses(SETUP_ARTIFACTS, project_root)
++
++
++def ci_artifact_statuses(project_root: Path) -> list[SetupArtifactStatus]:
++    return artifact_statuses(CI_ARTIFACTS, project_root)
++
++
+ def acceptance_scaffold_present(cfg: InterlockConfig) -> bool:
+     """True when acceptance is enabled and at least one ``*.feature`` file exists."""
+     status = classify_acceptance(cfg)
+diff --git a/interlocks/stages/check.py b/interlocks/stages/check.py
+index 19c2e8c..e20cada 100644
+--- a/interlocks/stages/check.py
++++ b/interlocks/stages/check.py
+@@ -22,6 +22,12 @@ from interlocks.runner import (
+     run_tasks,
+     warn_skip,
+ )
++from interlocks.skip import (
++    SkipPolicy,
++    current_skip_policy,
++    maybe_print_skip_banner,
++    run_unless_skipped,
++)
+ from interlocks.tasks.acceptance import task_acceptance_with_attribution
+ from interlocks.tasks.behavior_attribution import cmd_behavior_attribution_cached_advisory
+ from interlocks.tasks.crap import cmd_crap_cached_advisory
+@@ -45,6 +51,7 @@ def cmd_check() -> None:
+     """
+     start = time.monotonic()
+     cfg = load_config()
++    skip_policy = current_skip_policy()
+     reset_results()
+ 
+     scope_ref = arg_flag_value("--changed", cfg.changed_ref)
+@@ -60,14 +67,16 @@ def cmd_check() -> None:
+         ui.section("Scope")
+         print(f"  changed vs {scope_ref} — {len(scoped_files)} file(s)")
+ 
++    maybe_print_skip_banner(skip_policy)
++
+     try:
+         ui.section("Quality Checks")
+-        cmd_fix(scoped_files)
+-        cmd_format(scoped_files)
++        run_unless_skipped("fix", lambda: cmd_fix(scoped_files), skip_policy)
++        run_unless_skipped("format", lambda: cmd_format(scoped_files), skip_policy)
+         ui.section("Parallel")
+         run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
+         ui.section("Advisory")
+-        _run_advisory(scope_ref, scoped_files)
++        _run_advisory(scope_ref, scoped_files, skip_policy)
+     finally:
+         print_suppressions_report()
+         _print_footer(time.monotonic() - start)
+@@ -111,14 +120,20 @@ def _maybe_append_acceptance(
+             parallel.append(acceptance_task)
+ 
+ 
+-def _run_advisory(scope_ref: str | None, scoped_files: list[str] | None) -> None:
++def _run_advisory(
++    scope_ref: str | None, scoped_files: list[str] | None, skip_policy: SkipPolicy
++) -> None:
+     if scope_ref is None:
+-        run(task_deps(), no_exit=True)
++        run_unless_skipped("deps", lambda: run(task_deps(), no_exit=True), skip_policy)
+     else:
+         _skip_under_changed("deps", "graph-wide by construction")
+-    cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None)
++    run_unless_skipped(
++        "crap",
++        lambda: cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None),
++        skip_policy,
++    )
+     if scope_ref is None:
+-        cmd_behavior_attribution_cached_advisory()
++        run_unless_skipped("attribution", cmd_behavior_attribution_cached_advisory, skip_policy)
+     else:
+         _skip_under_changed("attribution", "registry-wide")
+ 
+diff --git a/interlocks/stages/ci.py b/interlocks/stages/ci.py
+index 5e95e66..d997155 100644
+--- a/interlocks/stages/ci.py
++++ b/interlocks/stages/ci.py
+@@ -13,6 +13,12 @@ from interlocks.acceptance_status import (
+ )
+ from interlocks.config import InterlockConfig, MutationCIMode, load_config
+ from interlocks.runner import run_tasks
++from interlocks.skip import (
++    current_skip_policy,
++    maybe_print_skip_banner,
++    run_unless_skipped,
++    warn_skipped,
++)
+ from interlocks.tasks.acceptance import task_acceptance_with_attribution
+ from interlocks.tasks.arch import task_arch
+ from interlocks.tasks.audit import task_audit
+@@ -32,7 +38,9 @@ def cmd_ci() -> None:
+     coverage, CRAP, (optionally) mutation."""
+     start = time.monotonic()
+     cfg = load_config()
++    skip_policy = current_skip_policy()
+     ui.banner(cfg)
++    maybe_print_skip_banner(skip_policy)
+     ui.section("CI Checks")
+     tasks = [
+         task_format_check(),
+@@ -59,10 +67,19 @@ def cmd_ci() -> None:
+         run_tasks(tasks)
+         # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
+         ui.section("Gates")
+-        cmd_crap()
+-        cmd_behavior_attribution(refresh=False)
++        if skip_policy.enabled("coverage"):
++            warn_skipped("crap", "coverage was skipped")
++        else:
++            run_unless_skipped("crap", cmd_crap, skip_policy)
++        run_unless_skipped(
++            "attribution", lambda: cmd_behavior_attribution(refresh=False), skip_policy
++        )
+         if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
+-            cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental")
++            run_unless_skipped(
++                "mutation",
++                lambda: cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental"),
++                skip_policy,
++            )
+     except SystemExit as exc:
+         exit_code = int(exc.code) if isinstance(exc.code, int) else 1
+         raise
+diff --git a/interlocks/stages/nightly.py b/interlocks/stages/nightly.py
+index a765b7e..2c99b2e 100644
+--- a/interlocks/stages/nightly.py
++++ b/interlocks/stages/nightly.py
+@@ -6,6 +6,7 @@ import time
+ 
+ from interlocks import ui
+ from interlocks.config import load_config
++from interlocks.skip import current_skip_policy, maybe_print_skip_banner, run_unless_skipped
+ from interlocks.tasks.audit import cmd_audit
+ from interlocks.tasks.coverage import cmd_coverage
+ from interlocks.tasks.mutation import cmd_mutation
+@@ -15,10 +16,14 @@ def cmd_nightly() -> None:
+     """Long-running gates: coverage + audit + mutation (always blocking on score)."""
+     start = time.monotonic()
+     cfg = load_config()
++    skip_policy = current_skip_policy()
+     ui.banner(cfg)
++    maybe_print_skip_banner(skip_policy)
+     ui.section("Nightly")
+-    cmd_coverage()
+-    cmd_audit(allow_network_skip=True)
++    run_unless_skipped("coverage", cmd_coverage, skip_policy)
++    run_unless_skipped("audit", lambda: cmd_audit(allow_network_skip=True), skip_policy)
+     # Force blocking regardless of `enforce_mutation`: nightly exists to fail the run.
+-    cmd_mutation(min_score_default=cfg.mutation_min_score)
++    run_unless_skipped(
++        "mutation", lambda: cmd_mutation(min_score_default=cfg.mutation_min_score), skip_policy
++    )
+     ui.stage_footer(time.monotonic() - start)
+diff --git a/interlocks/stages/pre_commit.py b/interlocks/stages/pre_commit.py
+index 018102f..5057e77 100644
+--- a/interlocks/stages/pre_commit.py
++++ b/interlocks/stages/pre_commit.py
+@@ -8,6 +8,7 @@ from interlocks import ui
+ from interlocks.config import load_config
+ from interlocks.git import stage, staged_py_files
+ from interlocks.runner import run_tasks
++from interlocks.skip import current_skip_policy, maybe_print_skip_banner, run_unless_skipped
+ from interlocks.tasks.fix import cmd_fix
+ from interlocks.tasks.format import cmd_format
+ from interlocks.tasks.test import task_test
+@@ -23,11 +24,14 @@ def cmd_pre_commit() -> None:
+ 
+     start = time.monotonic()
+     cfg = load_config()
++    skip_policy = current_skip_policy()
+     ui.banner(cfg)
++    maybe_print_skip_banner(skip_policy)
+     ui.section("Pre-commit Checks")
+-    cmd_fix(files)
+-    cmd_format(files)
+-    stage(files)
++    run_unless_skipped("fix", lambda: cmd_fix(files), skip_policy)
++    run_unless_skipped("format", lambda: cmd_format(files), skip_policy)
++    if not (skip_policy.enabled("fix") and skip_policy.enabled("format")):
++        stage(files)
+ 
+     src_prefix = f"{cfg.src_dir_arg}/"
+     tasks = [task_typecheck()]
+diff --git a/interlocks/tasks/config.py b/interlocks/tasks/config.py
+index 74a7c89..cd93dfb 100644
+--- a/interlocks/tasks/config.py
++++ b/interlocks/tasks/config.py
+@@ -7,6 +7,8 @@ need a single command answering "what can I configure?".
+ 
+ from __future__ import annotations
+ 
++import json
++import sys
+ import time
+ from typing import TYPE_CHECKING
+ 
+@@ -16,8 +18,11 @@ from interlocks.config import (
+     CONFIG_KEYS,
+     find_project_root,
+     kv_with_source,
++    load_config,
+     load_optional_config,
+ )
++from interlocks.defaults_path import TOOL_CONFIG_SPECS, ToolConfigSource, tool_config_source
++from interlocks.runner import fail_skip
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Callable
+@@ -27,6 +32,12 @@ if TYPE_CHECKING:
+ 
+ def cmd_config() -> None:
+     start = time.monotonic()
++    args = _config_args()
++    if args and args[0] == "show":
++        _cmd_config_show(args[1:], start=start)
++        return
++    if args:
++        fail_skip(_config_usage())
+     project_root = find_project_root()
+     pyproject = project_root / "pyproject.toml"
+     cfg = load_optional_config()
+@@ -54,6 +65,89 @@ def cmd_config() -> None:
+     ui.command_footer(start)
+ 
+ 
++def _config_args() -> list[str]:
++    raw = sys.argv[1:]
++    try:
++        start = raw.index("config") + 1
++    except ValueError:
++        return []
++    return [arg for arg in raw[start:] if arg not in {"--quiet", "--verbose"}]
++
++
++def _config_usage() -> str:
++    tools = "|".join(TOOL_CONFIG_SPECS)
++    return f"usage: interlocks config [show <{tools}> [--bundled-only] [--json]]"
++
++
++def _cmd_config_show(args: list[str], *, start: float) -> None:
++    json_output = False
++    bundled_only = False
++    positional: list[str] = []
++    for arg in args:
++        if arg == "--json":
++            json_output = True
++        elif arg == "--bundled-only":
++            bundled_only = True
++        elif arg.startswith("-"):
++            fail_skip(_config_usage())
++        else:
++            positional.append(arg)
++    if len(positional) != 1 or positional[0] not in TOOL_CONFIG_SPECS:
++        fail_skip(_config_usage())
++
++    cfg = load_config()
++    source = tool_config_source(cfg, positional[0])
++    if json_output:
++        _print_tool_source_json(cfg, source, bundled_only=bundled_only)
++        return
++
++    ui.command_banner(f"config show {positional[0]}", cfg)
++    ui.section("Tool config")
++    _print_tool_source(cfg, source, bundled_only=bundled_only)
++    ui.command_footer(start)
++
++
++def _print_tool_source(
++    cfg: InterlockConfig, source: ToolConfigSource, *, bundled_only: bool
++) -> None:
++    rows = _tool_source_rows(cfg, source, bundled_only=bundled_only)
++    ui.kv_block(rows)
++    print()
++    if source.is_bundled or bundled_only:
++        print("  Bundled config is used only when the project has no native tool config.")
++    else:
++        print("  Project config replaces the bundled default; it does not extend it.")
++
++
++def _tool_source_rows(
++    cfg: InterlockConfig, source: ToolConfigSource, *, bundled_only: bool
++) -> list[tuple[str, str]]:
++    active_source = "bundled" if bundled_only else source.source
++    active_path = source.bundled_path if bundled_only else source.path
++    rows = [
++        ("tool", source.tool),
++        ("source", active_source),
++        ("path", cfg.relpath(active_path)),
++        ("bundled_path", cfg.relpath(source.bundled_path)),
++    ]
++    if source.is_bundled or bundled_only:
++        rows.append(("flag", f"{source.flag} {cfg.relpath(source.bundled_path)}"))
++    else:
++        rows.append(("flag", "(none; native project config detected)"))
++    return rows
++
++
++def _print_tool_source_json(
++    cfg: InterlockConfig, source: ToolConfigSource, *, bundled_only: bool
++) -> None:
++    print(
++        json.dumps(
++            dict(_tool_source_rows(cfg, source, bundled_only=bundled_only)),
++            sort_keys=True,
++        )
++    )
++
++
+ def _print_status(cfg: InterlockConfig | None, *, pyproject_present: bool) -> None:
+     rows: list[tuple[str, str]] = []
+     if pyproject_present and cfg is not None:
+@@ -93,6 +187,7 @@ _RESOLVED_RENDERERS: dict[str, Callable[[InterlockConfig], object]] = {
+         cfg.acceptance_runner if cfg.acceptance_runner is not None else "(auto)"
+     ),
+     "audit_severity_threshold": lambda cfg: cfg.audit_severity_threshold or "(none)",
++    "skip": lambda cfg: sorted(cfg.skip) if cfg.skip else "[]",
+     "ci_evidence_path": lambda cfg: cfg.relpath(cfg.ci_evidence_path),
+ }
+ 
+diff --git a/interlocks/tasks/evaluate.py b/interlocks/tasks/evaluate.py
+index 30d7c0d..b160b97 100644
+--- a/interlocks/tasks/evaluate.py
++++ b/interlocks/tasks/evaluate.py
+@@ -629,7 +629,7 @@ def _advisory_complexity_action(ci_wired: bool) -> tuple[int, str]:
+ 
+ 
+ def _complexity_ci_wired() -> bool:
+-    return _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap(")
++    return _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap")
+ 
+ 
+ def _has_complexity_thresholds(cfg: InterlockConfig) -> bool:
+diff --git a/interlocks/tasks/setup.py b/interlocks/tasks/setup.py
+index c3a81d6..5b8227d 100644
+--- a/interlocks/tasks/setup.py
++++ b/interlocks/tasks/setup.py
+@@ -4,13 +4,21 @@ from __future__ import annotations
+ 
+ import sys
+ import time
++from dataclasses import dataclass
+ from typing import TYPE_CHECKING
+ 
+ from interlocks import ui
+ from interlocks.config import find_project_root, load_optional_config
++from interlocks.defaults_path import path as defaults_path
+ from interlocks.hook_setup import install_hooks
+-from interlocks.runner import fail_skip
+-from interlocks.setup_state import SetupArtifactStatus, setup_artifact_statuses
++from interlocks.runner import fail_skip, ok
++from interlocks.setup_state import (
++    CI_ARTIFACTS,
++    SetupArtifactStatus,
++    ci_artifact_statuses,
++    ci_workflow_present,
++    setup_artifact_statuses,
++)
+ from interlocks.tasks.agents import install_agent_docs
+ from interlocks.tasks.setup_skill import install_skill
+ 
+@@ -20,24 +28,42 @@ if TYPE_CHECKING:
+ 
+ def cmd_setup() -> None:
+     start = time.monotonic()
+-    check_only = _parse_check_flag()
++    args = _parse_args()
+     project_root = find_project_root()
+ 
+     ui.command_banner("setup", load_optional_config())
+-    if check_only:
++    if args.ci == "github":
++        if args.check_only:
++            _cmd_setup_ci_check(project_root)
++        else:
++            _cmd_setup_ci_install(project_root)
++    elif args.check_only:
+         _cmd_setup_check(project_root)
+     else:
+         _cmd_setup_install(project_root)
+     ui.command_footer(start)
+ 
+ 
+-def _parse_check_flag() -> bool:
+-    args = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose"}]
+-    if not args:
+-        return False
+-    if args == ["--check"]:
+-        return True
+-    fail_skip("usage: interlocks setup [--check]")
++@dataclass(frozen=True)
++class _SetupArgs:
++    check_only: bool = False
++    ci: str | None = None
++
++
++def _parse_args() -> _SetupArgs:
++    raw = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose"}]
++    check_only = False
++    ci: str | None = None
++    for arg in raw:
++        if arg == "--check":
++            check_only = True
++        elif arg == "--ci=github":
++            ci = "github"
++        elif arg.startswith("--ci="):
++            fail_skip("unsupported CI setup target: " + arg.split("=", 1)[1])
++        else:
++            fail_skip("usage: interlocks setup [--check] [--ci=github]")
++    return _SetupArgs(check_only=check_only, ci=ci)
+ 
+ 
+ def _cmd_setup_install(project_root: Path) -> None:
+@@ -51,11 +77,52 @@ def _cmd_setup_install(project_root: Path) -> None:
+ 
+     ui.section("Next Steps")
+     ui.message_list([
+-        "Run `interlocks doctor` to inspect full project readiness.",
+         "Run `interlocks check` after edits.",
++        "Run `interlocks doctor` to diagnose readiness or failures.",
++        "Wire shared CI manually, or run `interlocks setup --ci=github` for GitHub Actions.",
+     ])
+ 
+ 
++def _cmd_setup_ci_install(project_root: Path) -> None:
++    ui.section("GitHub CI Setup")
++    workflow = project_root / ".github" / "workflows" / "interlocks.yml"
++    installed = ci_workflow_present(project_root)
++    if installed:
++        ok("GitHub workflow already invokes interlocks")
++    elif workflow.is_file():
++        fail_skip(
++            ".github/workflows/interlocks.yml already exists but does not invoke interlocks; "
++            "review it before rerunning setup"
++        )
++    else:
++        workflow.parent.mkdir(parents=True, exist_ok=True)
++        workflow.write_text(
++            defaults_path("github_workflow.yml").read_text(encoding="utf-8"), encoding="utf-8"
++        )
++        installed = True
++        ok("Installed GitHub Actions workflow at .github/workflows/interlocks.yml")
++    ui.section("Status")
++    _render_status([SetupArtifactStatus(CI_ARTIFACTS[0], installed)])
++    ui.section("Next Steps")
++    ui.message_list([
++        "Run `interlocks setup --ci=github --check` to verify CI wiring.",
++        "Commit the workflow file after reviewing the action pin and install-command policy.",
++    ])
++
++
++def _cmd_setup_ci_check(project_root: Path) -> None:
++    ui.section("GitHub CI Check")
++    statuses = ci_artifact_statuses(project_root)
++    _render_status(statuses)
++    if all(status.installed for status in statuses):
++        ui.section("Next Steps")
++        ui.message_list(["GitHub CI invokes interlocks."])
++        return
++    ui.section("Next Steps")
++    ui.message_list(["Run `interlocks setup --ci=github` to install a GitHub Actions workflow."])
++    sys.exit(1)
++
++
+ def _cmd_setup_check(project_root: Path) -> None:
+     ui.section("Setup Check")
+     statuses = setup_artifact_statuses(project_root)
+diff --git a/pyproject.toml b/pyproject.toml
+index 34411c8..fef0097 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -3,12 +3,14 @@ name = "interlocks"
+ version = "0.1.6"
+ description = "Zero-config Python quality interlocks: lint, format, typecheck, test, coverage, acceptance, audit, deps, architecture, complexity, CRAP, mutation — all behind `interlocks <task>` (or `il <task>`)."
+ readme = "README.md"
+-requires-python = ">=3.13"
++requires-python = ">=3.11"
+ license = {text = "MIT"}
+ authors = [{name = "0xjgv", email = "juan@mail.usestilgar.com"}]
+ keywords = ["quality", "linting", "testing", "coverage", "mutation-testing", "ci", "devex"]
+ classifiers = [
+     "Development Status :: 5 - Production/Stable",
++    "Programming Language :: Python :: 3.11",
++    "Programming Language :: Python :: 3.12",
+     "Programming Language :: Python :: 3.13",
+     "Intended Audience :: Developers",
+     "Topic :: Software Development :: Quality Assurance",
+@@ -83,6 +85,7 @@ pr_ci_runtime_budget_seconds = 600
+ # ── Ruff (lint + format) ────────────────────────────────────────────
+ 
+ [tool.pytest.ini_options]
++testpaths = ["tests"]
+ markers = [
+     "slow: marks tests that take multiple seconds (deselect with -m 'not slow')",
+     # Acceptance feature areas (pytest-bdd auto-promotes Gherkin tags to markers).
+@@ -98,7 +101,7 @@ markers = [
+ ]
+ 
+ [tool.ruff]
+-target-version = "py313"
++target-version = "py311"
+ line-length = 99
+ preview = true
+ # interlocks/defaults/ holds bundled data files (templates copied into user
+@@ -180,7 +183,7 @@ known-first-party = ["interlocks"]
+ # ── Basedpyright ───────────────────────────────────────────────────
+ 
+ [tool.basedpyright]
+-pythonVersion = "3.13"
++pythonVersion = "3.11"
+ typeCheckingMode = "standard"
+ reportUnusedCallResult = false
+ reportMissingTypeStubs = false
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 02903c7..646186b 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -27,7 +27,7 @@ _DEFAULT_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "{_DEFAULT_PROJECT_NAME}"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     """
+ )
+ 
+diff --git a/tests/stages/test_check.py b/tests/stages/test_check.py
+index a88f0d4..2f57f96 100644
+--- a/tests/stages/test_check.py
++++ b/tests/stages/test_check.py
+@@ -16,17 +16,17 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "tmpproj"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ 
+     [tool.ruff.lint]
+     select = ["E", "F", "I"]
+ 
+     [tool.basedpyright]
+-    pythonVersion = "3.13"
++    pythonVersion = "3.11"
+     typeCheckingMode = "standard"
+     reportMissingTypeStubs = false
+     """
+@@ -167,6 +167,36 @@ def test_check_in_process_dispatches_stages(
+     assert "Completed in" in out
+ 
+ 
++def test_check_skip_filters_direct_and_parallel_tasks(
++    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
++) -> None:
++    from interlocks.stages import check as check_mod
++
++    calls: list[object] = []
++    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--skip=fix,typecheck,deps,crap"])
++    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
++    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: calls.append("format"))
++    monkeypatch.setattr(
++        check_mod,
++        "run_tasks",
++        lambda tasks: calls.append(("run_tasks", [t.label for t in tasks])),
++    )
++    monkeypatch.setattr(check_mod, "run", lambda task, **kw: calls.append(("run", task.label, kw)))
++    monkeypatch.setattr(
++        check_mod, "cmd_crap_cached_advisory", lambda *_a, **_k: calls.append("cached-crap")
++    )
++    monkeypatch.setattr(check_mod, "print_suppressions_report", lambda: None)
++    monkeypatch.chdir(tmp_project)
++
++    check_mod.cmd_check()
++
++    assert calls == ["format", ("run_tasks", ["typecheck", "test"])]
++    out = capsys.readouterr().out
++    assert "skips active" in out
++    assert "fix: skipped by global skip policy" in out
++    assert "crap: skipped by global skip policy" in out
++
++
+ def test_check_in_process_runs_suppressions_on_failure(
+     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+diff --git a/tests/stages/test_ci.py b/tests/stages/test_ci.py
+index 2eb4742..e557f35 100644
+--- a/tests/stages/test_ci.py
++++ b/tests/stages/test_ci.py
+@@ -17,17 +17,17 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "tmpproj"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ 
+     [tool.ruff.lint]
+     select = ["E", "F", "I"]
+ 
+     [tool.basedpyright]
+-    pythonVersion = "3.13"
++    pythonVersion = "3.11"
+     typeCheckingMode = "standard"
+     reportMissingTypeStubs = false
+ 
+@@ -190,6 +190,46 @@ def test_ci_in_process_queues_all_tasks(
+     assert "CI Checks" in capsys.readouterr().out
+ 
+ 
++def test_ci_skip_coverage_warns_and_skips_crap(
++    monkeypatch: pytest.MonkeyPatch,
++    tmp_path: Path,
++    capsys: pytest.CaptureFixture[str],
++) -> None:
++    (tmp_path / "tests").mkdir()
++    (tmp_path / "pyproject.toml").write_text(
++        textwrap.dedent(
++            """\
++            [project]
++            name = "ci-skip"
++            version = "0.0.0"
++            """
++        ),
++        encoding="utf-8",
++    )
++    monkeypatch.chdir(tmp_path)
++    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--skip=coverage"])
++
++    from interlocks.stages import ci as ci_mod
++
++    sequential: list[str] = []
++    monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
++    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
++    monkeypatch.setattr(
++        ci_mod,
++        "cmd_behavior_attribution",
++        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
++    )
++    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
++
++    ci_mod.cmd_ci()
++
++    assert sequential == ["Attribution:False"]
++    out = capsys.readouterr().out
++    assert "skips active" in out
++    assert "crap: skipped by global skip policy" in out
++    assert "coverage was skipped" in out
++
++
+ def test_ci_writes_failing_runtime_evidence(
+     monkeypatch: pytest.MonkeyPatch,
+     tmp_path: Path,
+diff --git a/tests/stages/test_clean.py b/tests/stages/test_clean.py
+index 568fd42..2f7cd32 100644
+--- a/tests/stages/test_clean.py
++++ b/tests/stages/test_clean.py
+@@ -44,7 +44,7 @@ SENTINELS = ("src/app.py", "data/raw")
+ def tmp_project(tmp_path: Path) -> Path:
+     """Minimal project with pre-seeded cache/build artifacts."""
+     (tmp_path / "pyproject.toml").write_text(
+-        '[project]\nname = "tmpproj"\nversion = "0.0.1"\nrequires-python = ">=3.13"\n',
++        '[project]\nname = "tmpproj"\nversion = "0.0.1"\nrequires-python = ">=3.11"\n',
+         encoding="utf-8",
+     )
+     for d in ROOT_DIR_ARTIFACTS:
+diff --git a/tests/stages/test_post_edit.py b/tests/stages/test_post_edit.py
+index df9b8d0..31ed157 100644
+--- a/tests/stages/test_post_edit.py
++++ b/tests/stages/test_post_edit.py
+@@ -12,10 +12,10 @@ PYPROJECT = """\
+ [project]
+ name = "tmp-proj"
+ version = "0.0.0"
+-requires-python = ">=3.13"
++requires-python = ">=3.11"
+ 
+ [tool.ruff]
+-target-version = "py313"
++target-version = "py311"
+ line-length = 99
+ 
+ [tool.interlocks]
+diff --git a/tests/stages/test_pre_commit.py b/tests/stages/test_pre_commit.py
+index 8e18dbb..532190d 100644
+--- a/tests/stages/test_pre_commit.py
++++ b/tests/stages/test_pre_commit.py
+@@ -12,14 +12,14 @@ PYPROJECT = """\
+ [project]
+ name = "tmp-proj"
+ version = "0.0.0"
+-requires-python = ">=3.13"
++requires-python = ">=3.11"
+ 
+ [tool.ruff]
+-target-version = "py313"
++target-version = "py311"
+ line-length = 99
+ 
+ [tool.basedpyright]
+-pythonVersion = "3.13"
++pythonVersion = "3.11"
+ typeCheckingMode = "standard"
+ """
+ 
+@@ -123,3 +123,77 @@ def test_pre_commit_in_process_dispatches(
+         ("stage", staged),
+         ("run_tasks", expected_task_descs),
+     ]
++
++
++@pytest.mark.parametrize(
++    ("skip", "expected_calls", "expected_warning"),
++    [
++        (
++            "fix",
++            ["format", "stage", "run_tasks"],
++            "fix: skipped by global skip policy",
++        ),
++        (
++            "format",
++            ["fix", "stage", "run_tasks"],
++            "format: skipped by global skip policy",
++        ),
++        (
++            "fix,format",
++            ["run_tasks"],
++            "fix: skipped by global skip policy",
++        ),
++    ],
++    ids=["skip-fix", "skip-format", "skip-both-mutators"],
++)
++def test_pre_commit_skip_controls_mutators_and_restaging(
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++    skip: str,
++    expected_calls: list[str],
++    expected_warning: str,
++) -> None:
++    calls = _pre_commit_calls(monkeypatch, ["interlocks/mod.py"], skip=skip)
++
++    from interlocks.stages import pre_commit as pre_commit_mod
++
++    pre_commit_mod.cmd_pre_commit()
++
++    assert [call[0] for call in calls] == expected_calls
++    assert expected_warning in capsys.readouterr().out
++
++
++def test_pre_commit_delegates_parallel_task_skips_to_runner(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    calls = _pre_commit_calls(monkeypatch, ["interlocks/mod.py"], skip="typecheck,test")
++
++    from interlocks.stages import pre_commit as pre_commit_mod
++
++    pre_commit_mod.cmd_pre_commit()
++
++    assert calls[-1] == ("run_tasks", ["Type check", "Run tests"])
++
++
++def _pre_commit_calls(
++    monkeypatch: pytest.MonkeyPatch, staged: list[str], *, skip: str | None = None
++) -> list[tuple[str, object]]:
++    from interlocks.stages import pre_commit as pre_commit_mod
++
++    calls: list[tuple[str, object]] = []
++    argv = ["interlocks", "pre-commit"]
++    if skip is not None:
++        argv.append(f"--skip={skip}")
++    monkeypatch.setattr(sys, "argv", argv)
++    monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
++    monkeypatch.setattr(pre_commit_mod, "cmd_fix", lambda files: calls.append(("fix", files)))
++    monkeypatch.setattr(
++        pre_commit_mod, "cmd_format", lambda files: calls.append(("format", files))
++    )
++    monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
++    monkeypatch.setattr(
++        pre_commit_mod,
++        "run_tasks",
++        lambda tasks: calls.append(("run_tasks", [task.description for task in tasks])),
++    )
++    return calls
+diff --git a/tests/stages/test_setup_hooks_integration.py b/tests/stages/test_setup_hooks_integration.py
+index a5df531..d4402a6 100644
+--- a/tests/stages/test_setup_hooks_integration.py
++++ b/tests/stages/test_setup_hooks_integration.py
+@@ -16,10 +16,10 @@ PYPROJECT = """\
+ [project]
+ name = "tmp-proj"
+ version = "0.0.0"
+-requires-python = ">=3.13"
++requires-python = ">=3.11"
+ 
+ [tool.ruff]
+-target-version = "py313"
++target-version = "py311"
+ """
+ 
+ 
+diff --git a/tests/step_defs/conftest.py b/tests/step_defs/conftest.py
+index 213d8c6..158b3d3 100644
+--- a/tests/step_defs/conftest.py
++++ b/tests/step_defs/conftest.py
+@@ -15,20 +15,20 @@ _TMP_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "tmp"
+     version = "0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [dependency-groups]
+     dev = ["pytest>=9"]
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ 
+     [tool.ruff.lint]
+     select = ["E", "F", "I"]
+ 
+     [tool.basedpyright]
+-    pythonVersion = "3.13"
++    pythonVersion = "3.11"
+     typeCheckingMode = "standard"
+     reportMissingTypeStubs = false
+ 
+@@ -59,17 +59,17 @@ _FLAT_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "tmp"
+     version = "0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ 
+     [tool.ruff.lint]
+     select = ["E", "F", "I"]
+ 
+     [tool.basedpyright]
+-    pythonVersion = "3.13"
++    pythonVersion = "3.11"
+     typeCheckingMode = "standard"
+     reportMissingTypeStubs = false
+ 
+diff --git a/tests/step_defs/test_interlock_meta.py b/tests/step_defs/test_interlock_meta.py
+index 3f288e4..ae69050 100644
+--- a/tests/step_defs/test_interlock_meta.py
++++ b/tests/step_defs/test_interlock_meta.py
+@@ -27,7 +27,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "meta-probe"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     """
+ )
+ 
+diff --git a/tests/step_defs/test_interlock_tasks.py b/tests/step_defs/test_interlock_tasks.py
+index 3583059..83d68b3 100644
+--- a/tests/step_defs/test_interlock_tasks.py
++++ b/tests/step_defs/test_interlock_tasks.py
+@@ -33,7 +33,7 @@ _AUDIT_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "audit-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     dependencies = []
+ 
+     [build-system]
+@@ -47,7 +47,7 @@ _DEPS_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "deps-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     dependencies = ["requests>=2"]
+ 
+     [build-system]
+@@ -61,7 +61,7 @@ _ARCH_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "arch-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     dependencies = []
+ 
+     [build-system]
+@@ -79,7 +79,7 @@ _COV_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "cov-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["mypkg"]
+@@ -95,7 +95,7 @@ _CRAP_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "crap-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["mypkg"]
+@@ -111,7 +111,7 @@ _MUTATION_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "mut-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.interlocks]
+     mutation_max_runtime = 5
+@@ -134,7 +134,7 @@ _MUTATION_INCREMENTAL_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "mut-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.interlocks]
+     mutation_max_runtime = 5
+@@ -240,7 +240,7 @@ _REQUIRE_ACCEPTANCE_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "req-acc-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.interlocks]
+     require_acceptance = true
+@@ -319,7 +319,7 @@ _BEHAVIOR_ATTRIBUTION_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "interlocks"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.interlocks]
+     src_dir = "pkg"
+diff --git a/tests/tasks/test_acceptance.py b/tests/tasks/test_acceptance.py
+index da5a906..25f5141 100644
+--- a/tests/tasks/test_acceptance.py
++++ b/tests/tasks/test_acceptance.py
+@@ -14,7 +14,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "acc-probe"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     """
+ )
+ 
+diff --git a/tests/tasks/test_arch.py b/tests/tasks/test_arch.py
+index 8d3fe1a..383ccaa 100644
+--- a/tests/tasks/test_arch.py
++++ b/tests/tasks/test_arch.py
+@@ -14,7 +14,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "arch-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     dependencies = []
+ 
+     [build-system]
+diff --git a/tests/tasks/test_audit.py b/tests/tasks/test_audit.py
+index 306ebbd..79a1bc6 100644
+--- a/tests/tasks/test_audit.py
++++ b/tests/tasks/test_audit.py
+@@ -18,7 +18,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "audit-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     dependencies = []
+ 
+     [build-system]
+diff --git a/tests/tasks/test_coverage.py b/tests/tasks/test_coverage.py
+index 86200fe..69585dc 100644
+--- a/tests/tasks/test_coverage.py
++++ b/tests/tasks/test_coverage.py
+@@ -31,7 +31,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "cov-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["mypkg"]
+@@ -95,7 +95,7 @@ _BARE_PYPROJECT = textwrap.dedent("""\
+     [project]
+     name = "bare"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ """)
+ 
+ 
+diff --git a/tests/tasks/test_crap.py b/tests/tasks/test_crap.py
+index 4f73b66..009c2a1 100644
+--- a/tests/tasks/test_crap.py
++++ b/tests/tasks/test_crap.py
+@@ -32,7 +32,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "crap-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["interlocks"]
+diff --git a/tests/tasks/test_deps.py b/tests/tasks/test_deps.py
+index da1189b..e8d3690 100644
+--- a/tests/tasks/test_deps.py
++++ b/tests/tasks/test_deps.py
+@@ -14,7 +14,7 @@ _PYPROJECT_TEMPLATE = textwrap.dedent(
+     [project]
+     name = "deps-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     dependencies = [{deps}]
+ 
+     [build-system]
+diff --git a/tests/tasks/test_doctor.py b/tests/tasks/test_doctor.py
+index 22487ed..8e49a38 100644
+--- a/tests/tasks/test_doctor.py
++++ b/tests/tasks/test_doctor.py
+@@ -59,7 +59,7 @@ def test_doctor_in_process_reports_sections(
+     (tmp_path / "probe" / "__init__.py").write_text("", encoding="utf-8")
+     (tmp_path / "tests").mkdir()
+     (tmp_path / "pyproject.toml").write_text(
+-        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.13"\n',
++        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
+         encoding="utf-8",
+     )
+     monkeypatch.chdir(tmp_path)
+@@ -199,7 +199,7 @@ def _write_probe_project(tmp_path: Path, *, tool_interlock: str = "") -> None:
+     (tmp_path / "probe").mkdir()
+     (tmp_path / "probe" / "__init__.py").write_text("", encoding="utf-8")
+     (tmp_path / "tests").mkdir()
+-    body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.13"\n'
++    body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
+     if tool_interlock:
+         body += "\n[tool.interlocks]\n" + tool_interlock.strip() + "\n"
+     (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+diff --git a/tests/tasks/test_evaluate.py b/tests/tasks/test_evaluate.py
+index 3bd8d16..726e2e3 100644
+--- a/tests/tasks/test_evaluate.py
++++ b/tests/tasks/test_evaluate.py
+@@ -30,7 +30,7 @@ def _pyproject(
+     [project]
+     name = "pkg"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [dependency-groups]
+     dev = ["pytest>=9", "pytest-bdd>=8"]
+diff --git a/tests/tasks/test_fix.py b/tests/tasks/test_fix.py
+index bee790d..38e4bb5 100644
+--- a/tests/tasks/test_fix.py
++++ b/tests/tasks/test_fix.py
+@@ -13,10 +13,10 @@ PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "sample"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ 
+     [tool.ruff.lint]
+diff --git a/tests/tasks/test_format.py b/tests/tasks/test_format.py
+index 1f24308..9997a0d 100644
+--- a/tests/tasks/test_format.py
++++ b/tests/tasks/test_format.py
+@@ -13,10 +13,10 @@ PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "sample"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ """)
+ 
+diff --git a/tests/tasks/test_format_check.py b/tests/tasks/test_format_check.py
+index be9cc44..01b0b2e 100644
+--- a/tests/tasks/test_format_check.py
++++ b/tests/tasks/test_format_check.py
+@@ -15,10 +15,10 @@ PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "sample"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ """)
+ 
+diff --git a/tests/tasks/test_init.py b/tests/tasks/test_init.py
+index b90272e..3801f66 100644
+--- a/tests/tasks/test_init.py
++++ b/tests/tasks/test_init.py
+@@ -26,7 +26,7 @@ def test_init_scaffolds_greenfield_project(tmp_path: Path) -> None:
+     assert pyproject.is_file()
+     body = pyproject.read_text(encoding="utf-8")
+     assert f'name = "{tmp_path.name}"' in body
+-    assert 'requires-python = ">=3.13"' in body
++    assert 'requires-python = ">=3.11"' in body
+     assert "dependencies = []" in body
+     assert 'dev = ["pytest>=8"]' in body
+     assert "[tool.interlocks]" in body
+diff --git a/tests/tasks/test_init_acceptance.py b/tests/tasks/test_init_acceptance.py
+index 4e31feb..114b5e2 100644
+--- a/tests/tasks/test_init_acceptance.py
++++ b/tests/tasks/test_init_acceptance.py
+@@ -14,7 +14,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "init-probe"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     """
+ )
+ 
+diff --git a/tests/tasks/test_lint.py b/tests/tasks/test_lint.py
+index 810b0b4..bd728ff 100644
+--- a/tests/tasks/test_lint.py
++++ b/tests/tasks/test_lint.py
+@@ -13,10 +13,10 @@ PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "sample"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.ruff]
+-    target-version = "py313"
++    target-version = "py311"
+     line-length = 99
+ 
+     [tool.ruff.lint]
+@@ -79,7 +79,7 @@ _BARE_PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "bare"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ """)
+ 
+ 
+diff --git a/tests/tasks/test_mutation.py b/tests/tasks/test_mutation.py
+index eaaedcc..e8cee57 100644
+--- a/tests/tasks/test_mutation.py
++++ b/tests/tasks/test_mutation.py
+@@ -54,7 +54,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "mut-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["mypkg"]
+diff --git a/tests/tasks/test_setup.py b/tests/tasks/test_setup.py
+index 6fbae63..cd3742e 100644
+--- a/tests/tasks/test_setup.py
++++ b/tests/tasks/test_setup.py
+@@ -12,7 +12,7 @@ import pytest
+ 
+ def _write_pyproject(project: Path) -> None:
+     (project / "pyproject.toml").write_text(
+-        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.13"\n',
++        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
+         encoding="utf-8",
+     )
+ 
+@@ -30,6 +30,17 @@ def _run_setup(monkeypatch: pytest.MonkeyPatch, project: Path, *args: str) -> No
+         clear_cache()
+ 
+ 
++def test_setup_recommends_check_before_doctor(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
++) -> None:
++    _write_pyproject(tmp_path)
++
++    _run_setup(monkeypatch, tmp_path)
++
++    out = capsys.readouterr().out
++    assert out.index("Run `interlocks check` after edits.") < out.index("Run `interlocks doctor`")
++
++
+ def test_setup_check_fails_when_artifacts_missing(
+     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+ ) -> None:
+@@ -90,6 +101,53 @@ def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
+     assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8") == first_claude
+ 
+ 
++def test_setup_ci_check_reports_missing_when_no_workflow(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
++) -> None:
++    _write_pyproject(tmp_path)
++
++    with pytest.raises(SystemExit) as exc:
++        _run_setup(monkeypatch, tmp_path, "--ci=github", "--check")
++
++    out = capsys.readouterr().out
++    assert exc.value.code == 1
++    assert "github ci" in out
++    assert "missing/stale" in out
++
++
++def test_setup_ci_installs_github_workflow(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
++) -> None:
++    _write_pyproject(tmp_path)
++
++    _run_setup(monkeypatch, tmp_path, "--ci=github")
++
++    workflow = tmp_path / ".github" / "workflows" / "interlocks.yml"
++    body = workflow.read_text(encoding="utf-8")
++    assert "uses: 0xjgv/interlocks@v1" in body
++    assert "Installed GitHub Actions workflow" in capsys.readouterr().out
++
++    first = workflow.read_text(encoding="utf-8")
++    _run_setup(monkeypatch, tmp_path, "--ci=github")
++    assert workflow.read_text(encoding="utf-8") == first
++
++    capsys.readouterr()
++    _run_setup(monkeypatch, tmp_path, "--ci=github", "--check")
++    assert "missing/stale" not in capsys.readouterr().out
++
++
++def test_setup_plain_check_does_not_require_ci(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
++) -> None:
++    _write_pyproject(tmp_path)
++    _run_setup(monkeypatch, tmp_path)
++    capsys.readouterr()
++
++    _run_setup(monkeypatch, tmp_path, "--check")
++
++    assert "missing/stale" not in capsys.readouterr().out
++
++
+ def test_setup_check_succeeds_after_setup(
+     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+ ) -> None:
+diff --git a/tests/tasks/test_stats.py b/tests/tasks/test_stats.py
+index 5a8f1b8..6537c15 100644
+--- a/tests/tasks/test_stats.py
++++ b/tests/tasks/test_stats.py
+@@ -338,7 +338,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "stats-probe"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["mypkg"]
+diff --git a/tests/tasks/test_test.py b/tests/tasks/test_test.py
+index ccb9950..99ac9eb 100644
+--- a/tests/tasks/test_test.py
++++ b/tests/tasks/test_test.py
+@@ -13,7 +13,7 @@ PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "sample"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ """)
+ 
+ PASSING = textwrap.dedent("""
+diff --git a/tests/tasks/test_typecheck.py b/tests/tasks/test_typecheck.py
+index a15b19e..986889f 100644
+--- a/tests/tasks/test_typecheck.py
++++ b/tests/tasks/test_typecheck.py
+@@ -21,10 +21,10 @@ PYPROJECT = textwrap.dedent("""
+     [project]
+     name = "sample"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.basedpyright]
+-    pythonVersion = "3.13"
++    pythonVersion = "3.11"
+     typeCheckingMode = "standard"
+     reportMissingTypeStubs = false
+ """)
+@@ -76,7 +76,7 @@ _BARE_PYPROJECT = textwrap.dedent("""\
+     [project]
+     name = "bare"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ """)
+ 
+ 
+@@ -281,7 +281,7 @@ def test_typecheck_resolves_imports_from_target_venv(
+             [project]
+             name = "target-dep"
+             version = "0.0.0"
+-            requires-python = ">=3.13"
++            requires-python = ">=3.11"
+             """
+         ),
+         encoding="utf-8",
+diff --git a/tests/test_behavior_attribution_standalone.py b/tests/test_behavior_attribution_standalone.py
+index 1627639..c7b15ba 100644
+--- a/tests/test_behavior_attribution_standalone.py
++++ b/tests/test_behavior_attribution_standalone.py
+@@ -29,7 +29,7 @@ def _write_tiny_attribution_project(root: Path) -> None:
+             [project]
+             name = "interlocks"
+             version = "0.0.0"
+-            requires-python = ">=3.13"
++            requires-python = ">=3.11"
+ 
+             [tool.interlocks]
+             src_dir = "pkg"
+diff --git a/tests/test_behavior_coverage_zeroconfig.py b/tests/test_behavior_coverage_zeroconfig.py
+index cc8c811..82f5c5b 100644
+--- a/tests/test_behavior_coverage_zeroconfig.py
++++ b/tests/test_behavior_coverage_zeroconfig.py
+@@ -19,7 +19,7 @@ _DOWNSTREAM_PYPROJECT = textwrap.dedent(
+     [project]
+     name = "downstream-app"
+     version = "0.0.0"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+     """
+ )
+ 
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 8a5679f..4911d79 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import dataclasses
++import json
+ import re
+ import sys
+ import textwrap
+@@ -336,6 +337,18 @@ def test_main_command_help_does_not_dispatch_task(
+     assert "[coverage]" in out
+ 
+ 
++def test_main_rejects_unknown_skip_label(
++    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
++) -> None:
++    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--skip=nope"])
++
++    with pytest.raises(SystemExit) as exc:
++        main()
++
++    assert exc.value.code == 2
++    assert "unknown skip label" in capsys.readouterr().err
++
++
+ def test_main_dispatches_alias_to_canonical(
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+@@ -450,6 +463,54 @@ def test_cmd_config_no_pyproject(
+     assert re.search(r"coverage_min\s+80 \(bundled-default\)", out)
+ 
+ 
++def test_cmd_config_show_reports_bundled_tool_config(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++    clean_config_cache: None,
++) -> None:
++    _setup_minimal_project(tmp_path, monkeypatch)
++    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "ruff"])
++
++    cmd_config()
++
++    out = capsys.readouterr().out
++    assert "command=config show ruff" in out
++    assert re.search(r"source\s+bundled", out)
++    assert "Bundled config is used only when the project has no native tool config." in out
++
++
++def test_cmd_config_show_reports_project_tool_config(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++    clean_config_cache: None,
++) -> None:
++    _setup_minimal_project(tmp_path, monkeypatch)
++    (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
++    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "ruff"])
++
++    cmd_config()
++
++    out = capsys.readouterr().out
++    assert re.search(r"source\s+project: ruff.toml", out)
++    assert "Project config replaces the bundled default; it does not extend it." in out
++
++
++def test_cmd_config_show_json_is_parseable(
++    tmp_path: Path,
++    monkeypatch: pytest.MonkeyPatch,
++    capsys: pytest.CaptureFixture[str],
++    clean_config_cache: None,
++) -> None:
++    _setup_minimal_project(tmp_path, monkeypatch)
++    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "coverage", "--json"])
++
++    cmd_config()
++
++    assert json.loads(capsys.readouterr().out)["tool"] == "coverage"
++
++
+ def test_cmd_config_falls_back_when_pyproject_malformed(
+     tmp_path: Path,
+     monkeypatch: pytest.MonkeyPatch,
+diff --git a/tests/test_config.py b/tests/test_config.py
+index 1d92381..434c550 100644
+--- a/tests/test_config.py
++++ b/tests/test_config.py
+@@ -82,6 +82,7 @@ def test_load_config_uv_lock_flips_invoker(tmp_project: Path) -> None:
+ 
+ def test_threshold_defaults_when_absent(tmp_project: Path) -> None:
+     cfg = load_config()
++    assert cfg.skip == frozenset()
+     assert cfg.coverage_min == 80
+     assert cfg.crap_max == 30.0
+     assert cfg.complexity_max_ccn == 15
+@@ -136,6 +137,52 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
+     assert cfg.enforce_mutation is True
+ 
+ 
++def test_skip_project_policy_resolves_labels(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    (tmp_path / "tests").mkdir()
++    _write(
++        tmp_path / "pyproject.toml",
++        """
++        [project]
++        name = "skip-policy"
++        version = "0.0.0"
++
++        [tool.interlocks]
++        skip = ["lint", "typecheck", "lint"]
++        """,
++    )
++    monkeypatch.chdir(tmp_path)
++
++    cfg = load_config()
++
++    assert cfg.skip == frozenset({"lint", "typecheck"})
++    assert cfg.value_sources["skip"] == "project-configured"
++
++
++def test_skip_project_policy_rejects_unknown_label(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    (tmp_path / "tests").mkdir()
++    _write(
++        tmp_path / "pyproject.toml",
++        """
++        [project]
++        name = "skip-bad"
++        version = "0.0.0"
++
++        [tool.interlocks]
++        skip = ["nope"]
++        """,
++    )
++    monkeypatch.chdir(tmp_path)
++
++    from interlocks.config import InterlockConfigError
++
++    with pytest.raises(InterlockConfigError, match=r"unknown .*skip label"):
++        load_config()
++
++
+ def test_invalid_threshold_types_fall_back_to_defaults(
+     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+diff --git a/tests/test_crap_blocking.py b/tests/test_crap_blocking.py
+index 2fb29c7..125460b 100644
+--- a/tests/test_crap_blocking.py
++++ b/tests/test_crap_blocking.py
+@@ -35,7 +35,7 @@ _PYPROJECT_COV = textwrap.dedent(
+     [project]
+     name = "crap-enforce"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["interlocks"]
+diff --git a/tests/test_defaults_path.py b/tests/test_defaults_path.py
+index 01921d4..e5bebf3 100644
+--- a/tests/test_defaults_path.py
++++ b/tests/test_defaults_path.py
+@@ -8,7 +8,7 @@ from pathlib import Path
+ import pytest
+ 
+ from interlocks.config import load_config
+-from interlocks.defaults_path import has_project_config, path
++from interlocks.defaults_path import has_project_config, path, tool_config_source
+ 
+ 
+ def _write(file_path: Path, text: str) -> None:
+@@ -68,6 +68,35 @@ def test_has_project_config_returns_false_when_absent(
+     assert has_project_config(cfg, "ruff", sidecars=("ruff.toml",)) is False
+ 
+ 
++def test_tool_config_source_reports_bundled_when_project_config_absent(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    _write(tmp_path / "pyproject.toml", "[project]\nname='probe'\nversion='0.0.0'\n")
++    monkeypatch.chdir(tmp_path)
++
++    cfg = load_config()
++    source = tool_config_source(cfg, "ruff")
++
++    assert source.source == "bundled"
++    assert source.path.name == "ruff.toml"
++    assert source.is_bundled is True
++
++
++def test_tool_config_source_reports_project_sidecar(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    _write(tmp_path / "pyproject.toml", "[project]\nname='probe'\nversion='0.0.0'\n")
++    (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
++    monkeypatch.chdir(tmp_path)
++
++    cfg = load_config()
++    source = tool_config_source(cfg, "ruff")
++
++    assert source.source == "project: ruff.toml"
++    assert source.path == tmp_path / "ruff.toml"
++    assert source.is_bundled is False
++
++
+ def test_has_project_config_ignores_other_tool_sections(
+     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+ ) -> None:
+diff --git a/tests/test_mutation_blocking.py b/tests/test_mutation_blocking.py
+index 43c7223..5fbdfdc 100644
+--- a/tests/test_mutation_blocking.py
++++ b/tests/test_mutation_blocking.py
+@@ -32,7 +32,7 @@ _PYPROJECT = textwrap.dedent(
+     [project]
+     name = "mut-enforce"
+     version = "0.0.1"
+-    requires-python = ">=3.13"
++    requires-python = ">=3.11"
+ 
+     [tool.coverage.run]
+     source = ["mypkg"]
+diff --git a/uv.lock b/uv.lock
+index 4e33f5c..14af7b6 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -1,6 +1,6 @@
+ version = 1
+ revision = 3
+-requires-python = ">=3.13"
++requires-python = ">=3.11"
+ resolution-markers = [
+     "python_full_version >= '3.14'",
+     "python_full_version < '3.14'",
