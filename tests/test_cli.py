@@ -480,6 +480,26 @@ def test_cmd_config_show_reports_bundled_tool_config(
     assert "Bundled config is used only when the project has no native tool config." in out
 
 
+def test_cmd_config_show_basedpyright_explains_adoption_baseline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "basedpyright"])
+
+    cmd_config()
+
+    out = capsys.readouterr().out
+    assert re.search(r"source\s+bundled", out)
+    assert "adoption baseline" in out
+    assert "fewer diagnostics than raw basedpyright" in out
+    assert "[tool.basedpyright]" in out
+    assert "pyrightconfig.json" in out
+    assert "pyrightconfig.toml" in out
+
+
 def test_cmd_config_show_reports_project_tool_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from types import FrameType
 
 _MUTMUT_HEADER = re.compile(r"^\[tool\.mutmut\]\s*$", re.MULTILINE)
@@ -95,7 +95,9 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 
 @contextmanager
-def patched_mutmut_paths(pyproject_path: Path, new_paths: list[str]) -> Iterator[None]:
+def patched_mutmut_paths(
+    pyproject_path: Path, new_paths: list[str]
+) -> Generator[None, None, None]:
     """Temporarily set ``[tool.mutmut].paths_to_mutate`` to ``new_paths``.
 
     Reads the file once into memory, writes the patched bytes via atomic rename,

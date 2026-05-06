@@ -117,6 +117,22 @@ def _print_tool_source(
         print("  Bundled config is used only when the project has no native tool config.")
     else:
         print("  Project config replaces the bundled default; it does not extend it.")
+    note = _tool_specific_note(source, bundled_only=bundled_only)
+    if note is not None:
+        print(f"  {note}")
+
+
+def _tool_specific_note(source: ToolConfigSource, *, bundled_only: bool) -> str | None:
+    if source.tool == "basedpyright" and (source.is_bundled or bundled_only):
+        spec = TOOL_CONFIG_SPECS[source.tool]
+        native_config_options = [f"[tool.{spec.section}]", *spec.sidecars]
+        native_config_list = ", ".join(native_config_options[:-1])
+        return (
+            "Bundled basedpyright config is an adoption baseline and may report fewer "
+            f"diagnostics than raw basedpyright. Add {native_config_list}, "
+            f"or {native_config_options[-1]} to own the policy."
+        )
+    return None
 
 
 def _tool_source_rows(

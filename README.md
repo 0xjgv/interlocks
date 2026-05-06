@@ -238,6 +238,8 @@ Run `interlocks presets set baseline` to set a project preset from the CLI.
 
 When a project has no native config, interlocks supplies bundled defaults for ruff, basedpyright, coverage.py, and import-linter. Those defaults are adoption defaults, not hidden project policy. Inspect them with `interlocks config show ruff`, `interlocks config show basedpyright`, `interlocks config show coverage`, or `interlocks config show import-linter`.
 
+For basedpyright, the bundled config is intentionally an adoption baseline. In bare projects, `il typecheck` passes `--project <bundled pyrightconfig.json>`, so it may report fewer diagnostics than raw `basedpyright` with no config. Add `[tool.basedpyright]`, `pyrightconfig.json`, or `pyrightconfig.toml` when you want project-owned basedpyright policy. The bundled baseline treats deprecated API usage as an error.
+
 ### Do bundled defaults extend my project config?
 
 No. A project-owned `[tool.ruff]`, `ruff.toml`, `[tool.basedpyright]`, `pyrightconfig.json`, `[tool.coverage]`, `.coveragerc`, `[tool.importlinter]`, or `.importlinter` replaces the bundled default for that tool. `config show` reports the active source.
@@ -365,6 +367,8 @@ When the target project has no config for a given tool, interlocks injects its b
 | `skill/SKILL.md` | `setup`, `setup-skill` | byte match at `.claude/skills/interlocks/SKILL.md` | direct copy |
 | `scaffold_pyproject.toml` | `init` | none | read plus `{project_name}` substitution |
 | `scaffold_test_example.py` | `init` | none | direct copy |
+
+The bundled `pyrightconfig.json` uses standard mode, suppresses selected noisy diagnostics for first adoption, and sets `reportDeprecated = "error"`.
 
 `interlocks deps` and `interlocks mutation` ship no bundled fallback: deptry applies its built-ins, and mutmut reads the project's `pyproject.toml`.
 

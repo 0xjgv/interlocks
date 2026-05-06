@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -25,6 +26,22 @@ def test_path_resolves_bundled_init() -> None:
 def test_path_missing_resource_is_not_a_file() -> None:
     """Unknown names don't raise — they just fail the is_file check."""
     assert not path("does-not-exist.toml").is_file()
+
+
+def test_bundled_pyrightconfig_preserves_adoption_policy() -> None:
+    config = json.loads(path("pyrightconfig.json").read_text(encoding="utf-8"))
+
+    assert config["typeCheckingMode"] == "standard"
+    assert config["reportDeprecated"] == "error"
+    for diagnostic in (
+        "reportUnusedCallResult",
+        "reportMissingTypeStubs",
+        "reportUnknownVariableType",
+        "reportUnknownMemberType",
+        "reportUnknownArgumentType",
+        "reportAny",
+    ):
+        assert config[diagnostic] is False
 
 
 # ─────────────── has_project_config ─────────────────────────────────
