@@ -7,10 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-05-06
+
+### Added
+
+- Global gate skipping via `--skip=...`, `INTERLOCKS_SKIP`, and
+  `[tool.interlocks] skip`, with validation for unknown labels and visible
+  skipped-gate warnings.
+- `interlocks config show ruff|basedpyright|coverage|import-linter` to inspect
+  whether each tool is using bundled defaults or project-owned native config.
+- `interlocks presets` and `interlocks presets set <preset>` for discovering and
+  applying adoption presets from the CLI.
+- `interlocks setup --ci=github` and `setup --ci=github --check` for explicit
+  GitHub Actions workflow installation and read-only CI wiring checks.
+
+### Changed
+
+- Interlocks now installs on Python 3.11+ again, with bundled defaults targeting
+  Python 3.11 syntax for wider adoption.
+- Bundled GitHub Actions wiring now uses current Node 24-compatible action
+  versions.
+
 ### Fixed
 
 - `interlocks typecheck` now resolves imports from a non-uv target project's
   in-tree `.venv` when Interlocks is run from an isolated install such as `uvx`.
+- `interlocks check --changed` now works in projects without `pyproject.toml`.
+- `interlocks check --changed` now includes changed Python files in flat-layout
+  projects.
+- Bundled basedpyright defaults now report deprecated API usage as an error.
 
 ## [0.1.6] - 2026-05-04
 

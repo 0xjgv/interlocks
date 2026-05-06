@@ -35,7 +35,7 @@ Do not expand the feature matrix yet. Package a narrow adoption loop:
 
 1. Start without installation: `uvx --from interlocks il doctor`.
 2. `uvx --from interlocks il check` proves local value with the latest release.
-3. Shared automation uses pinned or range-pinned specs: `uvx --from 'interlocks>=0.1,<0.2' il ci`, exact `uvx --from interlocks==0.1.5 il ci`, or the GitHub Action `install-command` override.
+3. Shared automation uses pinned or range-pinned specs: `uvx --from 'interlocks>=0.1,<0.2' il ci`, exact `uvx --from interlocks==0.1.7 il ci`, or the GitHub Action `install-command` override.
 4. Frequent local users install it permanently with `uv tool install interlocks`; `pipx install interlocks` remains an alternative.
 5. A first-class GitHub Action makes adoption copy-pasteable and reports a concise job summary.
 

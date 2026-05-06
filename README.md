@@ -15,7 +15,7 @@ interlocks gives one local/hook/CI command surface for ruff, basedpyright, cover
 | Use case | Command | Notes |
 | --- | --- | --- |
 | Exploration or ad hoc checks | `uvx --from interlocks il check` | Runs the latest PyPI release without installing. |
-| Repeatable CI or shared workflows | `uvx --from 'interlocks>=0.1,<0.2' il ci` or `uvx --from interlocks==0.1.5 il ci` | Range-pin within a compatible line, or exact-pin when you need full reproducibility. |
+| Repeatable CI or shared workflows | `uvx --from 'interlocks>=0.1,<0.2' il ci` or `uvx --from interlocks==0.1.7 il ci` | Range-pin within a compatible line, or exact-pin when you need full reproducibility. |
 | Frequent local use | `uv tool install interlocks`, then `il check` | Installs the CLI once for repeated local runs. |
 | Alternative installed path | `pipx install interlocks`, then `il check` | Use when `pipx` is your installed-tool manager. |
 
@@ -84,7 +84,7 @@ For repeatable CI, pin or range-pin the package spec:
 ```bash
 uvx --from 'interlocks>=0.1,<0.2' il ci
 # or exact-pin:
-uvx --from interlocks==0.1.5 il ci
+uvx --from interlocks==0.1.7 il ci
 ```
 
 If interlocks is installed in the CI environment, the direct command is:
