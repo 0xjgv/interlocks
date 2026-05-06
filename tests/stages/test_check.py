@@ -16,17 +16,17 @@ _PYPROJECT = textwrap.dedent(
     [project]
     name = "tmpproj"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.ruff]
-    target-version = "py313"
+    target-version = "py311"
     line-length = 99
 
     [tool.ruff.lint]
     select = ["E", "F", "I"]
 
     [tool.basedpyright]
-    pythonVersion = "3.13"
+    pythonVersion = "3.11"
     typeCheckingMode = "standard"
     reportMissingTypeStubs = false
     """
@@ -165,6 +165,36 @@ def test_check_in_process_dispatches_stages(
     assert "Parallel" in out
     assert "Advisory" in out
     assert "Completed in" in out
+
+
+def test_check_skip_filters_direct_and_parallel_tasks(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from interlocks.stages import check as check_mod
+
+    calls: list[object] = []
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--skip=fix,typecheck,deps,crap"])
+    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
+    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: calls.append("format"))
+    monkeypatch.setattr(
+        check_mod,
+        "run_tasks",
+        lambda tasks: calls.append(("run_tasks", [t.label for t in tasks])),
+    )
+    monkeypatch.setattr(check_mod, "run", lambda task, **kw: calls.append(("run", task.label, kw)))
+    monkeypatch.setattr(
+        check_mod, "cmd_crap_cached_advisory", lambda *_a, **_k: calls.append("cached-crap")
+    )
+    monkeypatch.setattr(check_mod, "print_suppressions_report", lambda: None)
+    monkeypatch.chdir(tmp_project)
+
+    check_mod.cmd_check()
+
+    assert calls == ["format", ("run_tasks", ["typecheck", "test"])]
+    out = capsys.readouterr().out
+    assert "skips active" in out
+    assert "fix: skipped by global skip policy" in out
+    assert "crap: skipped by global skip policy" in out
 
 
 def test_check_in_process_runs_suppressions_on_failure(

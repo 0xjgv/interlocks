@@ -33,7 +33,7 @@ _AUDIT_PYPROJECT = textwrap.dedent(
     [project]
     name = "audit-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
     dependencies = []
 
     [build-system]
@@ -47,7 +47,7 @@ _DEPS_PYPROJECT = textwrap.dedent(
     [project]
     name = "deps-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
     dependencies = ["requests>=2"]
 
     [build-system]
@@ -61,7 +61,7 @@ _ARCH_PYPROJECT = textwrap.dedent(
     [project]
     name = "arch-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
     dependencies = []
 
     [build-system]
@@ -79,7 +79,7 @@ _COV_PYPROJECT = textwrap.dedent(
     [project]
     name = "cov-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.coverage.run]
     source = ["mypkg"]
@@ -95,7 +95,7 @@ _CRAP_PYPROJECT = textwrap.dedent(
     [project]
     name = "crap-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.coverage.run]
     source = ["mypkg"]
@@ -111,7 +111,7 @@ _MUTATION_PYPROJECT = textwrap.dedent(
     [project]
     name = "mut-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.interlocks]
     mutation_max_runtime = 5
@@ -134,7 +134,7 @@ _MUTATION_INCREMENTAL_PYPROJECT = textwrap.dedent(
     [project]
     name = "mut-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.interlocks]
     mutation_max_runtime = 5
@@ -240,7 +240,7 @@ _REQUIRE_ACCEPTANCE_PYPROJECT = textwrap.dedent(
     [project]
     name = "req-acc-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.interlocks]
     require_acceptance = true
@@ -319,7 +319,7 @@ _BEHAVIOR_ATTRIBUTION_PYPROJECT = textwrap.dedent(
     [project]
     name = "interlocks"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.interlocks]
     src_dir = "pkg"

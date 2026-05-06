@@ -629,7 +629,7 @@ def _advisory_complexity_action(ci_wired: bool) -> tuple[int, str]:
 
 
 def _complexity_ci_wired() -> bool:
-    return _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap(")
+    return _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap")
 
 
 def _has_complexity_thresholds(cfg: InterlockConfig) -> bool:

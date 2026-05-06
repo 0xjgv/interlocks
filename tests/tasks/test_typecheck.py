@@ -21,10 +21,10 @@ PYPROJECT = textwrap.dedent("""
     [project]
     name = "sample"
     version = "0.0.0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.basedpyright]
-    pythonVersion = "3.13"
+    pythonVersion = "3.11"
     typeCheckingMode = "standard"
     reportMissingTypeStubs = false
 """)
@@ -76,7 +76,7 @@ _BARE_PYPROJECT = textwrap.dedent("""\
     [project]
     name = "bare"
     version = "0.0.0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 """)
 
 
@@ -281,7 +281,7 @@ def test_typecheck_resolves_imports_from_target_venv(
             [project]
             name = "target-dep"
             version = "0.0.0"
-            requires-python = ">=3.13"
+            requires-python = ">=3.11"
             """
         ),
         encoding="utf-8",

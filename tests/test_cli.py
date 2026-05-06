@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import re
 import sys
 import textwrap
@@ -336,6 +337,18 @@ def test_main_command_help_does_not_dispatch_task(
     assert "[coverage]" in out
 
 
+def test_main_rejects_unknown_skip_label(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--skip=nope"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 2
+    assert "unknown skip label" in capsys.readouterr().err
+
+
 def test_main_dispatches_alias_to_canonical(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -448,6 +461,54 @@ def test_cmd_config_no_pyproject(
     assert "Scaffold a project:" in out
     # Defaults still listed.
     assert re.search(r"coverage_min\s+80 \(bundled-default\)", out)
+
+
+def test_cmd_config_show_reports_bundled_tool_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "ruff"])
+
+    cmd_config()
+
+    out = capsys.readouterr().out
+    assert "command=config show ruff" in out
+    assert re.search(r"source\s+bundled", out)
+    assert "Bundled config is used only when the project has no native tool config." in out
+
+
+def test_cmd_config_show_reports_project_tool_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "ruff"])
+
+    cmd_config()
+
+    out = capsys.readouterr().out
+    assert re.search(r"source\s+project: ruff.toml", out)
+    assert "Project config replaces the bundled default; it does not extend it." in out
+
+
+def test_cmd_config_show_json_is_parseable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "coverage", "--json"])
+
+    cmd_config()
+
+    assert json.loads(capsys.readouterr().out)["tool"] == "coverage"
 
 
 def test_cmd_config_falls_back_when_pyproject_malformed(

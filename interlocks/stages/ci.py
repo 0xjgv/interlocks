@@ -13,6 +13,12 @@ from interlocks.acceptance_status import (
 )
 from interlocks.config import InterlockConfig, MutationCIMode, load_config
 from interlocks.runner import run_tasks
+from interlocks.skip import (
+    current_skip_policy,
+    maybe_print_skip_banner,
+    run_unless_skipped,
+    warn_skipped,
+)
 from interlocks.tasks.acceptance import task_acceptance_with_attribution
 from interlocks.tasks.arch import task_arch
 from interlocks.tasks.audit import task_audit
@@ -32,7 +38,9 @@ def cmd_ci() -> None:
     coverage, CRAP, (optionally) mutation."""
     start = time.monotonic()
     cfg = load_config()
+    skip_policy = current_skip_policy()
     ui.banner(cfg)
+    maybe_print_skip_banner(skip_policy)
     ui.section("CI Checks")
     tasks = [
         task_format_check(),
@@ -59,10 +67,19 @@ def cmd_ci() -> None:
         run_tasks(tasks)
         # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
         ui.section("Gates")
-        cmd_crap()
-        cmd_behavior_attribution(refresh=False)
+        if skip_policy.enabled("coverage"):
+            warn_skipped("crap", "coverage was skipped")
+        else:
+            run_unless_skipped("crap", cmd_crap, skip_policy)
+        run_unless_skipped(
+            "attribution", lambda: cmd_behavior_attribution(refresh=False), skip_policy
+        )
         if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
-            cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental")
+            run_unless_skipped(
+                "mutation",
+                lambda: cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental"),
+                skip_policy,
+            )
     except SystemExit as exc:
         exit_code = int(exc.code) if isinstance(exc.code, int) else 1
         raise

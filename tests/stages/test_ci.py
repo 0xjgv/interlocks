@@ -17,17 +17,17 @@ _PYPROJECT = textwrap.dedent(
     [project]
     name = "tmpproj"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.ruff]
-    target-version = "py313"
+    target-version = "py311"
     line-length = 99
 
     [tool.ruff.lint]
     select = ["E", "F", "I"]
 
     [tool.basedpyright]
-    pythonVersion = "3.13"
+    pythonVersion = "3.11"
     typeCheckingMode = "standard"
     reportMissingTypeStubs = false
 
@@ -188,6 +188,46 @@ def test_ci_in_process_queues_all_tasks(
     )
     assert sequential == expected_sequential
     assert "CI Checks" in capsys.readouterr().out
+
+
+def test_ci_skip_coverage_warns_and_skips_crap(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "ci-skip"
+            version = "0.0.0"
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--skip=coverage"])
+
+    from interlocks.stages import ci as ci_mod
+
+    sequential: list[str] = []
+    monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(
+        ci_mod,
+        "cmd_behavior_attribution",
+        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+    )
+    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
+
+    ci_mod.cmd_ci()
+
+    assert sequential == ["Attribution:False"]
+    out = capsys.readouterr().out
+    assert "skips active" in out
+    assert "crap: skipped by global skip policy" in out
+    assert "coverage was skipped" in out
 
 
 def test_ci_writes_failing_runtime_evidence(

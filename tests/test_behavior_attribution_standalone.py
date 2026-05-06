@@ -29,7 +29,7 @@ def _write_tiny_attribution_project(root: Path) -> None:
             [project]
             name = "interlocks"
             version = "0.0.0"
-            requires-python = ">=3.13"
+            requires-python = ">=3.11"
 
             [tool.interlocks]
             src_dir = "pkg"

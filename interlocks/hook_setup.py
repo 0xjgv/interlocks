@@ -6,14 +6,15 @@ import json
 import shlex
 import sys
 from pathlib import Path
+from typing import TypeVar
 
 from interlocks.runner import ok
 from interlocks.setup_state import is_post_edit_command
 
+_Container = TypeVar("_Container", dict[str, object], list[object])
 
-def _reset_invalid_container[T: (dict[str, object], list[object])](
-    parent: dict[str, object], key: str, empty: T
-) -> T:
+
+def _reset_invalid_container(parent: dict[str, object], key: str, empty: _Container) -> _Container:
     """Return ``parent[key]`` when it matches ``type(empty)``; reset to ``empty`` otherwise."""
     value = parent.setdefault(key, empty)
     if isinstance(value, type(empty)):

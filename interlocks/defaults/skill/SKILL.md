@@ -36,7 +36,7 @@ uvx --from interlocks==0.1.5 il ci
 
 For frequent local human use, `uv tool install interlocks` is appropriate; `pipx install interlocks` is the alternative installed path.
 
-Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Use `il setup --check` for read-only verification; use `il doctor` for full project readiness. Use `il version` to print the installed version.
+Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Use `il setup --check` for read-only verification. Use `il setup --ci=github` when GitHub Actions should be installed and no existing workflow invokes interlocks. First useful check after setup is `il check`; use `il doctor` when readiness or failures need diagnosis. Use `il version` to print the installed version.
 
 `il` is the short alias (`interlocks`/`ilocks`/`ilock`/`ils`/`il` all work). Drop to bare `interlocks <cmd>` only when the project lists `interlocks` as a dev dep.
 
@@ -61,7 +61,7 @@ Branch on intent:
 - **Pre-commit** → automated via hook. If missing, run `uvx --from interlocks il pre-commit`.
 - **Pre-PR / verifying CI parity** → `uvx --from interlocks il ci`. Adds coverage, CRAP, audit, deps, arch.
 - **Investigating one failure** → run the single gate: `il lint`, `il typecheck`, `il coverage`, etc.
-- **Setting up a fresh repo** → `il doctor` → `il init` (greenfield only) → `il setup` → `il setup --check`.
+- **Setting up a fresh repo** → `il init` (greenfield only) → `il setup` → `il check` → `il doctor` if blocked → optional `il setup --ci=github`.
 - **Long-running gates** → `il nightly` (full coverage + mutation).
 
 ## Reading the output
@@ -69,7 +69,7 @@ Branch on intent:
 - **Symbols**: `✓` ok, `✗` fail, `⚠` skip.
 - **Exit codes**: `0` pass, `1` blocking gate failed, `2` preflight (no `pyproject.toml` reachable).
 - **Advisory ≠ blocking**: a red `✗` does not always mean exit 1. CRAP and mutation default to advisory. Check exit code, not just symbol.
-- **Skips are signals**: `⚠` usually means a tool isn't installed or a config key is unset. Fix env, don't ignore.
+- **Skips are signals**: `⚠` can mean optional scope, missing evidence, or an explicit global skip. Fix env or config; don't ignore silent gaps.
 
 ## Recovery patterns
 
@@ -92,7 +92,7 @@ Don't read defaults inline.
 
 - All overrides: `[tool.interlocks]` in `pyproject.toml`.
 - Precedence: CLI flag > `[tool.interlocks]` > preset > bundled default.
-- Inspect: `uvx --from interlocks il config` (full key list with current values).
+- Inspect: `uvx --from interlocks il config` (full key list with current values); `il config show ruff|basedpyright|coverage|import-linter` for bundled/project tool config provenance.
 - Common knobs: `coverage_min`, `crap_max`, `enforce_crap`, `enforce_mutation`, `mutation_ci_mode`, `preset` (`baseline`|`strict`|`legacy`).
 - Switching presets: `il presets set strict`. Don't hand-edit each threshold.
 
@@ -106,6 +106,6 @@ Don't read defaults inline.
 
 - Lowering a threshold (`coverage_min`, `crap_max`, `mutation_min_score`).
 - Preset downgrade (`strict` → `baseline` → `legacy`).
-- Disabling enforcement (`enforce_crap=false`, `enforce_mutation=false`).
+- Disabling enforcement (`enforce_crap=false`, `enforce_mutation=false`) or adding global `skip` labels.
 - Bypassing a hook (`git commit --no-verify`, force-push).
 - Adding a new gate or task — refer to `CLAUDE.md` "adding a new gate" block in the interlocks repo.

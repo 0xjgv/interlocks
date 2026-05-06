@@ -31,7 +31,7 @@ _PYPROJECT = textwrap.dedent(
     [project]
     name = "cov-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.coverage.run]
     source = ["mypkg"]
@@ -95,7 +95,7 @@ _BARE_PYPROJECT = textwrap.dedent("""\
     [project]
     name = "bare"
     version = "0.0.0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 """)
 
 

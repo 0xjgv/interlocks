@@ -17,6 +17,8 @@ from typing import IO, NoReturn
 
 from interlocks import ui
 from interlocks.config import InterlockUserError, load_config, require_pyproject
+from interlocks.skip import filter_tasks
+from interlocks.task_labels import default_label
 
 # Re-exported for historical callers (e.g. tasks/stats.py).
 GREEN = "\033[32m"
@@ -209,6 +211,9 @@ class RunResult:
 
 def run(task: Task, *, no_exit: bool = False) -> None:
     """Run ``task`` silently; print a status row. Exit on failure unless ``no_exit``."""
+    tasks = _filter_skipped_tasks([task])
+    if not tasks:
+        return
     result = _execute(task)
     _print_status(result, elapsed_suffix=False)
     if result.returncode in task.allowed_rcs:
@@ -225,6 +230,7 @@ def run_tasks(tasks: list[Task]) -> None:
     after the status block, and we ``sys.exit`` with the *first-in-task-list*
     failure's returncode (deterministic; matches sequential semantics).
     """
+    tasks = _filter_skipped_tasks(tasks)
     if not tasks:
         return
     results: list[RunResult | None] = [None] * len(tasks)
@@ -240,6 +246,10 @@ def run_tasks(tasks: list[Task]) -> None:
         _dump_failure(failed, titled=True)
     if failures:
         sys.exit(failures[0].returncode)
+
+
+def _filter_skipped_tasks(tasks: list[Task]) -> list[Task]:
+    return filter_tasks(tasks)
 
 
 def _execute(task: Task) -> RunResult:
@@ -320,7 +330,7 @@ def _pump(stream: IO[str] | None, tag: str, sink: io.StringIO) -> None:
 
 def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     task = result.task
-    label = task.label or _default_label(task.description)
+    label = task.label or default_label(task.description)
     command = task.display or _default_display(task.cmd)
     status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
     _RESULTS.append((label, state == "ok"))
@@ -339,12 +349,6 @@ def _status(result: RunResult, *, elapsed_suffix: bool) -> tuple[str, str | None
     if elapsed_suffix:
         return ("ok", f"{result.elapsed:.1f}s", "ok")
     return ("ok", None, "ok")
-
-
-def _default_label(description: str) -> str:
-    """First word of ``description`` lowercased (e.g. `Fix lint errors` → `fix`)."""
-    head = description.split(" ", 1)[0]
-    return head.lower().rstrip(":")
 
 
 def _default_display(cmd: list[str]) -> str:

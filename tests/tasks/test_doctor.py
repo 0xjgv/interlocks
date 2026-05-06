@@ -59,7 +59,7 @@ def test_doctor_in_process_reports_sections(
     (tmp_path / "probe" / "__init__.py").write_text("", encoding="utf-8")
     (tmp_path / "tests").mkdir()
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.13"\n',
+        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
@@ -199,7 +199,7 @@ def _write_probe_project(tmp_path: Path, *, tool_interlock: str = "") -> None:
     (tmp_path / "probe").mkdir()
     (tmp_path / "probe" / "__init__.py").write_text("", encoding="utf-8")
     (tmp_path / "tests").mkdir()
-    body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.13"\n'
+    body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
     if tool_interlock:
         body += "\n[tool.interlocks]\n" + tool_interlock.strip() + "\n"
     (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")

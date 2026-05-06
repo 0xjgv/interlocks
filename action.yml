@@ -5,7 +5,7 @@ inputs:
   python-version:
     description: Python version used to install interlocks and run interlocks.
     required: false
-    default: "3.13"
+    default: "3.11"
   install-command:
     description: Command that installs interlocks before running CI.
     required: false

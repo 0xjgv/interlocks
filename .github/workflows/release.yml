@@ -14,7 +14,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v8.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.11"
 
       - name: Install project
         run: uv sync
@@ -40,7 +40,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v8.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.11"
 
       - name: Build sdist and wheel
         run: uv build
@@ -66,7 +66,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v8.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.11"
 
       - name: Verify tag matches project version
         run: |

@@ -11,8 +11,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python: ["3.13"]
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: ubuntu-latest
+            python: "3.13"
+          - os: macos-latest
+            python: "3.11"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

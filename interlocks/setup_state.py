@@ -16,7 +16,7 @@ from interlocks.acceptance_status import AcceptanceStatus, classify_acceptance, 
 from interlocks.defaults_path import path as defaults_path
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from interlocks.config import InterlockConfig
 
@@ -54,18 +54,20 @@ class SetupArtifactStatus:
 
 def iter_workflow_bodies(project_root: Path) -> list[str]:
     """Read every ``.github/workflows/*.y*ml`` file body. Empty list when dir is absent."""
+    return list(_iter_workflow_bodies(project_root))
+
+
+def _iter_workflow_bodies(project_root: Path) -> Iterator[str]:
     workflows_dir = project_root / ".github" / "workflows"
     if not workflows_dir.is_dir():
-        return []
-    bodies: list[str] = []
+        return
     for path in sorted(workflows_dir.iterdir()):
         if path.suffix not in (".yml", ".yaml"):
             continue
         try:
-            bodies.append(path.read_text(encoding="utf-8"))
+            yield path.read_text(encoding="utf-8")
         except OSError:
             continue
-    return bodies
 
 
 def is_post_edit_command(command: object) -> bool:
@@ -122,7 +124,7 @@ def ci_workflow_present(project_root: Path) -> bool:
     """True when any ``.github/workflows/*.y*ml`` references ``interlocks ci`` or the action."""
     return any(
         any(needle in body for needle in _CI_WORKFLOW_NEEDLES)
-        for body in iter_workflow_bodies(project_root)
+        for body in _iter_workflow_bodies(project_root)
     )
 
 
@@ -157,6 +159,10 @@ def skill_installed(project_root: Path) -> bool:
         return False
 
 
+CI_ARTIFACTS: tuple[SetupArtifact, ...] = (
+    SetupArtifact("github ci", ".github/workflows/*.yml", ci_workflow_present),
+)
+
 SETUP_ARTIFACTS: tuple[SetupArtifact, ...] = (
     SetupArtifact("git hook", ".git/hooks/pre-commit", pre_commit_hook_installed),
     SetupArtifact("claude hook", ".claude/settings.json → Stop", claude_stop_hook_installed),
@@ -165,11 +171,20 @@ SETUP_ARTIFACTS: tuple[SetupArtifact, ...] = (
 )
 
 
-def setup_artifact_statuses(project_root: Path) -> list[SetupArtifactStatus]:
+def artifact_statuses(
+    artifacts: tuple[SetupArtifact, ...], project_root: Path
+) -> list[SetupArtifactStatus]:
     return [
-        SetupArtifactStatus(artifact, artifact.detector(project_root))
-        for artifact in SETUP_ARTIFACTS
+        SetupArtifactStatus(artifact, artifact.detector(project_root)) for artifact in artifacts
     ]
+
+
+def setup_artifact_statuses(project_root: Path) -> list[SetupArtifactStatus]:
+    return artifact_statuses(SETUP_ARTIFACTS, project_root)
+
+
+def ci_artifact_statuses(project_root: Path) -> list[SetupArtifactStatus]:
+    return artifact_statuses(CI_ARTIFACTS, project_root)
 
 
 def acceptance_scaffold_present(cfg: InterlockConfig) -> bool:

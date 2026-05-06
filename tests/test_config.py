@@ -82,6 +82,7 @@ def test_load_config_uv_lock_flips_invoker(tmp_project: Path) -> None:
 
 def test_threshold_defaults_when_absent(tmp_project: Path) -> None:
     cfg = load_config()
+    assert cfg.skip == frozenset()
     assert cfg.coverage_min == 80
     assert cfg.crap_max == 30.0
     assert cfg.complexity_max_ccn == 15
@@ -134,6 +135,52 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert cfg.enforce_behavior_attribution is True
     assert cfg.run_mutation_in_ci is True
     assert cfg.enforce_mutation is True
+
+
+def test_skip_project_policy_resolves_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "tests").mkdir()
+    _write(
+        tmp_path / "pyproject.toml",
+        """
+        [project]
+        name = "skip-policy"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        skip = ["lint", "typecheck", "lint"]
+        """,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+
+    assert cfg.skip == frozenset({"lint", "typecheck"})
+    assert cfg.value_sources["skip"] == "project-configured"
+
+
+def test_skip_project_policy_rejects_unknown_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "tests").mkdir()
+    _write(
+        tmp_path / "pyproject.toml",
+        """
+        [project]
+        name = "skip-bad"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        skip = ["nope"]
+        """,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    from interlocks.config import InterlockConfigError
+
+    with pytest.raises(InterlockConfigError, match=r"unknown .*skip label"):
+        load_config()
 
 
 def test_invalid_threshold_types_fall_back_to_defaults(

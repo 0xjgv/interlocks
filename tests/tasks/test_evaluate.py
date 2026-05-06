@@ -30,7 +30,7 @@ def _pyproject(
     [project]
     name = "pkg"
     version = "0.0.0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [dependency-groups]
     dev = ["pytest>=9", "pytest-bdd>=8"]

@@ -26,7 +26,7 @@ def test_init_scaffolds_greenfield_project(tmp_path: Path) -> None:
     assert pyproject.is_file()
     body = pyproject.read_text(encoding="utf-8")
     assert f'name = "{tmp_path.name}"' in body
-    assert 'requires-python = ">=3.13"' in body
+    assert 'requires-python = ">=3.11"' in body
     assert "dependencies = []" in body
     assert 'dev = ["pytest>=8"]' in body
     assert "[tool.interlocks]" in body

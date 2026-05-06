@@ -1,0 +1,128 @@
+"""Global gate skip parsing and execution helpers."""
+
+from __future__ import annotations
+
+import os
+import sys
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal, Protocol, TypeVar
+
+from interlocks import ui
+from interlocks.config import SKIP_LABELS, load_config
+from interlocks.task_labels import default_label
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
+
+class TaskLike(Protocol):
+    @property
+    def description(self) -> str: ...
+
+    @property
+    def label(self) -> str | None: ...
+
+
+_FilterTask = TypeVar("_FilterTask", bound=TaskLike)
+
+
+SkipSource = Literal["cli", "env", "project"]
+
+_ENV_NAME = "INTERLOCKS_SKIP"
+
+
+@dataclass(frozen=True)
+class SkipPolicy:
+    labels: frozenset[str]
+    source: SkipSource | None = None
+
+    def enabled(self, label: str) -> bool:
+        return label in self.labels
+
+
+def current_skip_policy() -> SkipPolicy:
+    raw = _cli_raw()
+    if raw is not None:
+        return SkipPolicy(_parse_csv(raw, source="--skip"), "cli")
+    raw = os.environ.get(_ENV_NAME)
+    if raw is not None:
+        return SkipPolicy(_parse_csv(raw, source=_ENV_NAME), "env")
+    return SkipPolicy(load_config().skip, "project")
+
+
+def maybe_print_skip_banner(policy: SkipPolicy) -> None:
+    if not policy.labels or ui.is_quiet():
+        return
+    source = policy.source or "project"
+    labels = ", ".join(sorted(policy.labels))
+    print(f"  skips active ({source}): {labels}")
+
+
+def filter_tasks(
+    tasks: Sequence[_FilterTask], policy: SkipPolicy | None = None
+) -> list[_FilterTask]:
+    policy = policy or current_skip_policy()
+    filtered: list[_FilterTask] = []
+    for task in tasks:
+        label = task.label or default_label(task.description)
+        if policy.enabled(label):
+            warn_skipped(label)
+        else:
+            filtered.append(task)
+    return filtered
+
+
+def run_unless_skipped(
+    label: str, run: Callable[[], None], policy: SkipPolicy | None = None
+) -> None:
+    policy = policy or current_skip_policy()
+    if policy.enabled(label):
+        warn_skipped(label)
+        return
+    run()
+
+
+def warn_skipped(label: str, detail: str | None = None) -> None:
+    message = f"{label}: skipped by global skip policy"
+    if detail:
+        message = f"{message} — {detail}"
+    print(f"  ⚠ {message}")
+
+
+def validate_cli_skip() -> None:
+    raw = _cli_raw()
+    if raw is not None:
+        _parse_csv(raw, source="--skip")
+
+
+def _cli_raw() -> str | None:
+    for arg in sys.argv[1:]:
+        if arg == "--skip":
+            _fail_skip_usage("usage: --skip=<label>[,<label>...] (known: " + _known_labels() + ")")
+        if arg.startswith("--skip="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def _parse_csv(raw: str, *, source: str) -> frozenset[str]:
+    labels = [_clean_label(label) for label in raw.split(",")]
+    labels = [label for label in labels if label]
+    unknown = sorted(set(labels) - SKIP_LABELS)
+    if unknown:
+        _fail_skip_usage(
+            f"unknown skip label(s) for {source}: {', '.join(unknown)} (known: {_known_labels()})"
+        )
+    return frozenset(labels)
+
+
+def _clean_label(label: str) -> str:
+    return label.strip().lower()
+
+
+def _known_labels() -> str:
+    return ",".join(sorted(SKIP_LABELS))
+
+
+def _fail_skip_usage(message: str) -> None:
+    print(f"interlocks: {message}", file=sys.stderr)
+    raise SystemExit(2)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import atexit
 from contextlib import ExitStack
+from dataclasses import dataclass
 from functools import cache
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -22,6 +23,48 @@ if TYPE_CHECKING:
 
 _extractor = ExitStack()
 atexit.register(_extractor.close)
+
+
+@dataclass(frozen=True)
+class ToolConfigSpec:
+    tool: str
+    section: str
+    filename: str
+    flag: str
+    sidecars: tuple[str, ...] = ()
+
+
+TOOL_CONFIG_SPECS: dict[str, ToolConfigSpec] = {
+    "ruff": ToolConfigSpec("ruff", "ruff", "ruff.toml", "--config", ("ruff.toml", ".ruff.toml")),
+    "basedpyright": ToolConfigSpec(
+        "basedpyright",
+        "basedpyright",
+        "pyrightconfig.json",
+        "--project",
+        ("pyrightconfig.json", "pyrightconfig.toml"),
+    ),
+    "coverage": ToolConfigSpec("coverage", "coverage", "coveragerc", "--rcfile", (".coveragerc",)),
+    "import-linter": ToolConfigSpec(
+        "import-linter",
+        "importlinter",
+        "importlinter_template.ini",
+        "--config",
+        (".importlinter", "setup.cfg"),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class ToolConfigSource:
+    tool: str
+    source: str
+    path: Path
+    bundled_path: Path
+    flag: str
+
+    @property
+    def is_bundled(self) -> bool:
+        return self.source == "bundled"
 
 
 @cache
@@ -42,9 +85,29 @@ def has_project_config(cfg: InterlockConfig, section: str, sidecars: Iterable[st
     Checks for ``[tool.<section>]`` in the project's pyproject.toml, then for
     any of ``sidecars`` (e.g. ``ruff.toml``, ``.ruff.toml``) in the project root.
     """
+    return project_config_source(cfg, section, sidecars=sidecars) is not None
+
+
+def project_config_source(
+    cfg: InterlockConfig, section: str, sidecars: Iterable[str] = ()
+) -> tuple[str, Path] | None:
     if section in cfg.pyproject.get("tool", {}):
-        return True
-    return any((cfg.project_root / name).is_file() for name in sidecars)
+        return (f"pyproject.toml [tool.{section}]", cfg.project_root / "pyproject.toml")
+    for name in sidecars:
+        candidate = cfg.project_root / name
+        if candidate.is_file():
+            return (name, candidate)
+    return None
+
+
+def tool_config_source(cfg: InterlockConfig, tool: str) -> ToolConfigSource:
+    spec = TOOL_CONFIG_SPECS[tool]
+    bundled = path(spec.filename)
+    project = project_config_source(cfg, spec.section, sidecars=spec.sidecars)
+    if project is not None:
+        label, project_path = project
+        return ToolConfigSource(tool, f"project: {label}", project_path, bundled, spec.flag)
+    return ToolConfigSource(tool, "bundled", bundled, bundled, spec.flag)
 
 
 def config_flag_if_absent(

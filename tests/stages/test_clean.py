@@ -44,7 +44,7 @@ SENTINELS = ("src/app.py", "data/raw")
 def tmp_project(tmp_path: Path) -> Path:
     """Minimal project with pre-seeded cache/build artifacts."""
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "tmpproj"\nversion = "0.0.1"\nrequires-python = ">=3.13"\n',
+        '[project]\nname = "tmpproj"\nversion = "0.0.1"\nrequires-python = ">=3.11"\n',
         encoding="utf-8",
     )
     for d in ROOT_DIR_ARTIFACTS:

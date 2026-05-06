@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from interlocks.config import load_config
-from interlocks.defaults_path import has_project_config, path
+from interlocks.defaults_path import has_project_config, path, tool_config_source
 
 
 def _write(file_path: Path, text: str) -> None:
@@ -66,6 +66,35 @@ def test_has_project_config_returns_false_when_absent(
     monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert has_project_config(cfg, "ruff", sidecars=("ruff.toml",)) is False
+
+
+def test_tool_config_source_reports_bundled_when_project_config_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path / "pyproject.toml", "[project]\nname='probe'\nversion='0.0.0'\n")
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+    source = tool_config_source(cfg, "ruff")
+
+    assert source.source == "bundled"
+    assert source.path.name == "ruff.toml"
+    assert source.is_bundled is True
+
+
+def test_tool_config_source_reports_project_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path / "pyproject.toml", "[project]\nname='probe'\nversion='0.0.0'\n")
+    (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+    source = tool_config_source(cfg, "ruff")
+
+    assert source.source == "project: ruff.toml"
+    assert source.path == tmp_path / "ruff.toml"
+    assert source.is_bundled is False
 
 
 def test_has_project_config_ignores_other_tool_sections(

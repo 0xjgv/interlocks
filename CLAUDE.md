@@ -2,7 +2,7 @@
 
 Zero-config Python quality CLI: lint, format, typecheck, test, coverage, acceptance, audit, deps, arch, CRAP, mutation. Self-dogfooded.
 
-Python 3.13, uv-managed. Tools: ruff, basedpyright, coverage.py, pytest + pytest-bdd, interlock-mutmut, deptry, import-linter, pip-audit, lizard.
+Python 3.11+, uv-managed. Tools: ruff, basedpyright, coverage.py, pytest + pytest-bdd, interlock-mutmut, deptry, import-linter, pip-audit, lizard.
 
 ## Project map
 
@@ -31,6 +31,8 @@ You own this product and the codebase.
 | `interlocks nightly` | Nightly cron stage |
 | `interlocks setup` | Install local hooks, agent docs, Claude skill |
 | `interlocks setup --check` | Verify local integrations read-only |
+| `interlocks setup --ci=github` | Install GitHub Actions workflow when absent |
+| `interlocks setup --ci=github --check` | Verify GitHub CI wiring read-only |
 | `interlocks help` | List subcommands + thresholds |
 | `interlocks config` | List config keys + resolved values |
 </important>

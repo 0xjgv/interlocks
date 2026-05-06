@@ -14,7 +14,7 @@ _PYPROJECT = textwrap.dedent(
     [project]
     name = "init-probe"
     version = "0.0.0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
     """
 )
 

@@ -14,7 +14,7 @@ _PYPROJECT_TEMPLATE = textwrap.dedent(
     [project]
     name = "deps-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
     dependencies = [{deps}]
 
     [build-system]

@@ -20,6 +20,7 @@ from interlocks.config import (
 )
 from interlocks.crash import CrashBoundary
 from interlocks.runner import fail_skip, ok, preflight
+from interlocks.skip import validate_cli_skip
 from interlocks.stages.check import cmd_check
 from interlocks.stages.ci import cmd_ci
 from interlocks.stages.clean import cmd_clean
@@ -388,6 +389,7 @@ def main() -> None:
         cmd_task_help(task_name)
         return
 
+    validate_cli_skip()
     preflight(task_name)
     boundary = CrashBoundary(subcommand=task_name)
     with boundary:

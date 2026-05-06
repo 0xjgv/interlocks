@@ -22,6 +22,12 @@ from interlocks.runner import (
     run_tasks,
     warn_skip,
 )
+from interlocks.skip import (
+    SkipPolicy,
+    current_skip_policy,
+    maybe_print_skip_banner,
+    run_unless_skipped,
+)
 from interlocks.tasks.acceptance import task_acceptance_with_attribution
 from interlocks.tasks.behavior_attribution import cmd_behavior_attribution_cached_advisory
 from interlocks.tasks.crap import cmd_crap_cached_advisory
@@ -45,6 +51,7 @@ def cmd_check() -> None:
     """
     start = time.monotonic()
     cfg = load_config()
+    skip_policy = current_skip_policy()
     reset_results()
 
     scope_ref = arg_flag_value("--changed", cfg.changed_ref)
@@ -60,14 +67,16 @@ def cmd_check() -> None:
         ui.section("Scope")
         print(f"  changed vs {scope_ref} — {len(scoped_files)} file(s)")
 
+    maybe_print_skip_banner(skip_policy)
+
     try:
         ui.section("Quality Checks")
-        cmd_fix(scoped_files)
-        cmd_format(scoped_files)
+        run_unless_skipped("fix", lambda: cmd_fix(scoped_files), skip_policy)
+        run_unless_skipped("format", lambda: cmd_format(scoped_files), skip_policy)
         ui.section("Parallel")
         run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
         ui.section("Advisory")
-        _run_advisory(scope_ref, scoped_files)
+        _run_advisory(scope_ref, scoped_files, skip_policy)
     finally:
         print_suppressions_report()
         _print_footer(time.monotonic() - start)
@@ -111,14 +120,20 @@ def _maybe_append_acceptance(
             parallel.append(acceptance_task)
 
 
-def _run_advisory(scope_ref: str | None, scoped_files: list[str] | None) -> None:
+def _run_advisory(
+    scope_ref: str | None, scoped_files: list[str] | None, skip_policy: SkipPolicy
+) -> None:
     if scope_ref is None:
-        run(task_deps(), no_exit=True)
+        run_unless_skipped("deps", lambda: run(task_deps(), no_exit=True), skip_policy)
     else:
         _skip_under_changed("deps", "graph-wide by construction")
-    cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None)
+    run_unless_skipped(
+        "crap",
+        lambda: cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None),
+        skip_policy,
+    )
     if scope_ref is None:
-        cmd_behavior_attribution_cached_advisory()
+        run_unless_skipped("attribution", cmd_behavior_attribution_cached_advisory, skip_policy)
     else:
         _skip_under_changed("attribution", "registry-wide")
 

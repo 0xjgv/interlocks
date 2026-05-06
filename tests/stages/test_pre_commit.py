@@ -12,14 +12,14 @@ PYPROJECT = """\
 [project]
 name = "tmp-proj"
 version = "0.0.0"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py311"
 line-length = 99
 
 [tool.basedpyright]
-pythonVersion = "3.13"
+pythonVersion = "3.11"
 typeCheckingMode = "standard"
 """
 
@@ -123,3 +123,77 @@ def test_pre_commit_in_process_dispatches(
         ("stage", staged),
         ("run_tasks", expected_task_descs),
     ]
+
+
+@pytest.mark.parametrize(
+    ("skip", "expected_calls", "expected_warning"),
+    [
+        (
+            "fix",
+            ["format", "stage", "run_tasks"],
+            "fix: skipped by global skip policy",
+        ),
+        (
+            "format",
+            ["fix", "stage", "run_tasks"],
+            "format: skipped by global skip policy",
+        ),
+        (
+            "fix,format",
+            ["run_tasks"],
+            "fix: skipped by global skip policy",
+        ),
+    ],
+    ids=["skip-fix", "skip-format", "skip-both-mutators"],
+)
+def test_pre_commit_skip_controls_mutators_and_restaging(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    skip: str,
+    expected_calls: list[str],
+    expected_warning: str,
+) -> None:
+    calls = _pre_commit_calls(monkeypatch, ["interlocks/mod.py"], skip=skip)
+
+    from interlocks.stages import pre_commit as pre_commit_mod
+
+    pre_commit_mod.cmd_pre_commit()
+
+    assert [call[0] for call in calls] == expected_calls
+    assert expected_warning in capsys.readouterr().out
+
+
+def test_pre_commit_delegates_parallel_task_skips_to_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _pre_commit_calls(monkeypatch, ["interlocks/mod.py"], skip="typecheck,test")
+
+    from interlocks.stages import pre_commit as pre_commit_mod
+
+    pre_commit_mod.cmd_pre_commit()
+
+    assert calls[-1] == ("run_tasks", ["Type check", "Run tests"])
+
+
+def _pre_commit_calls(
+    monkeypatch: pytest.MonkeyPatch, staged: list[str], *, skip: str | None = None
+) -> list[tuple[str, object]]:
+    from interlocks.stages import pre_commit as pre_commit_mod
+
+    calls: list[tuple[str, object]] = []
+    argv = ["interlocks", "pre-commit"]
+    if skip is not None:
+        argv.append(f"--skip={skip}")
+    monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
+    monkeypatch.setattr(pre_commit_mod, "cmd_fix", lambda files: calls.append(("fix", files)))
+    monkeypatch.setattr(
+        pre_commit_mod, "cmd_format", lambda files: calls.append(("format", files))
+    )
+    monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
+    monkeypatch.setattr(
+        pre_commit_mod,
+        "run_tasks",
+        lambda tasks: calls.append(("run_tasks", [task.description for task in tasks])),
+    )
+    return calls

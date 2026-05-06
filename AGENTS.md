@@ -14,6 +14,8 @@ Tests live in `tests/`, with focused task and stage coverage under `tests/tasks/
 - `uv run interlocks pre-commit` - staged-file checks used by the git hook.
 - `uv run interlocks setup` - installs or refreshes local hooks, agent docs, and bundled Claude skill.
 - `uv run interlocks setup --check` - verifies local integrations without writing.
+- `uv run interlocks setup --ci=github` - installs a GitHub Actions workflow only when no existing workflow invokes interlocks.
+- `uv run interlocks setup --ci=github --check` - verifies GitHub CI wiring read-only.
 - `uv run interlocks doctor` - readiness diagnostic; static inspection only.
 - `uv run interlocks evaluate` - read-only 11-check quality scorecard (0–33).
 - `uv run interlocks help` / `interlocks config` / `interlocks presets` - resolved thresholds, full config key list, preset selector.
@@ -21,7 +23,7 @@ Tests live in `tests/`, with focused task and stage coverage under `tests/tasks/
 
 ## Coding Style & Naming Conventions
 
-Target Python `3.13`. Use 4-space indentation, explicit type hints in production code, and `snake_case` for modules, functions, and variables. Keep task commands named `cmd_<task>` to match CLI dispatch.
+Target Python `3.11+`. Use 4-space indentation, explicit type hints in production code, and `snake_case` for modules, functions, and variables. Keep task commands named `cmd_<task>` to match CLI dispatch.
 
 Ruff owns linting, import ordering, and formatting. Line length is `99`; first-party imports are `interlocks`. Avoid adding new tools unless already represented in `pyproject.toml`.
 

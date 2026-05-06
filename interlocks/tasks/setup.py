@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import sys
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from interlocks import ui
 from interlocks.config import find_project_root, load_optional_config
+from interlocks.defaults_path import path as defaults_path
 from interlocks.hook_setup import install_hooks
-from interlocks.runner import fail_skip
-from interlocks.setup_state import SetupArtifactStatus, setup_artifact_statuses
+from interlocks.runner import fail_skip, ok
+from interlocks.setup_state import (
+    CI_ARTIFACTS,
+    SetupArtifactStatus,
+    ci_artifact_statuses,
+    ci_workflow_present,
+    setup_artifact_statuses,
+)
 from interlocks.tasks.agents import install_agent_docs
 from interlocks.tasks.setup_skill import install_skill
 
@@ -20,24 +28,42 @@ if TYPE_CHECKING:
 
 def cmd_setup() -> None:
     start = time.monotonic()
-    check_only = _parse_check_flag()
+    args = _parse_args()
     project_root = find_project_root()
 
     ui.command_banner("setup", load_optional_config())
-    if check_only:
+    if args.ci == "github":
+        if args.check_only:
+            _cmd_setup_ci_check(project_root)
+        else:
+            _cmd_setup_ci_install(project_root)
+    elif args.check_only:
         _cmd_setup_check(project_root)
     else:
         _cmd_setup_install(project_root)
     ui.command_footer(start)
 
 
-def _parse_check_flag() -> bool:
-    args = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose"}]
-    if not args:
-        return False
-    if args == ["--check"]:
-        return True
-    fail_skip("usage: interlocks setup [--check]")
+@dataclass(frozen=True)
+class _SetupArgs:
+    check_only: bool = False
+    ci: str | None = None
+
+
+def _parse_args() -> _SetupArgs:
+    raw = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose"}]
+    check_only = False
+    ci: str | None = None
+    for arg in raw:
+        if arg == "--check":
+            check_only = True
+        elif arg == "--ci=github":
+            ci = "github"
+        elif arg.startswith("--ci="):
+            fail_skip("unsupported CI setup target: " + arg.split("=", 1)[1])
+        else:
+            fail_skip("usage: interlocks setup [--check] [--ci=github]")
+    return _SetupArgs(check_only=check_only, ci=ci)
 
 
 def _cmd_setup_install(project_root: Path) -> None:
@@ -51,9 +77,50 @@ def _cmd_setup_install(project_root: Path) -> None:
 
     ui.section("Next Steps")
     ui.message_list([
-        "Run `interlocks doctor` to inspect full project readiness.",
         "Run `interlocks check` after edits.",
+        "Run `interlocks doctor` to diagnose readiness or failures.",
+        "Wire shared CI manually, or run `interlocks setup --ci=github` for GitHub Actions.",
     ])
+
+
+def _cmd_setup_ci_install(project_root: Path) -> None:
+    ui.section("GitHub CI Setup")
+    workflow = project_root / ".github" / "workflows" / "interlocks.yml"
+    installed = ci_workflow_present(project_root)
+    if installed:
+        ok("GitHub workflow already invokes interlocks")
+    elif workflow.is_file():
+        fail_skip(
+            ".github/workflows/interlocks.yml already exists but does not invoke interlocks; "
+            "review it before rerunning setup"
+        )
+    else:
+        workflow.parent.mkdir(parents=True, exist_ok=True)
+        workflow.write_text(
+            defaults_path("github_workflow.yml").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        installed = True
+        ok("Installed GitHub Actions workflow at .github/workflows/interlocks.yml")
+    ui.section("Status")
+    _render_status([SetupArtifactStatus(CI_ARTIFACTS[0], installed)])
+    ui.section("Next Steps")
+    ui.message_list([
+        "Run `interlocks setup --ci=github --check` to verify CI wiring.",
+        "Commit the workflow file after reviewing the action pin and install-command policy.",
+    ])
+
+
+def _cmd_setup_ci_check(project_root: Path) -> None:
+    ui.section("GitHub CI Check")
+    statuses = ci_artifact_statuses(project_root)
+    _render_status(statuses)
+    if all(status.installed for status in statuses):
+        ui.section("Next Steps")
+        ui.message_list(["GitHub CI invokes interlocks."])
+        return
+    ui.section("Next Steps")
+    ui.message_list(["Run `interlocks setup --ci=github` to install a GitHub Actions workflow."])
+    sys.exit(1)
 
 
 def _cmd_setup_check(project_root: Path) -> None:

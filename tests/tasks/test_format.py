@@ -13,10 +13,10 @@ PYPROJECT = textwrap.dedent("""
     [project]
     name = "sample"
     version = "0.0.0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.ruff]
-    target-version = "py313"
+    target-version = "py311"
     line-length = 99
 """)
 

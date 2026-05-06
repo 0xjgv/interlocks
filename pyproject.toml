@@ -3,12 +3,14 @@ name = "interlocks"
 version = "0.1.6"
 description = "Zero-config Python quality interlocks: lint, format, typecheck, test, coverage, acceptance, audit, deps, architecture, complexity, CRAP, mutation — all behind `interlocks <task>` (or `il <task>`)."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "0xjgv", email = "juan@mail.usestilgar.com"}]
 keywords = ["quality", "linting", "testing", "coverage", "mutation-testing", "ci", "devex"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Quality Assurance",
@@ -83,6 +85,7 @@ pr_ci_runtime_budget_seconds = 600
 # ── Ruff (lint + format) ────────────────────────────────────────────
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "slow: marks tests that take multiple seconds (deselect with -m 'not slow')",
     # Acceptance feature areas (pytest-bdd auto-promotes Gherkin tags to markers).
@@ -98,7 +101,7 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py311"
 line-length = 99
 preview = true
 # interlocks/defaults/ holds bundled data files (templates copied into user
@@ -180,7 +183,7 @@ known-first-party = ["interlocks"]
 # ── Basedpyright ───────────────────────────────────────────────────
 
 [tool.basedpyright]
-pythonVersion = "3.13"
+pythonVersion = "3.11"
 typeCheckingMode = "standard"
 reportUnusedCallResult = false
 reportMissingTypeStubs = false

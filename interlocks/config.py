@@ -12,7 +12,7 @@ import tomllib
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
 from interlocks.detect import (
@@ -35,6 +35,23 @@ _SOURCE_AUTO = "auto-detected"
 _SOURCE_DEFAULT = "bundled-default"
 _SOURCE_PRESET = "preset-derived"
 _SOURCE_PROJECT = "project-configured"
+
+SKIP_LABELS: frozenset[str] = frozenset({
+    "acceptance",
+    "arch",
+    "attribution",
+    "audit",
+    "complexity",
+    "coverage",
+    "crap",
+    "deps",
+    "fix",
+    "format",
+    "lint",
+    "mutation",
+    "test",
+    "typecheck",
+})
 
 _SUPPORTED_PRESETS: tuple[Preset, ...] = ("baseline", "strict", "legacy")
 _PRESET_DESCRIPTIONS: dict[Preset, str] = {
@@ -272,6 +289,13 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "Gates",
     ),
     ConfigKeyDoc(
+        "skip",
+        "list[str]",
+        "[]",
+        "Stable gate labels skipped by every stage; CLI --skip and INTERLOCKS_SKIP win",
+        "Gates",
+    ),
+    ConfigKeyDoc(
         "acceptance_runner",
         "pytest-bdd|behave|off",
         "auto",
@@ -458,6 +482,7 @@ class InterlockConfig:
     mutation_ci_mode: MutationCIMode = "off"
     mutation_since_ref: str = "origin/main"
     changed_ref: str = "origin/main"
+    skip: frozenset[str] = frozenset()
     # Acceptance (Gherkin) — all optional; resolved lazily by the task.
     acceptance_runner: AcceptanceRunner | None = None
     features_dir: Path | None = None
@@ -598,28 +623,20 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
     project_table = _interlock_table(pyproject)
     table, value_sources, preset, unsupported_presets = _resolve_config_table(project_table)
 
-    test_dir_override = table.get("test_dir")
-    src_dir_override = table.get("src_dir")
-    features_dir_override = table.get("features_dir")
+    paths = _resolved_paths(project_root, pyproject, table)
     runner_override = _runner_override(table)
     invoker_override = _invoker_override(table)
     acceptance_runner = _acceptance_runner_override(table)
     pytest_args = tuple(str(a) for a in (table.get("pytest_args") or ()))
 
-    test_dir = _resolved_path(test_dir_override, detect_test_dir(project_root), project_root)
-    src_dir = _resolved_path(
-        src_dir_override, detect_src_dir(project_root, pyproject), project_root
-    )
-    features_dir = _resolved_path(
-        features_dir_override, detect_features_dir(project_root, test_dir), project_root
-    )
     test_runner: TestRunner = runner_override or detect_test_runner(
-        project_root, pyproject, test_dir
+        project_root, pyproject, paths.test_dir
     )
     test_invoker: TestInvoker = invoker_override or detect_test_invoker(project_root)
     run_acceptance_in_check, require_acceptance, mutation_ci_mode, mutation_since_ref = (
         _resolve_flags(table)
     )
+    skip = frozenset(table.get("skip", ()))
     audit_severity_threshold = _audit_severity_threshold_override(table)
     thresholds = _threshold_overrides(table)
     if "enforce_behavior_attribution" not in thresholds:
@@ -642,28 +659,29 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
     )
 
     overrides = {
-        "src_dir": src_dir_override,
-        "test_dir": test_dir_override,
-        "features_dir": features_dir_override,
+        "src_dir": paths.src_dir_override,
+        "test_dir": paths.test_dir_override,
+        "features_dir": paths.features_dir_override,
         "test_runner": runner_override,
         "test_invoker": invoker_override,
         "acceptance_runner": acceptance_runner,
     }
     return InterlockConfig(
         project_root=project_root,
-        src_dir=src_dir,
-        test_dir=test_dir,
+        src_dir=paths.src_dir,
+        test_dir=paths.test_dir,
         test_runner=test_runner,
         test_invoker=test_invoker,
         preset=preset,
         pytest_args=pytest_args,
         acceptance_runner=acceptance_runner,
-        features_dir=features_dir,
+        features_dir=paths.features_dir,
         run_acceptance_in_check=run_acceptance_in_check,
         require_acceptance=require_acceptance,
         mutation_ci_mode=mutation_ci_mode,
         mutation_since_ref=mutation_since_ref,
         changed_ref=changed_ref,
+        skip=skip,
         dependency_freshness_command=dependency_freshness_command,
         dependency_freshness_stage=dependency_freshness_stage,
         audit_severity_threshold=audit_severity_threshold,
@@ -674,6 +692,39 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
     )
 
 
+@dataclass(frozen=True)
+class ResolvedPaths:
+    test_dir_override: object
+    src_dir_override: object
+    features_dir_override: object
+    test_dir: Path
+    src_dir: Path
+    features_dir: Path | None
+
+
+def _resolved_paths(
+    project_root: Path, pyproject: dict[str, Any], table: dict[str, Any]
+) -> ResolvedPaths:
+    test_dir_override = table.get("test_dir")
+    src_dir_override = table.get("src_dir")
+    features_dir_override = table.get("features_dir")
+    test_dir = _resolved_path(test_dir_override, detect_test_dir(project_root), project_root)
+    src_dir = _resolved_path(
+        src_dir_override, detect_src_dir(project_root, pyproject), project_root
+    )
+    features_dir = _resolved_path(
+        features_dir_override, detect_features_dir(project_root, test_dir), project_root
+    )
+    return ResolvedPaths(
+        test_dir_override,
+        src_dir_override,
+        features_dir_override,
+        test_dir,
+        src_dir,
+        features_dir,
+    )
+
+
 def _default_enforce_behavior_attribution(pyproject: dict[str, Any]) -> bool:
     project = pyproject.get("project")
     if not isinstance(project, dict) or project.get("name") != "interlocks":
@@ -681,7 +732,12 @@ def _default_enforce_behavior_attribution(pyproject: dict[str, Any]) -> bool:
     return any(behavior.public_symbol for behavior in INTERLOCKS_REGISTRY.behaviors)
 
 
-def _resolved_path[T](override: object, fallback: T, project_root: Path) -> Path | T:
+_PathFallback = TypeVar("_PathFallback")
+
+
+def _resolved_path(
+    override: object, fallback: _PathFallback, project_root: Path
+) -> Path | _PathFallback:
     """Resolve ``override`` against ``project_root`` when set; otherwise return ``fallback``."""
     if isinstance(override, str):
         return (project_root / override).resolve()
@@ -763,6 +819,23 @@ def _preset_override(table: dict[str, Any]) -> Preset | None:
     return None
 
 
+def _skip_override(raw: object) -> tuple[str, ...] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise InterlockConfigError("[tool.interlocks] skip must be a list of gate labels")
+    labels = tuple(label.strip().lower() for label in raw)
+    if any(not label for label in labels):
+        raise InterlockConfigError("[tool.interlocks] skip contains an empty gate label")
+    unknown = sorted(set(labels) - SKIP_LABELS)
+    if unknown:
+        known = ",".join(sorted(SKIP_LABELS))
+        raise InterlockConfigError(
+            f"unknown [tool.interlocks] skip label(s): {', '.join(unknown)} (known: {known})"
+        )
+    return tuple(dict.fromkeys(labels))
+
+
 def _explicit_config_overrides(table: dict[str, Any]) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     for key in _STRING_KEYS:
@@ -772,6 +845,9 @@ def _explicit_config_overrides(table: dict[str, Any]) -> dict[str, Any]:
     value = table.get("pytest_args")
     if isinstance(value, list):
         overrides["pytest_args"] = value
+    skip = _skip_override(table.get("skip"))
+    if skip is not None:
+        overrides["skip"] = skip
     for key, parser in _ENUM_PARSERS.items():
         parsed = parser(table)
         if parsed is not None:
@@ -800,6 +876,7 @@ def _complete_value_sources(
         "mutation_ci_mode",
         "mutation_since_ref",
         "changed_ref",
+        "skip",
         "run_acceptance_in_check",
         "require_acceptance",
         "evaluate_dependency_freshness",

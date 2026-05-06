@@ -32,7 +32,7 @@ _PYPROJECT = textwrap.dedent(
     [project]
     name = "crap-probe"
     version = "0.0.1"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.coverage.run]
     source = ["interlocks"]

@@ -53,9 +53,11 @@ il check
 cd your-python-project
 interlocks setup
 interlocks setup --check
+interlocks setup --ci=github --check   # optional CI readiness check
+interlocks setup --ci=github           # optional GitHub Actions installer
 ```
 
-`setup` idempotently installs local feedback loops: git pre-commit hook, Claude Code Stop hook, `AGENTS.md` / `CLAUDE.md` interlocks block, and bundled Claude skill at `.claude/skills/interlocks/SKILL.md`. `setup --check` is read-only and exits non-zero when any local integration is missing or stale.
+`setup` idempotently installs local feedback loops: git pre-commit hook, Claude Code Stop hook, `AGENTS.md` / `CLAUDE.md` interlocks block, and bundled Claude skill at `.claude/skills/interlocks/SKILL.md`. `setup --check` is read-only and exits non-zero when any local integration is missing or stale. CI is explicit: `setup --ci=github` creates `.github/workflows/interlocks.yml` only when no existing workflow invokes interlocks.
 
 ### 3. Diagnose Readiness
 
@@ -91,7 +93,7 @@ If interlocks is installed in the CI environment, the direct command is:
 interlocks ci
 ```
 
-For GitHub Actions, copy this workflow:
+For GitHub Actions, either run `interlocks setup --ci=github` or copy this workflow:
 
 ```yaml
 name: interlocks
@@ -193,6 +195,7 @@ mutation_max_runtime = 600
 mutation_min_score = 80.0
 
 # Gate behavior
+skip = []                         # e.g. ["typecheck"] for explicit project policy
 enforce_crap = true
 run_mutation_in_ci = false
 enforce_mutation = false
@@ -224,8 +227,36 @@ Precedence, lowest to highest:
 4. CLI flags inside tasks, such as `--min=`, `--max=`, `--max-runtime=`, `--min-score=`, and `--min-coverage=`.
 
 Run `interlocks help` to see the active preset and resolved values.
+Run `interlocks config` to see every `[tool.interlocks]` key and source.
+Run `interlocks config show ruff|basedpyright|coverage|import-linter` to see whether a tool is using bundled defaults or project-owned native config.
 Run `interlocks presets` to see preset options, their main thresholds, and copyable config.
 Run `interlocks presets set baseline` to set a project preset from the CLI.
+
+## FAQ
+
+### What style rules are bundled?
+
+When a project has no native config, interlocks supplies bundled defaults for ruff, basedpyright, coverage.py, and import-linter. Those defaults are adoption defaults, not hidden project policy. Inspect them with `interlocks config show ruff`, `interlocks config show basedpyright`, `interlocks config show coverage`, or `interlocks config show import-linter`.
+
+### Do bundled defaults extend my project config?
+
+No. A project-owned `[tool.ruff]`, `ruff.toml`, `[tool.basedpyright]`, `pyrightconfig.json`, `[tool.coverage]`, `.coveragerc`, `[tool.importlinter]`, or `.importlinter` replaces the bundled default for that tool. `config show` reports the active source.
+
+### How do I ignore or skip checks?
+
+Prefer native tool ignores for narrow code-level exceptions. Use presets and thresholds for policy. Use `interlocks check --changed[=<ref>]` to scope first adoption to changed files. Use global skip only when you need an explicit gate-level escape hatch: `interlocks check --skip=typecheck`, `INTERLOCKS_SKIP=typecheck interlocks check`, or `[tool.interlocks] skip = ["typecheck"]`. Unknown skip labels exit 2, and skipped gates print warnings.
+
+### What did setup install, and what remains manual?
+
+`interlocks setup` installs local hooks, agent docs, and the bundled Claude skill. It does not silently add CI. For GitHub Actions, run `interlocks setup --ci=github --check` to detect wiring and `interlocks setup --ci=github` to create `.github/workflows/interlocks.yml` only when no existing workflow invokes interlocks.
+
+### Which Python versions are supported?
+
+interlocks installs on Python 3.11, 3.12, and 3.13. Python 3.11 is the floor because `tomllib` is required and bundled defaults target `py311` syntax.
+
+### Is it production-ready?
+
+Yes for Python repositories that want deterministic local/CI quality gates. The CLI is self-dogfooded, has a reusable GitHub Action, and keeps hosted state out of the trust path. It is still intentionally narrow: no dashboard, no polyglot orchestration, and no replacement for project-owned tests.
 
 ## Stages
 
@@ -236,11 +267,11 @@ Run `interlocks presets set baseline` to set a project preset from the CLI.
 | `interlocks ci` | Pull requests and protected branches | format-check, lint, complexity, audit, deps, typecheck, coverage, arch, acceptance -> CRAP -> optional mutation (per `mutation_ci_mode`); writes `.interlocks/ci.json` timing evidence |
 | `interlocks nightly` | Scheduled jobs | coverage -> audit (warn-skips on transient pip-audit failures) -> mutation, always blocking on `mutation_min_score` |
 | `interlocks post-edit` | Editor/agent hook interface | advisory ruff fix + format on changed Python files |
-| `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill |
+| `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill; `--ci=github` installs/checks GitHub CI wiring |
 | `interlocks setup-hooks` | Narrow hook installer | writes hooks that call `interlocks pre-commit` and `interlocks post-edit` |
 | `interlocks clean` | Local cleanup | removes caches, build artifacts, coverage output, mutation state, and `__pycache__/` |
 
-`interlocks pre-commit` and `interlocks post-edit` are the stable hook interfaces. `interlocks setup` is the default local onboarding command. `interlocks setup --check` verifies hooks, agent docs, and the Claude skill without writing. Narrow commands (`setup-hooks`, `agents`, `setup-skill`) remain available as escape hatches.
+`interlocks pre-commit` and `interlocks post-edit` are the stable hook interfaces. `interlocks setup` is the default local onboarding command. `interlocks setup --check` verifies hooks, agent docs, and the Claude skill without writing. `interlocks setup --ci=github --check` verifies GitHub CI wiring separately. Narrow commands (`setup-hooks`, `agents`, `setup-skill`) remain available as escape hatches.
 
 `mutation_ci_mode` picks how `interlocks ci` invokes mutmut:
 

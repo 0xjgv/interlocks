@@ -5,7 +5,7 @@
 # Project-local configs (per-file-ignores, isort.known-first-party) are
 # intentionally omitted — they belong to the downstream repo.
 
-target-version = "py313"
+target-version = "py311"
 line-length = 99
 preview = true
 

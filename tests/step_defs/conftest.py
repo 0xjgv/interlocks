@@ -15,20 +15,20 @@ _TMP_PYPROJECT = textwrap.dedent(
     [project]
     name = "tmp"
     version = "0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [dependency-groups]
     dev = ["pytest>=9"]
 
     [tool.ruff]
-    target-version = "py313"
+    target-version = "py311"
     line-length = 99
 
     [tool.ruff.lint]
     select = ["E", "F", "I"]
 
     [tool.basedpyright]
-    pythonVersion = "3.13"
+    pythonVersion = "3.11"
     typeCheckingMode = "standard"
     reportMissingTypeStubs = false
 
@@ -59,17 +59,17 @@ _FLAT_PYPROJECT = textwrap.dedent(
     [project]
     name = "tmp"
     version = "0"
-    requires-python = ">=3.13"
+    requires-python = ">=3.11"
 
     [tool.ruff]
-    target-version = "py313"
+    target-version = "py311"
     line-length = 99
 
     [tool.ruff.lint]
     select = ["E", "F", "I"]
 
     [tool.basedpyright]
-    pythonVersion = "3.13"
+    pythonVersion = "3.11"
     typeCheckingMode = "standard"
     reportMissingTypeStubs = false
 

@@ -12,7 +12,7 @@ import pytest
 
 def _write_pyproject(project: Path) -> None:
     (project / "pyproject.toml").write_text(
-        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.13"\n',
+        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
         encoding="utf-8",
     )
 
@@ -28,6 +28,17 @@ def _run_setup(monkeypatch: pytest.MonkeyPatch, project: Path, *args: str) -> No
         cmd_setup()
     finally:
         clear_cache()
+
+
+def test_setup_recommends_check_before_doctor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    _run_setup(monkeypatch, tmp_path)
+
+    out = capsys.readouterr().out
+    assert out.index("Run `interlocks check` after edits.") < out.index("Run `interlocks doctor`")
 
 
 def test_setup_check_fails_when_artifacts_missing(
@@ -88,6 +99,53 @@ def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert len(post_edit_hooks) == 1
     assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == first_agents
     assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8") == first_claude
+
+
+def test_setup_ci_check_reports_missing_when_no_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--ci=github", "--check")
+
+    out = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "github ci" in out
+    assert "missing/stale" in out
+
+
+def test_setup_ci_installs_github_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    _run_setup(monkeypatch, tmp_path, "--ci=github")
+
+    workflow = tmp_path / ".github" / "workflows" / "interlocks.yml"
+    body = workflow.read_text(encoding="utf-8")
+    assert "uses: 0xjgv/interlocks@v1" in body
+    assert "Installed GitHub Actions workflow" in capsys.readouterr().out
+
+    first = workflow.read_text(encoding="utf-8")
+    _run_setup(monkeypatch, tmp_path, "--ci=github")
+    assert workflow.read_text(encoding="utf-8") == first
+
+    capsys.readouterr()
+    _run_setup(monkeypatch, tmp_path, "--ci=github", "--check")
+    assert "missing/stale" not in capsys.readouterr().out
+
+
+def test_setup_plain_check_does_not_require_ci(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+    _run_setup(monkeypatch, tmp_path)
+    capsys.readouterr()
+
+    _run_setup(monkeypatch, tmp_path, "--check")
+
+    assert "missing/stale" not in capsys.readouterr().out
 
 
 def test_setup_check_succeeds_after_setup(
