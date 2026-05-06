@@ -5,25 +5,16 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Protocol, TypeVar
+from functools import cache
+from typing import TYPE_CHECKING, Literal
 
 from interlocks import ui
 from interlocks.config import SKIP_LABELS, load_config
-from interlocks.task_labels import default_label
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable
 
-
-class TaskLike(Protocol):
-    @property
-    def description(self) -> str: ...
-
-    @property
-    def label(self) -> str | None: ...
-
-
-_FilterTask = TypeVar("_FilterTask", bound=TaskLike)
+    from interlocks.runner import Task
 
 
 SkipSource = Literal["cli", "env", "project"]
@@ -34,12 +25,13 @@ _ENV_NAME = "INTERLOCKS_SKIP"
 @dataclass(frozen=True)
 class SkipPolicy:
     labels: frozenset[str]
-    source: SkipSource | None = None
+    source: SkipSource
 
     def enabled(self, label: str) -> bool:
         return label in self.labels
 
 
+@cache
 def current_skip_policy() -> SkipPolicy:
     raw = _cli_raw()
     if raw is not None:
@@ -53,18 +45,17 @@ def current_skip_policy() -> SkipPolicy:
 def maybe_print_skip_banner(policy: SkipPolicy) -> None:
     if not policy.labels or ui.is_quiet():
         return
-    source = policy.source or "project"
     labels = ", ".join(sorted(policy.labels))
-    print(f"  skips active ({source}): {labels}")
+    print(f"  skips active ({policy.source}): {labels}")
 
 
-def filter_tasks(
-    tasks: Sequence[_FilterTask], policy: SkipPolicy | None = None
-) -> list[_FilterTask]:
+def filter_tasks(tasks: list[Task], policy: SkipPolicy | None = None) -> list[Task]:
+    from interlocks.runner import _default_label  # noqa: PLC0415  (breaks runner↔skip cycle)
+
     policy = policy or current_skip_policy()
-    filtered: list[_FilterTask] = []
+    filtered: list[Task] = []
     for task in tasks:
-        label = task.label or default_label(task.description)
+        label = task.label or _default_label(task.description)
         if policy.enabled(label):
             warn_skipped(label)
         else:
@@ -83,10 +74,12 @@ def run_unless_skipped(
 
 
 def warn_skipped(label: str, detail: str | None = None) -> None:
+    from interlocks.runner import warn_skip  # noqa: PLC0415  (breaks runner↔skip cycle)
+
     message = f"{label}: skipped by global skip policy"
     if detail:
         message = f"{message} — {detail}"
-    print(f"  ⚠ {message}")
+    warn_skip(message)
 
 
 def validate_cli_skip() -> None:

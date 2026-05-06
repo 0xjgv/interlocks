@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from interlocks import ui
 from interlocks.config import find_project_root, load_optional_config
@@ -47,13 +47,13 @@ def cmd_setup() -> None:
 @dataclass(frozen=True)
 class _SetupArgs:
     check_only: bool = False
-    ci: str | None = None
+    ci: Literal["github"] | None = None
 
 
 def _parse_args() -> _SetupArgs:
     raw = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose"}]
     check_only = False
-    ci: str | None = None
+    ci: Literal["github"] | None = None
     for arg in raw:
         if arg == "--check":
             check_only = True
