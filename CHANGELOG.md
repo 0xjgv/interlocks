@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `interlocks typecheck` now resolves imports from a non-uv target project's
+  in-tree `.venv` when Interlocks is run from an isolated install such as `uvx`.
+
 ## [0.1.6] - 2026-05-04
 
 ### Added
