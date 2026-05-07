@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `interlocks check --changed` now includes changed Python files in flat-layout
   projects.
 - Bundled basedpyright defaults now report deprecated API usage as an error.
+- The `import-linter` dependency is bounded below releases that require
+  `grimp` versions without macOS Python 3.11 wheels, keeping CI installs
+  wheel-based on supported macOS runners.
 
 ## [0.1.6] - 2026-05-04
 
