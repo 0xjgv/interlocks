@@ -90,10 +90,10 @@ def cmd_doctor() -> None:
     _render_setup_checklist(rows)
 
     ui.section("Blockers")
-    _print_messages([*failures, *blockers], empty="none")
+    ui.message_list([*failures, *blockers], empty="none")
 
     ui.section("Warnings")
-    _print_messages(warnings, empty="none")
+    ui.message_list(warnings, empty="none")
 
     ui.section("Next Steps")
     ui.message_list(
@@ -107,17 +107,18 @@ def cmd_doctor() -> None:
 
 
 def _print_readiness(is_blocked: bool, gap_count: int) -> None:
+    status, summary = _readiness(is_blocked, gap_count)
+    print(f"  status                 {status}")
+    print(f"  summary                {summary}")
+
+
+def _readiness(is_blocked: bool, gap_count: int) -> tuple[str, str]:
     if is_blocked:
-        print("  status                 blocked")
-        print("  summary                fix blockers before running `interlocks check`")
-        return
+        return "blocked", "fix blockers before running `interlocks check`"
     if gap_count:
         suffix = "s" if gap_count != 1 else ""
-        print(f"  status                 ready ({gap_count} gap{suffix})")
-        print("  summary                see Setup Checklist for optional wiring")
-        return
-    print("  status                 ready")
-    print("  summary                ready to try `interlocks check`")
+        return f"ready ({gap_count} gap{suffix})", "see Setup Checklist for optional wiring"
+    return "ready", "ready to try `interlocks check`"
 
 
 def _safe_load_config(pyproject_path: Path, failures: list[str]) -> InterlockConfig | None:
@@ -297,28 +298,30 @@ def _render_setup_checklist(rows: list[CheckRow]) -> None:
         ui.row(row.label, row.target, row.state, detail=row.detail, state=row.state)
 
 
+# Each rule maps a set of `CheckRow.label`s to the next-step bullet shown when
+# any of those rows is in a `warn` (gap) state.
+_NEXT_STEP_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        ("git hook", "claude hook", "agent docs", "claude skill"),
+        "Run `interlocks setup` to install hooks, agent docs, and the Claude skill.",
+    ),
+    (
+        ("interlocks cfg", "preset"),
+        "Run `interlocks presets` to pick a preset (baseline, strict, legacy).",
+    ),
+    (("acceptance",), "Run `interlocks init-acceptance` to scaffold Gherkin tests."),
+    (("ci workflow",), "Wire CI via `interlocks ci` or the reusable interlocks GitHub Action."),
+    (("venv",), "Create a venv (`uv sync` or `python -m venv .venv`)."),
+)
+
+
 def _next_steps(rows: list[CheckRow], is_blocked: bool) -> list[str]:
     if is_blocked:
         return ["Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."]
     by_label = {r.label: r for r in rows}
     steps = [
         step
-        for labels, step in (
-            (
-                ("git hook", "claude hook", "agent docs", "claude skill"),
-                "Run `interlocks setup` to install hooks, agent docs, and the Claude skill.",
-            ),
-            (
-                ("interlocks cfg", "preset"),
-                "Run `interlocks presets` to pick a preset (baseline, strict, legacy).",
-            ),
-            (("acceptance",), "Run `interlocks init-acceptance` to scaffold Gherkin tests."),
-            (
-                ("ci workflow",),
-                "Wire CI via `interlocks ci` or the reusable interlocks GitHub Action.",
-            ),
-            (("venv",), "Create a venv (`uv sync` or `python -m venv .venv`)."),
-        )
+        for labels, step in _NEXT_STEP_RULES
         if any(_is_warn(by_label, label) for label in labels)
     ]
     return steps or ["Run `interlocks check` locally."]
@@ -345,30 +348,29 @@ def _print_configuration(
     ui.kv_block(pairs)
 
 
+_DERIVED_CFG_KEYS: tuple[str, ...] = (
+    "coverage_min",
+    "crap_max",
+    "enforce_crap",
+    "run_mutation_in_ci",
+    "enforce_mutation",
+    "mutation_ci_mode",
+    "run_acceptance_in_check",
+)
+
+
 def _cfg_rows(cfg: InterlockConfig) -> list[tuple[str, object]]:
-    features = cfg.features_dir_arg if cfg.features_dir_arg is not None else "(none)"
-    acceptance = cfg.acceptance_runner if cfg.acceptance_runner is not None else "(auto)"
     rows: list[tuple[str, object]] = [
         ("preset", cfg.preset or "(none)"),
         ("src_dir", cfg.src_dir_arg),
         ("test_dir", cfg.test_dir_arg),
         ("test_runner", cfg.test_runner),
         ("test_invoker", cfg.test_invoker),
-        ("features_dir", features),
-        ("acceptance_runner", acceptance),
+        ("features_dir", cfg.features_dir_arg if cfg.features_dir_arg is not None else "(none)"),
+        (
+            "acceptance_runner",
+            cfg.acceptance_runner if cfg.acceptance_runner is not None else "(auto)",
+        ),
     ]
-    for key in (
-        "coverage_min",
-        "crap_max",
-        "enforce_crap",
-        "run_mutation_in_ci",
-        "enforce_mutation",
-        "mutation_ci_mode",
-        "run_acceptance_in_check",
-    ):
-        rows.append((key, getattr(cfg, key)))
+    rows.extend((key, getattr(cfg, key)) for key in _DERIVED_CFG_KEYS)
     return rows
-
-
-def _print_messages(messages: list[str], *, empty: str) -> None:
-    ui.message_list(messages, empty=empty)

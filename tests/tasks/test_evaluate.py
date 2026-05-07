@@ -99,6 +99,11 @@ jobs:
 """
 
 
+def _write_dedented(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(textwrap.dedent(content), encoding="utf-8")
+
+
 def _project(
     make_tmp_project: TmpProjectFactory,
     *,
@@ -113,13 +118,9 @@ def _project(
         test_files=_TEST_FILES if test_files is None else test_files,
     )
     if feature is not None:
-        feature_path = project / "tests" / "features" / "checkout.feature"
-        feature_path.parent.mkdir(parents=True, exist_ok=True)
-        feature_path.write_text(textwrap.dedent(feature), encoding="utf-8")
+        _write_dedented(project / "tests" / "features" / "checkout.feature", feature)
     if workflow is not None:
-        workflow_path = project / ".github" / "workflows" / "ci.yml"
-        workflow_path.parent.mkdir(parents=True, exist_ok=True)
-        workflow_path.write_text(textwrap.dedent(workflow), encoding="utf-8")
+        _write_dedented(project / ".github" / "workflows" / "ci.yml", workflow)
     _write_ci_evidence(project)
     return project
 
@@ -142,11 +143,6 @@ def _write_ci_evidence(
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _report_for(project: Path, monkeypatch: pytest.MonkeyPatch) -> evaluate_mod.EvaluationReport:
-    monkeypatch.chdir(project)
-    return evaluate(load_config())
-
-
 def _item(cfg: InterlockConfig, category: str) -> EvaluationItem:
     report = evaluate(cfg)
     return next(item for item in report.items if item.category == category)
@@ -155,7 +151,8 @@ def _item(cfg: InterlockConfig, category: str) -> EvaluationItem:
 def test_all_pass_project_scores_33_of_33(
     make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    report = _report_for(_project(make_tmp_project), monkeypatch)
+    monkeypatch.chdir(_project(make_tmp_project))
+    report = evaluate(load_config())
 
     assert report.total == 33
     assert report.max_total == 33
@@ -462,8 +459,6 @@ def test_audit_absent_from_ci_lowers_security_score(
     make_tmp_project: TmpProjectFactory,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from interlocks.tasks import evaluate as evaluate_mod
-
     project = _project(make_tmp_project)
     monkeypatch.chdir(project)
     monkeypatch.setattr(

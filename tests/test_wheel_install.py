@@ -35,42 +35,40 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     if shutil.which("uv") is None:
         pytest.skip("uv required")
 
+    def run(cmd: list[str | Path], *, cwd: Path = tmp_path) -> subprocess.CompletedProcess[str]:
+        return _run(cmd, cwd=cwd)
+
     dist_dir = tmp_path / "dist"
-    _run(["uv", "build", "--out-dir", dist_dir, REPO_ROOT], cwd=tmp_path)
+    run(["uv", "build", "--out-dir", dist_dir, REPO_ROOT])
 
     wheels = list(dist_dir.glob("*.whl"))
     assert wheels, f"no wheel produced in {dist_dir}"
     wheel = wheels[0]
 
-    _run(["uv", "venv", "venv"], cwd=tmp_path)
+    venv = tmp_path / "venv"
+    run(["uv", "venv", venv])
 
-    venv_python = tmp_path / "venv" / "bin" / "python"
-    _run(["uv", "pip", "install", wheel, "--python", venv_python], cwd=tmp_path)
+    venv_python = venv / "bin" / "python"
+    run(["uv", "pip", "install", wheel, "--python", venv_python])
 
-    interlocks_bin = tmp_path / "venv" / "bin" / "interlocks"
-    il_bin = tmp_path / "venv" / "bin" / "il"
+    interlocks_bin = venv / "bin" / "interlocks"
+    il_bin = venv / "bin" / "il"
     for bin_path in (interlocks_bin, il_bin):
         assert bin_path.exists(), f"entry point missing at {bin_path}"
         assert bin_path.stat().st_mode & 0o111, f"entry point not executable at {bin_path}"
 
-    result = _run([interlocks_bin, "help"], cwd=tmp_path)
+    help_out = run([interlocks_bin, "help"]).stdout
     for expected in ("check", "pre-commit", "ci", "nightly"):
-        assert expected in result.stdout, (
-            f"`interlocks help` output missing {expected!r}:\n{result.stdout}"
-        )
+        assert expected in help_out, f"`interlocks help` output missing {expected!r}:\n{help_out}"
 
     version = _project_version()
-    assert _run([il_bin, "version"], cwd=tmp_path).stdout.strip() == version
-    assert (
-        _run([venv_python, "-m", "interlocks.cli", "version"], cwd=tmp_path).stdout.strip()
-        == version
-    )
-    assert (
-        _run(
-            [venv_python, "-c", "import interlocks; print(interlocks.__version__)"], cwd=tmp_path
-        ).stdout.strip()
-        == version
-    )
+    version_cmds: list[list[str | Path]] = [
+        [il_bin, "version"],
+        [venv_python, "-m", "interlocks.cli", "version"],
+        [venv_python, "-c", "import interlocks; print(interlocks.__version__)"],
+    ]
+    for cmd in version_cmds:
+        assert run(cmd).stdout.strip() == version, cmd
 
     setup_project = tmp_path / "setup-project"
     setup_project.mkdir()
@@ -80,7 +78,7 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     )
     (setup_project / ".git").mkdir()
 
-    _run([il_bin, "setup-hooks"], cwd=setup_project)
+    run([il_bin, "setup-hooks"], cwd=setup_project)
 
     pre_commit = (setup_project / ".git" / "hooks" / "pre-commit").read_text(encoding="utf-8")
     settings = (setup_project / ".claude" / "settings.json").read_text(encoding="utf-8")

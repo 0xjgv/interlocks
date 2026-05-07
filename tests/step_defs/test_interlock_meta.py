@@ -3,14 +3,11 @@
 Exercises the meta commands (`acceptance`, `init-acceptance`, `setup-hooks`)
 end-to-end against a throwaway tmp project. Each scenario gets its own
 project directory so state cannot leak between them.
-
-Per-file helpers only — no shared conftest fixture.
 """
 
 from __future__ import annotations
 
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
@@ -18,6 +15,7 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from interlocks.defaults_path import path as defaults_path
+from tests.step_defs.conftest import run_interlock_in_cwd
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_meta.feature"))
 
@@ -30,16 +28,6 @@ _PYPROJECT = textwrap.dedent(
     requires-python = ">=3.11"
     """
 )
-
-
-def _run_interlock(project: Path, subcmd: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *subcmd.split()],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
 
 
 @pytest.fixture
@@ -86,7 +74,7 @@ def _run_cmd(
     subcmd: str,
     cli_results: list[subprocess.CompletedProcess[str]],
 ) -> None:
-    cli_results.append(_run_interlock(project, subcmd))
+    cli_results.append(run_interlock_in_cwd(project, *subcmd.split()))
 
 
 @then("the command exits successfully")

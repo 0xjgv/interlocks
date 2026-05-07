@@ -85,39 +85,34 @@ def cmd_check() -> None:
 def _parallel_tasks(
     cfg: InterlockConfig, scope_ref: str | None, scoped_files: list[str] | None
 ) -> list[Task]:
-    parallel = [task_typecheck(scoped_files)]
-    _maybe_append_test(parallel, scope_ref)
-    _maybe_append_acceptance(parallel, cfg, scope_ref)
-    return parallel
+    tasks = [task_typecheck(scoped_files)]
+    optional = (_test_task(scope_ref), _acceptance_task(cfg, scope_ref))
+    tasks.extend(t for t in optional if t is not None)
+    return tasks
 
 
-def _maybe_append_test(parallel: list[Task], scope_ref: str | None) -> None:
+def _test_task(scope_ref: str | None) -> Task | None:
     if scope_ref is not None:
         _skip_under_changed("test", "run `interlocks test` for full suite")
-        return
-    test_task = task_test()
-    if test_task is None:
+        return None
+    test = task_test()
+    if test is None:
         warn_skip("test: no test dir detected — run `interlocks init` to scaffold tests/")
-        return
-    parallel.append(test_task)
+    return test
 
 
-def _maybe_append_acceptance(
-    parallel: list[Task], cfg: InterlockConfig, scope_ref: str | None
-) -> None:
+def _acceptance_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None:
     if not cfg.run_acceptance_in_check:
-        return
+        return None
     if scope_ref is not None:
         _skip_under_changed("acceptance", "scenario-level, not file-level")
-        return
+        return None
     acceptance = classify_acceptance_with_details(cfg)
     if acceptance.is_required_failure:
-        parallel.append(acceptance_failure_task(acceptance))
-        return
+        return acceptance_failure_task(acceptance)
     if acceptance.status is AcceptanceStatus.RUNNABLE:
-        acceptance_task = task_acceptance_with_attribution(cfg)
-        if acceptance_task is not None:
-            parallel.append(acceptance_task)
+        return task_acceptance_with_attribution(cfg)
+    return None
 
 
 def _run_advisory(

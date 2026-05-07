@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from interlocks.config import (
     COVERAGE_REQUIREMENT,
+    InterlockConfig,
     build_coverage_test_command,
     coverage_invoker_prefix,
     load_config,
@@ -13,17 +14,15 @@ from interlocks.defaults_path import has_project_config, path
 from interlocks.runner import Task, arg_value, run
 
 
-def _coverage_rcfile_args() -> list[str]:
+def _coverage_rcfile_args(cfg: InterlockConfig) -> list[str]:
     """``['--rcfile=<bundled>']`` when the project owns no coverage config, else ``[]``."""
-    cfg = load_config()
     if has_project_config(cfg, "coverage", sidecars=(".coveragerc",)):
         return []
     return [f"--rcfile={path('coveragerc')}"]
 
 
-def _coverage_import_check_cmd() -> list[str] | None:
+def _coverage_import_check_cmd(cfg: InterlockConfig) -> list[str] | None:
     """Preflight non-uv projects where Interlocks cannot inject Coverage.py."""
-    cfg = load_config()
     if cfg.test_invoker == "uv":
         return None
     message = (
@@ -48,7 +47,7 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
     cfg = load_config()
     if min_pct is None:
         min_pct = int(arg_value("--min=", str(cfg.coverage_min)))
-    rcfile_args = _coverage_rcfile_args()
+    rcfile_args = _coverage_rcfile_args(cfg)
     run_cmd = build_coverage_test_command(cfg, coverage_args=tuple(rcfile_args))
     report_cmd = [
         *coverage_invoker_prefix(cfg),
@@ -58,7 +57,7 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
         "--show-missing",
         f"--fail-under={min_pct}",
     ]
-    pre_cmds = tuple(cmd for cmd in (_coverage_import_check_cmd(), run_cmd) if cmd is not None)
+    pre_cmds = tuple(cmd for cmd in (_coverage_import_check_cmd(cfg), run_cmd) if cmd is not None)
     return Task(
         f"Coverage >= {min_pct}%",
         report_cmd,

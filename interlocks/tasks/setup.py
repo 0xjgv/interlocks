@@ -111,28 +111,38 @@ def _cmd_setup_ci_install(project_root: Path) -> None:
 
 
 def _cmd_setup_ci_check(project_root: Path) -> None:
-    ui.section("GitHub CI Check")
-    statuses = ci_artifact_statuses(project_root)
-    _render_status(statuses)
-    if all(status.installed for status in statuses):
-        ui.section("Next Steps")
-        ui.message_list(["GitHub CI invokes interlocks."])
-        return
-    ui.section("Next Steps")
-    ui.message_list(["Run `interlocks setup --ci=github` to install a GitHub Actions workflow."])
-    sys.exit(1)
+    _render_check(
+        "GitHub CI Check",
+        ci_artifact_statuses(project_root),
+        ok_message="GitHub CI invokes interlocks.",
+        fix_message="Run `interlocks setup --ci=github` to install a GitHub Actions workflow.",
+    )
 
 
 def _cmd_setup_check(project_root: Path) -> None:
-    ui.section("Setup Check")
-    statuses = setup_artifact_statuses(project_root)
+    _render_check(
+        "Setup Check",
+        setup_artifact_statuses(project_root),
+        ok_message="Local integrations are installed and current.",
+        fix_message="Run `interlocks setup` to install or refresh local integrations.",
+    )
+
+
+def _render_check(
+    title: str,
+    statuses: list[SetupArtifactStatus],
+    *,
+    ok_message: str,
+    fix_message: str,
+) -> None:
+    """Render a `--check` section: status table + Next Steps; exit 1 if anything missing."""
+    ui.section(title)
     _render_status(statuses)
-    if all(status.installed for status in statuses):
-        ui.section("Next Steps")
-        ui.message_list(["Local integrations are installed and current."])
-        return
     ui.section("Next Steps")
-    ui.message_list(["Run `interlocks setup` to install or refresh local integrations."])
+    if all(status.installed for status in statuses):
+        ui.message_list([ok_message])
+        return
+    ui.message_list([fix_message])
     sys.exit(1)
 
 

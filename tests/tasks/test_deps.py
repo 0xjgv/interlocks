@@ -47,27 +47,25 @@ def dirty_project(tmp_path: Path) -> Path:
     return _make_probe(tmp_path, deps='"requests>=2"')
 
 
-@pytest.mark.slow
-def test_deps_passes_on_clean_project(clean_project: Path) -> None:
-    result = subprocess.run(
+def _run_deps(cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [sys.executable, "-m", "interlocks.cli", "deps"],
-        cwd=clean_project,
+        cwd=cwd,
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+@pytest.mark.slow
+def test_deps_passes_on_clean_project(clean_project: Path) -> None:
+    result = _run_deps(clean_project)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
 
 
 @pytest.mark.slow
 def test_deps_fails_on_unused_dependency(dirty_project: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "deps"],
-        cwd=dirty_project,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = _run_deps(dirty_project)
     assert result.returncode != 0
     assert "DEP002" in (result.stdout + result.stderr)
 

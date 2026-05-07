@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-from interlocks.runner import Task, run, tool
-from interlocks.tasks._ruff import ruff_config_args
+from interlocks.runner import Task, run
+from interlocks.tasks._ruff import make_ruff_task
 
 
 def task_lint(files: list[str] | None = None) -> Task:
-    target = files or ["."]
-    return Task(
-        "Lint check",
-        tool("ruff", "check", *ruff_config_args(), *target),
-        label="lint",
-        display="ruff check",
-    )
+    return make_ruff_task("lint", files)
 
 
 def cmd_lint(files: list[str] | None = None) -> None:

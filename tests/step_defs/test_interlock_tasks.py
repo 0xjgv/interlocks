@@ -22,6 +22,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
 from interlocks.config import COVERAGE_REQUIREMENT, clear_cache
+from tests.step_defs.conftest import run_interlock_in_cwd
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_tasks.feature"))
 
@@ -462,13 +463,8 @@ def _run_in_project(cmd: str, project_root: Path) -> CliResult:
     # cmd starts with "interlocks <subcmd> …"; drop the "interlocks" sentinel.
     _, *argv = cmd.split()
     env = {**os.environ}
-    if (
-        project_root
-        .joinpath("pyproject.toml")
-        .read_text(encoding="utf-8")
-        .find('name = "interlocks"')
-        >= 0
-    ):
+    pyproject_text = (project_root / "pyproject.toml").read_text(encoding="utf-8")
+    if 'name = "interlocks"' in pyproject_text:
         env["INTERLOCKS_ACCEPTANCE_TRACE"] = "1"
     # When a fixture contains a local ``interlocks/`` directory, it would
     # otherwise shadow the installed package via the implicit CWD on sys.path.
@@ -477,14 +473,7 @@ def _run_in_project(cmd: str, project_root: Path) -> CliResult:
     # CWD-relative imports.
     if (project_root / "interlocks").is_dir():
         env["PYTHONSAFEPATH"] = "1"
-    result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *argv],
-        cwd=project_root,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = run_interlock_in_cwd(project_root, *argv, env=env)
     return CliResult(rc=result.returncode, output=result.stdout + result.stderr)
 
 

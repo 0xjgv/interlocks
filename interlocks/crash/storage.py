@@ -90,25 +90,20 @@ def write_crash(payload: Mapping[str, Any]) -> Path:
 
 def _read_dedup(directory: Path) -> dict[str, float]:
     """Load ``dedup.json``; missing or corrupt → empty dict, never raise."""
-    path = directory / _DEDUP_FILE
+    # FileNotFoundError ⊂ OSError; json.JSONDecodeError ⊂ ValueError.
     try:
-        raw = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return {}
-    except OSError:
-        return {}
-    try:
+        raw = (directory / _DEDUP_FILE).read_text(encoding="utf-8")
         data = json.loads(raw)
-    except (ValueError, json.JSONDecodeError):
+    except (OSError, ValueError):
         return {}
     if not isinstance(data, dict):
         return {}
     # Only keep entries that match the schema; drop the rest silently.
-    cleaned: dict[str, float] = {}
-    for key, value in data.items():
-        if isinstance(key, str) and isinstance(value, (int, float)):
-            cleaned[key] = float(value)
-    return cleaned
+    return {
+        key: float(value)
+        for key, value in data.items()
+        if isinstance(key, str) and isinstance(value, (int, float))
+    }
 
 
 def should_suppress_transport(fingerprint: str, *, now: float) -> bool:

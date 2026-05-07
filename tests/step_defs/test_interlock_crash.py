@@ -19,13 +19,9 @@ from pathlib import Path
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
-import interlocks
+from tests.step_defs.conftest import interlocks_pythonpath_env
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_crash.feature"))
-
-# Force the in-tree package onto PYTHONPATH so subprocess probes always exercise
-# the current source, not a stale editable install. Mirrors test_preflight.py.
-_INTERLOCK_PKG_ROOT = str(Path(interlocks.__file__).resolve().parent.parent)
 
 
 @dataclass
@@ -54,11 +50,9 @@ def crash_session(tmp_path: Path) -> CrashSession:
 
 
 def _base_env(session: CrashSession) -> dict[str, str]:
-    env = os.environ.copy()
-    existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = (
-        f"{_INTERLOCK_PKG_ROOT}{os.pathsep}{existing}" if existing else _INTERLOCK_PKG_ROOT
-    )
+    # PYTHONPATH augmented so subprocess probes hit the in-tree source
+    # (not a stale editable install) — mirrors test_preflight.py.
+    env = interlocks_pythonpath_env()
     env["XDG_CACHE_HOME"] = str(session.cache_root)
     env.pop("INTERLOCKS_CRASH_INJECT", None)
     # Suppress browser-open side effects in headless CI; transport prints stderr regardless.
@@ -143,57 +137,37 @@ def _invoke_interactive(
     return run
 
 
-def _write_minimal_project(root: Path) -> None:
+_CRASH_PYPROJECT = textwrap.dedent(
+    """\
+    [project]
+    name = "crash-fixture"
+    version = "0.0.0"
+
+    [tool.interlocks]
+    src_dir = "pkg"
+    test_dir = "tests"
+    """
+)
+
+
+def _scaffold_crash_project(
+    root: Path, *, write_pyproject: bool = True, broken_module: bool = False
+) -> None:
+    """Materialize the standard crash-fixture layout.
+
+    - ``write_pyproject=False`` → preflight raises InterlockUserError.
+    - ``broken_module=True``    → adds an unused-import file ruff will flag,
+      driving a real lint-gate failure.
+    """
     (root / "pkg").mkdir(exist_ok=True)
     (root / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    if broken_module:
+        (root / "pkg" / "broken.py").write_text(
+            "import os\nimport sys\n\nx = 1\n", encoding="utf-8"
+        )
     (root / "tests").mkdir(exist_ok=True)
-    (root / "pyproject.toml").write_text(
-        textwrap.dedent(
-            """\
-            [project]
-            name = "crash-fixture"
-            version = "0.0.0"
-
-            [tool.interlocks]
-            src_dir = "pkg"
-            test_dir = "tests"
-            """
-        ),
-        encoding="utf-8",
-    )
-
-
-def _write_no_pyproject_project(root: Path) -> None:
-    """No pyproject.toml — preflight raises InterlockUserError (the user-error path)."""
-    (root / "pkg").mkdir(exist_ok=True)
-    (root / "pkg" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "tests").mkdir(exist_ok=True)
-
-
-def _write_lint_failure_project(root: Path) -> None:
-    """Project with a Python file that ruff will flag — drives a real gate failure."""
-    (root / "pkg").mkdir(exist_ok=True)
-    (root / "pkg" / "__init__.py").write_text("", encoding="utf-8")
-    # Unused import + bare 'except' — ruff E/F codes will fail without auto-fix.
-    (root / "pkg" / "broken.py").write_text(
-        "import os\nimport sys\n\nx = 1\n",
-        encoding="utf-8",
-    )
-    (root / "tests").mkdir(exist_ok=True)
-    (root / "pyproject.toml").write_text(
-        textwrap.dedent(
-            """\
-            [project]
-            name = "crash-fixture"
-            version = "0.0.0"
-
-            [tool.interlocks]
-            src_dir = "pkg"
-            test_dir = "tests"
-            """
-        ),
-        encoding="utf-8",
-    )
+    if write_pyproject:
+        (root / "pyproject.toml").write_text(_CRASH_PYPROJECT, encoding="utf-8")
 
 
 # ---------- Given steps ----------
@@ -204,7 +178,7 @@ def _write_lint_failure_project(root: Path) -> None:
     target_fixture="crash_run",
 )
 def _run_with_inject(subcmd: str, target: str, crash_session: CrashSession) -> CrashRun:
-    _write_minimal_project(crash_session.project_root)
+    _scaffold_crash_project(crash_session.project_root)
     env = _base_env(crash_session)
     env["INTERLOCKS_CRASH_INJECT"] = target
     return _invoke(crash_session, subcmd.split(), env)
@@ -220,7 +194,7 @@ def _run_with_inject(subcmd: str, target: str, crash_session: CrashSession) -> C
 def _run_with_inject_and_prompt_answer(
     subcmd: str, target: str, answer: str, crash_session: CrashSession
 ) -> CrashRun:
-    _write_minimal_project(crash_session.project_root)
+    _scaffold_crash_project(crash_session.project_root)
     env = _base_env(crash_session)
     env["INTERLOCKS_CRASH_INJECT"] = target
     response = "\n" if answer == "yes" else "n\n"
@@ -229,12 +203,12 @@ def _run_with_inject_and_prompt_answer(
 
 @given("a project without a pyproject.toml")
 def _no_pyproject(crash_session: CrashSession) -> None:
-    _write_no_pyproject_project(crash_session.project_root)
+    _scaffold_crash_project(crash_session.project_root, write_pyproject=False)
 
 
 @given("a project whose lint gate will fail")
 def _lint_failure_project(crash_session: CrashSession) -> None:
-    _write_lint_failure_project(crash_session.project_root)
+    _scaffold_crash_project(crash_session.project_root, broken_module=True)
 
 
 @given("the first run printed a GitHub issue URL")

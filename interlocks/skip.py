@@ -98,18 +98,13 @@ def _cli_raw() -> str | None:
 
 
 def _parse_csv(raw: str, *, source: str) -> frozenset[str]:
-    labels = [_clean_label(label) for label in raw.split(",")]
-    labels = [label for label in labels if label]
+    labels = [cleaned for raw_label in raw.split(",") if (cleaned := raw_label.strip().lower())]
     unknown = sorted(set(labels) - SKIP_LABELS)
     if unknown:
         _fail_skip_usage(
             f"unknown skip label(s) for {source}: {', '.join(unknown)} (known: {_known_labels()})"
         )
     return frozenset(labels)
-
-
-def _clean_label(label: str) -> str:
-    return label.strip().lower()
 
 
 def _known_labels() -> str:

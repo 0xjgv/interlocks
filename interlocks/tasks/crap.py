@@ -76,17 +76,21 @@ def cmd_crap_cached_advisory(changed: set[str] | None = None) -> None:
     """Print fast advisory CRAP output from fresh cached coverage, or a skip hint."""
     cfg = load_config()
     command = f"CRAP --max={cfg.crap_max}"
+
+    def _skip(detail: str) -> None:
+        ui.row("crap", command, "skipped", detail=detail, state="warn")
+
     cov_cache = Path(".coverage")
     if not cov_cache.exists():
-        ui.row("crap", command, "skipped", detail="no coverage cache", state="warn")
+        _skip("no coverage cache")
         return
     if _coverage_cache_is_stale(cov_cache, cfg):
-        ui.row("crap", command, "skipped", detail="coverage cache is stale", state="warn")
+        _skip("coverage cache is stale")
         return
 
     cov_file = generate_coverage_xml()
     if not cov_file.exists():
-        ui.row("crap", command, "skipped", detail="coverage.xml missing", state="warn")
+        _skip("coverage.xml missing")
         return
 
     cov_map = parse_coverage(cov_file)

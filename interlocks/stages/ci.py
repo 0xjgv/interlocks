@@ -12,8 +12,9 @@ from interlocks.acceptance_status import (
     classify_acceptance_with_details,
 )
 from interlocks.config import InterlockConfig, MutationCIMode, load_config
-from interlocks.runner import run_tasks
+from interlocks.runner import Task, run_tasks
 from interlocks.skip import (
+    SkipPolicy,
     current_skip_policy,
     maybe_print_skip_banner,
     run_unless_skipped,
@@ -42,7 +43,24 @@ def cmd_ci() -> None:
     ui.banner(cfg)
     maybe_print_skip_banner(skip_policy)
     ui.section("CI Checks")
-    tasks = [
+    # DISABLED + OPTIONAL_MISSING → skip silently (preserve current CI behavior)
+    exit_code = 0
+    try:
+        run_tasks(_parallel_tasks(cfg))
+        # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
+        ui.section("Gates")
+        _post_coverage_gates(cfg, skip_policy)
+    except SystemExit as exc:
+        exit_code = int(exc.code) if isinstance(exc.code, int) else 1
+        raise
+    finally:
+        elapsed = time.monotonic() - start
+        _write_ci_evidence(cfg, elapsed_seconds=elapsed, passed=exit_code == 0)
+    ui.stage_footer(elapsed)
+
+
+def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:
+    tasks: list[Task] = [
         task_format_check(),
         task_lint(),
         task_complexity(),
@@ -51,42 +69,32 @@ def cmd_ci() -> None:
         task_typecheck(),
         task_coverage(),
     ]
-    arch = task_arch()
-    if arch is not None:
-        tasks.append(arch)
+    optional = (task_arch(), _acceptance_task(cfg))
+    tasks.extend(t for t in optional if t is not None)
+    return tasks
+
+
+def _acceptance_task(cfg: InterlockConfig) -> Task | None:
     acceptance = classify_acceptance_with_details(cfg)
     if acceptance.is_required_failure:
-        tasks.append(acceptance_failure_task(acceptance))
-    elif acceptance.status is AcceptanceStatus.RUNNABLE:
-        acceptance_task = task_acceptance_with_attribution(cfg)
-        if acceptance_task is not None:
-            tasks.append(acceptance_task)
-    # DISABLED + OPTIONAL_MISSING → skip silently (preserve current CI behavior)
-    exit_code = 0
-    try:
-        run_tasks(tasks)
-        # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
-        ui.section("Gates")
-        if skip_policy.enabled("coverage"):
-            warn_skipped("crap", "coverage was skipped")
-        else:
-            run_unless_skipped("crap", cmd_crap, skip_policy)
+        return acceptance_failure_task(acceptance)
+    if acceptance.status is AcceptanceStatus.RUNNABLE:
+        return task_acceptance_with_attribution(cfg)
+    return None
+
+
+def _post_coverage_gates(cfg: InterlockConfig, skip_policy: SkipPolicy) -> None:
+    if skip_policy.enabled("coverage"):
+        warn_skipped("crap", "coverage was skipped")
+    else:
+        run_unless_skipped("crap", cmd_crap, skip_policy)
+    run_unless_skipped("attribution", lambda: cmd_behavior_attribution(refresh=False), skip_policy)
+    if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
         run_unless_skipped(
-            "attribution", lambda: cmd_behavior_attribution(refresh=False), skip_policy
+            "mutation",
+            lambda: cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental"),
+            skip_policy,
         )
-        if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
-            run_unless_skipped(
-                "mutation",
-                lambda: cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental"),
-                skip_policy,
-            )
-    except SystemExit as exc:
-        exit_code = int(exc.code) if isinstance(exc.code, int) else 1
-        raise
-    finally:
-        elapsed = time.monotonic() - start
-        _write_ci_evidence(cfg, elapsed_seconds=elapsed, passed=exit_code == 0)
-    ui.stage_footer(elapsed)
 
 
 def _should_run_mutation(mode: MutationCIMode, *, run_in_ci: bool) -> bool:

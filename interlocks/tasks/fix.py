@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-from interlocks.runner import Task, run, tool
-from interlocks.tasks._ruff import ruff_config_args
+from interlocks.runner import Task, run
+from interlocks.tasks._ruff import make_ruff_task
 
 
 def task_fix(files: list[str] | None = None) -> Task:
-    target = files or ["."]
-    return Task(
-        "Fix lint errors",
-        tool("ruff", "check", "--fix", *ruff_config_args(), *target),
-        label="fix",
-        display="ruff check --fix",
-    )
+    return make_ruff_task("fix", files)
 
 
 def cmd_fix(files: list[str] | None = None, *, no_exit: bool = False) -> None:

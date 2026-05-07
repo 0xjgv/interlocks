@@ -11,9 +11,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
-
 from interlocks import ui
 from interlocks.config import load_config
 from interlocks.git import changed_py_files_vs
@@ -30,6 +27,8 @@ from interlocks.runner import GREEN, RED, RESET, VERBOSE, YELLOW, generate_cover
 from interlocks.tasks.coverage import cmd_coverage
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
     from interlocks.config import InterlockConfig
 
 
@@ -97,18 +96,17 @@ def _compute_trust(
     cfg: InterlockConfig,
 ) -> float:
     """Start at 100, subtract capped penalties for each signal. Floor at 0."""
-    score = 100.0
     max_crap = max((r.crap for r in crap_rows), default=0.0)
-    overrun = max(0.0, max_crap - cfg.crap_max)
-    score -= _clamp(overrun * CRAP_OVERRUN_WEIGHT, 0, CRAP_MAX_PENALTY)
-    if mutation is not None:
-        shortfall = cfg.mutation_min_score - mutation.score
-        score -= _clamp(shortfall, 0, MUTATION_MAX_PENALTY)
-    if coverage_pct is not None:
-        cov_shortfall = cfg.coverage_min - coverage_pct
-        score -= _clamp(cov_shortfall, 0, COVERAGE_MAX_PENALTY)
-    score -= suspicious_count * SUSPICIOUS_PENALTY_EACH
-    return max(score, 0.0)
+    crap_overrun = max(0.0, max_crap - cfg.crap_max)
+    mutation_short = (cfg.mutation_min_score - mutation.score) if mutation is not None else 0.0
+    coverage_short = (cfg.coverage_min - coverage_pct) if coverage_pct is not None else 0.0
+    penalty = (
+        _clamp(crap_overrun * CRAP_OVERRUN_WEIGHT, 0, CRAP_MAX_PENALTY)
+        + _clamp(mutation_short, 0, MUTATION_MAX_PENALTY)
+        + _clamp(coverage_short, 0, COVERAGE_MAX_PENALTY)
+        + suspicious_count * SUSPICIOUS_PENALTY_EACH
+    )
+    return max(100.0 - penalty, 0.0)
 
 
 def _tier(score: float) -> tuple[float, str, str, str]:
@@ -163,17 +161,18 @@ def _collect_test_inspections(
 
 
 def _inspect_tree(tree: ast.Module, rel_path: str) -> list[TestInspection]:
-    rows: list[TestInspection] = []
+    return [_inspect_function(fn, rel_path, qualname=q) for fn, q in _iter_tests(tree)]
+
+
+def _iter_tests(tree: ast.Module) -> Iterator[tuple[ast.FunctionDef, str]]:
+    """Yield ``(fn, qualname)`` for every top-level ``test_*`` fn or TestCase method."""
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
-            rows.append(_inspect_function(node, rel_path, qualname=node.name))
+            yield node, node.name
         elif isinstance(node, ast.ClassDef):
             for item in node.body:
                 if isinstance(item, ast.FunctionDef) and item.name.startswith("test_"):
-                    rows.append(
-                        _inspect_function(item, rel_path, qualname=f"{node.name}.{item.name}")
-                    )
-    return rows
+                    yield item, f"{node.name}.{item.name}"
 
 
 def _inspect_function(fn: ast.FunctionDef, rel_path: str, *, qualname: str) -> TestInspection:
@@ -310,16 +309,28 @@ def _render_header(report: TrustReport) -> None:
     ])
 
 
-def _print_truncated(rows: list, *, verbose: bool, formatter: Callable[..., str]) -> None:
-    """Print a section body: each row via ``formatter``, with an overflow hint."""
+def _print_truncated(
+    rows: list,
+    *,
+    verbose: bool,
+    formatter: Callable[..., str],
+    limit: int = 10,
+    indent: str = "    ",
+    empty: str | None = "    (none)",
+) -> None:
+    """Print rows via ``formatter``, capped at ``limit`` unless verbose, with overflow hint.
+
+    ``empty`` is printed when ``rows`` is empty (set ``None`` to suppress).
+    """
     if not rows:
-        print("    (none)")
+        if empty is not None:
+            print(empty)
         return
-    shown = rows if verbose else rows[:10]
+    shown = rows if verbose else rows[:limit]
     for row in shown:
         print(formatter(row))
     if not verbose and len(rows) > len(shown):
-        print(f"    … {len(rows) - len(shown)} more (use --verbose)")
+        print(f"{indent}… {len(rows) - len(shown)} more (use --verbose)")
 
 
 def _format_suspicious(t: TestInspection) -> str:
@@ -374,23 +385,26 @@ def _render_next_actions(report: TrustReport, *, verbose: bool) -> None:
 
 def _render_suspicious_actions(rows: list[TestInspection], *, verbose: bool) -> None:
     print("    Add behavioral assertions, or shorten/mark intentional smoke tests:")
-    shown = rows if verbose else rows[:3]
-    for row in shown:
-        print(f"      {row.file}::{row.name}")
-    _render_more_hint(total=len(rows), shown=len(shown))
+    _print_truncated(
+        rows,
+        verbose=verbose,
+        limit=3,
+        indent="      ",
+        empty=None,
+        formatter=lambda r: f"      {r.file}::{r.name}",
+    )
 
 
 def _render_crap_actions(rows: list[CrapRow], *, verbose: bool) -> None:
     print("    Cover or simplify hot functions; start with:")
-    shown = rows if verbose else rows[:3]
-    for row in shown:
-        print(f"      {row.path}::{row.name}  cov {row.coverage * 100:.0f}%")
-    _render_more_hint(total=len(rows), shown=len(shown))
-
-
-def _render_more_hint(*, total: int, shown: int) -> None:
-    if total > shown:
-        print(f"      … {total - shown} more (use --verbose)")
+    _print_truncated(
+        rows,
+        verbose=verbose,
+        limit=3,
+        indent="      ",
+        empty=None,
+        formatter=lambda r: f"      {r.path}::{r.name}  cov {r.coverage * 100:.0f}%",
+    )
 
 
 def _render_stages(report: TrustReport) -> None:

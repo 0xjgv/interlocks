@@ -16,7 +16,7 @@ from interlocks.acceptance_status import AcceptanceStatus, classify_acceptance, 
 from interlocks.defaults_path import path as defaults_path
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
 
     from interlocks.config import InterlockConfig
 
@@ -54,20 +54,18 @@ class SetupArtifactStatus:
 
 def iter_workflow_bodies(project_root: Path) -> list[str]:
     """Read every ``.github/workflows/*.y*ml`` file body. Empty list when dir is absent."""
-    return list(_iter_workflow_bodies(project_root))
-
-
-def _iter_workflow_bodies(project_root: Path) -> Iterator[str]:
     workflows_dir = project_root / ".github" / "workflows"
     if not workflows_dir.is_dir():
-        return
+        return []
+    bodies: list[str] = []
     for path in sorted(workflows_dir.iterdir()):
         if path.suffix not in (".yml", ".yaml"):
             continue
         try:
-            yield path.read_text(encoding="utf-8")
+            bodies.append(path.read_text(encoding="utf-8"))
         except OSError:
             continue
+    return bodies
 
 
 def is_post_edit_command(command: object) -> bool:
@@ -124,7 +122,7 @@ def ci_workflow_present(project_root: Path) -> bool:
     """True when any ``.github/workflows/*.y*ml`` references ``interlocks ci`` or the action."""
     return any(
         any(needle in body for needle in _CI_WORKFLOW_NEEDLES)
-        for body in _iter_workflow_bodies(project_root)
+        for body in iter_workflow_bodies(project_root)
     )
 
 

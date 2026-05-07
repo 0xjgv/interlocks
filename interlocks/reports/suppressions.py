@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -38,13 +39,11 @@ def _parse_line_for_suppressions(line: str) -> list[tuple[str, list[str]]]:
 
 def _scan_suppressions(roots: Iterable[str] | None = None) -> dict[str, list[list[str]]]:
     """Scan Python files for suppression comments. Returns {kind: [rules...]}."""
-    results: dict[str, list[list[str]]] = {}
     if roots is None:
         cfg = load_config()
-        actual_roots = (cfg.src_dir_arg, cfg.test_dir_arg)
-    else:
-        actual_roots = roots
-    for dir_name in actual_roots:
+        roots = (cfg.src_dir_arg, cfg.test_dir_arg)
+    results: dict[str, list[list[str]]] = {}
+    for dir_name in roots:
         for py_file in sorted(Path(dir_name).rglob("*.py")):
             try:
                 text = py_file.read_text(encoding="utf-8")
@@ -66,12 +65,10 @@ def print_suppressions_report() -> None:
     print(f"Suppressions: {total} total")
     if total == 0:
         return
-    for kind in sorted(results):
-        entries = results[kind]
+    for kind, entries in sorted(results.items()):
         print(f"  {kind}: {len(entries)}")
-        rule_counts: dict[str, int] = {}
+        rule_counts: Counter[str] = Counter()
         for rules in entries:
-            for r in rules:
-                rule_counts[r] = rule_counts.get(r, 0) + 1
+            rule_counts.update(rules)
         for rule, count in sorted(rule_counts.items(), key=lambda x: (-x[1], x[0]))[:10]:
             print(f"    {rule}: {count}")

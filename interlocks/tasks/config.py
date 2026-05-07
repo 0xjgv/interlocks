@@ -54,10 +54,12 @@ def cmd_config() -> None:
     _print_keys()
 
     ui.section("Precedence")
-    _print_precedence()
+    for line in _PRECEDENCE_LINES:
+        print(line)
 
     ui.section("Examples")
-    _print_examples()
+    for line in _EXAMPLE_LINES:
+        print(line)
 
     ui.section("Next steps")
     _print_next_steps(cfg, pyproject_present=pyproject.is_file())
@@ -247,11 +249,6 @@ _PRECEDENCE_LINES: tuple[str, ...] = (
 )
 
 
-def _print_precedence() -> None:
-    for line in _PRECEDENCE_LINES:
-        print(line)
-
-
 _EXAMPLE_LINES: tuple[str, ...] = (
     "  Apply preset:        interlocks presets set baseline",
     "  Override threshold:  [tool.interlocks]",
@@ -260,11 +257,6 @@ _EXAMPLE_LINES: tuple[str, ...] = (
     '  Pin runner/invoker:  test_runner = "pytest"',
     '                       test_invoker = "uv"',
 )
-
-
-def _print_examples() -> None:
-    for line in _EXAMPLE_LINES:
-        print(line)
 
 
 def _print_next_steps(cfg: InterlockConfig | None, *, pyproject_present: bool) -> None:

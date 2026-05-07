@@ -131,19 +131,28 @@ def _tracer(public_symbols: tuple[str, ...], reached: set[str]) -> Any:
     symbol_index = symbols_by_function(public_symbols)
 
     def trace(frame: Any, event: str, _arg: object) -> Any:
-        if event != "call":
-            return trace
-        candidates = symbol_index.get(frame.f_code.co_name)
-        if not candidates:
-            return trace
-        for module in frame_module_names(frame):
-            symbol = candidates.get(module)
-            if symbol is not None:
-                reached.add(symbol)
-                break
+        symbol = _match_public_symbol(frame, event, symbol_index)
+        if symbol is not None:
+            reached.add(symbol)
         return trace
 
     return trace
+
+
+def _match_public_symbol(
+    frame: Any, event: str, symbol_index: dict[str, dict[str, str]]
+) -> str | None:
+    """Return the public ``module:fn`` symbol for ``frame`` on a ``call`` event, else None."""
+    if event != "call" or frame.f_globals is None:
+        return None
+    candidates = symbol_index.get(frame.f_code.co_name)
+    if not candidates:
+        return None
+    for module in frame_module_names(frame):
+        symbol = candidates.get(module)
+        if symbol is not None:
+            return symbol
+    return None
 
 
 def frame_module_names(frame: Any) -> tuple[str, ...]:

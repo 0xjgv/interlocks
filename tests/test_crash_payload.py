@@ -18,6 +18,7 @@ import re
 import socket
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -55,6 +56,11 @@ def _capture_keyerror() -> KeyError:
     raise AssertionError("unreachable")
 
 
+def _build(subcommand: str = "lint") -> dict[str, Any]:
+    """Capture a fresh KeyError and build the payload — the per-test boilerplate."""
+    return build_payload(_capture_keyerror(), subcommand=subcommand, project_root=Path.cwd())
+
+
 @pytest.fixture
 def force_interlocks_frame(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mark this test file as an interlocks frame so the scrubber keeps it.
@@ -81,20 +87,16 @@ def force_interlocks_frame(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_payload_contains_exactly_allowlisted_keys(
     force_interlocks_frame: None,
 ) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
+    result = _build()
     assert set(result.keys()) == ALLOWLIST_KEYS
     # No extras hiding under None values either.
     assert len(result) == len(ALLOWLIST_KEYS)
 
 
 def test_payload_is_json_serializable(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
     # Round-trip through JSON to confirm there are no non-serializable types
     # (Path, datetime, dataclass instances) leaking into the payload.
-    text = json.dumps(result)
-    parsed = json.loads(text)
+    parsed = json.loads(json.dumps(_build()))
     assert set(parsed.keys()) == ALLOWLIST_KEYS
 
 
@@ -110,30 +112,21 @@ def test_payload_does_not_leak_env_values(
     env_key = "FAKE" + "_API" + "_KEY_FOR_CRASH_TEST"
     sentinel = "marker-" + "xyz123-not-real"
     monkeypatch.setenv(env_key, sentinel)
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    text = json.dumps(result)
-    assert sentinel not in text
+    assert sentinel not in json.dumps(_build())
 
 
 def test_payload_does_not_leak_hostname(force_interlocks_frame: None) -> None:
     hostname = socket.gethostname()
     if not hostname:
         pytest.skip("no hostname configured on this machine")
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    text = json.dumps(result)
-    assert hostname not in text
+    assert hostname not in json.dumps(_build())
 
 
 def test_payload_does_not_leak_user(force_interlocks_frame: None) -> None:
     user = os.getenv("USER", "")
     if not user:
         pytest.skip("USER env not set")
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    text = json.dumps(result)
-    assert user not in text
+    assert user not in json.dumps(_build())
 
 
 def test_payload_does_not_leak_sys_argv(
@@ -142,54 +135,41 @@ def test_payload_does_not_leak_sys_argv(
     """Distinctive sys.argv marker must not appear anywhere in the JSON dump."""
     marker = "secret-arg-marker-9988"
     monkeypatch.setattr(sys, "argv", ["pytest", marker])
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    text = json.dumps(result)
-    assert marker not in text
+    assert marker not in json.dumps(_build())
 
 
 # ─────────────── per-field shape ────────────────────────────────────
 
 
 def test_exception_type_is_class_name_only(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
+    result = _build()
     assert result["exception_type"] == "KeyError"
     assert "." not in result["exception_type"]
     assert "builtins" not in result["exception_type"]
 
 
 def test_python_version_matches_dotted_triple(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    assert re.fullmatch(r"\d+\.\d+\.\d+", result["python_version"])
+    assert re.fullmatch(r"\d+\.\d+\.\d+", _build()["python_version"])
 
 
 def test_timestamp_utc_iso8601_second_precision(
     force_interlocks_frame: None,
 ) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    ts = result["timestamp_utc"]
+    ts = _build()["timestamp_utc"]
     assert ts.endswith("Z")
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", ts)
 
 
 def test_schema_version_is_one(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    assert result["schema_version"] == 1
+    assert _build()["schema_version"] == 1
 
 
 def test_interlocks_version_matches_package(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    assert result["interlocks_version"] == interlocks.__version__
+    assert _build()["interlocks_version"] == interlocks.__version__
 
 
 def test_subcommand_round_trip(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="nightly", project_root=Path.cwd())
+    result = _build("nightly")
     assert result["subcommand"] == "nightly"
     # Stage is a documented alias for now (spec §2.5); both must be strings.
     assert isinstance(result["stage"], str)
@@ -197,18 +177,14 @@ def test_subcommand_round_trip(force_interlocks_frame: None) -> None:
 
 
 def test_fingerprint_is_16_hex(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    assert re.fullmatch(r"[0-9a-f]{16}", result["fingerprint"])
+    assert re.fullmatch(r"[0-9a-f]{16}", _build()["fingerprint"])
 
 
 # ─────────────── frames structure ────────────────────────────────────
 
 
 def test_frames_have_correct_kind_tags(force_interlocks_frame: None) -> None:
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    frames = result["frames"]
+    frames = _build()["frames"]
     assert isinstance(frames, list)
     assert frames, "expected at least one frame from the synthetic raise"
     for frame in frames:
@@ -227,11 +203,8 @@ def test_frames_include_synthetic_raise_function(
     force_interlocks_frame: None,
 ) -> None:
     """The interlocks frame for the helper must surface its function name."""
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    interlocks_frames = [f for f in result["frames"] if f["kind"] == "interlocks"]
-    fn_names = {f["function"] for f in interlocks_frames}
-    assert "_raise_key_error" in fn_names
+    interlocks_frames = [f for f in _build()["frames"] if f["kind"] == "interlocks"]
+    assert "_raise_key_error" in {f["function"] for f in interlocks_frames}
 
 
 # ─────────────── ci boolean strictness ──────────────────────────────
@@ -254,18 +227,14 @@ def test_ci_only_true_for_literal_lowercase_true(
     expected: bool,
 ) -> None:
     monkeypatch.setenv("CI", value)
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    assert result["ci"] is expected
+    assert _build()["ci"] is expected
 
 
 def test_ci_false_when_unset(
     force_interlocks_frame: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("CI", raising=False)
-    exc = _capture_keyerror()
-    result = build_payload(exc, subcommand="lint", project_root=Path.cwd())
-    assert result["ci"] is False
+    assert _build()["ci"] is False
 
 
 # ─────────────── module-level smoke ──────────────────────────────────

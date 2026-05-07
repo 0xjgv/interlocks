@@ -102,12 +102,9 @@ def _encode_body_within_cap(body: str, *, local_path: Path | None) -> str:
     target_encoded = _BODY_ENCODED_CAP - encoded_suffix_len
 
     truncated = body
-    while True:
-        encoded_truncated = quote(truncated, safe="")
-        if len(encoded_truncated) <= target_encoded:
-            break
+    while len(quote(truncated, safe="")) > target_encoded:
         shrink = max(1, len(truncated) // 20)
-        truncated = truncated[: len(truncated) - shrink]
+        truncated = truncated[:-shrink]
 
     return quote(truncated + suffix, safe="")
 
@@ -120,39 +117,32 @@ def _render_body(payload: Mapping[str, Any]) -> str:
     fingerprint, frames. Anything else in the payload is ignored — this
     function is the schema-to-prose translator, not a generic dict dumper.
     """
-    interlocks_version = payload.get("interlocks_version", "")
-    python_version = payload.get("python_version", "")
-    platform_system = payload.get("platform_system", "")
-    platform_machine = payload.get("platform_machine", "")
-    subcommand = payload.get("subcommand", "")
-    exception_type = payload.get("exception_type", "")
-    timestamp_utc = payload.get("timestamp_utc", "")
-    ci = payload.get("ci", False)
-    fingerprint = payload.get("fingerprint", "")
-    frames = payload.get("frames", []) or []
-
+    fields: tuple[tuple[str, Any], ...] = (
+        ("interlocks", payload.get("interlocks_version", "")),
+        ("python", payload.get("python_version", "")),
+        (
+            "platform",
+            f"{payload.get('platform_system', '')}/{payload.get('platform_machine', '')}",
+        ),
+        ("subcommand", payload.get("subcommand", "")),
+        ("exception", payload.get("exception_type", "")),
+        ("timestamp", payload.get("timestamp_utc", "")),
+        ("ci", payload.get("ci", False)),
+        ("fingerprint", payload.get("fingerprint", "")),
+    )
     lines = [
         "## Crash report",
         "",
         "Please add what you were trying to do before submitting.",
         "",
-        f"- interlocks: {interlocks_version}",
-        f"- python: {python_version}",
-        f"- platform: {platform_system}/{platform_machine}",
-        f"- subcommand: {subcommand}",
-        f"- exception: {exception_type}",
-        f"- timestamp: {timestamp_utc}",
-        f"- ci: {ci}",
-        f"- fingerprint: {fingerprint}",
+        *(f"- {label}: {value}" for label, value in fields),
         "",
         "## Frames",
         "",
         "```",
+        *(_format_frame(frame) for frame in payload.get("frames") or []),
+        "```",
     ]
-    for frame in frames:
-        lines.append(_format_frame(frame))
-    lines.append("```")
-
     return "\n".join(lines)
 
 

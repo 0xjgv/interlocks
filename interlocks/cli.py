@@ -94,7 +94,7 @@ _TOOL_INTERLOCK_HEADER = re.compile(r"^\[tool\.interlocks\]\s*$", re.MULTILINE)
 _NEXT_HEADER = re.compile(r"^\[", re.MULTILINE)
 _PRESET_LINE = re.compile(r"^(?P<indent>[ \t]*)preset\s*=.*$", re.MULTILINE)
 
-_PRESET_REPORTED_KEYS: tuple[str, ...] = (
+_THRESHOLD_KEYS: tuple[str, ...] = (
     "coverage_min",
     "crap_max",
     "complexity_max_ccn",
@@ -107,6 +107,12 @@ _PRESET_REPORTED_KEYS: tuple[str, ...] = (
     "enforce_behavior_attribution",
     "run_mutation_in_ci",
     "enforce_mutation",
+)
+
+# `presets` reports a superset of `_THRESHOLD_KEYS` — the extra keys are
+# preset-only signals that don't appear in `cmd_help`'s threshold block.
+_PRESET_REPORTED_KEYS: tuple[str, ...] = (
+    *_THRESHOLD_KEYS,
     "mutation_ci_mode",
     "run_acceptance_in_check",
     "require_acceptance",
@@ -121,18 +127,18 @@ def cmd_presets() -> None:
 
 
 def _maybe_handle_presets_set(start: float) -> bool:
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
-    if not args or args[0] != "presets":
-        args = ["presets"]
-    if len(args) >= 2 and args[1] == "set":
-        _cmd_presets_set(args[2:], start=start)
-        return True
-    if len(args) == 2:
-        _cmd_presets_set([args[1]], start=start)
-        return True
-    if len(args) > 2:
+    raw = [a for a in sys.argv[1:] if not a.startswith("-")]
+    # Trailing args only carry preset selection when invoked as `... presets ...`.
+    args = raw[1:] if raw and raw[0] == "presets" else []
+    if not args:
+        return False
+    if args[0] == "set":
+        _cmd_presets_set(args[1:], start=start)
+    elif len(args) == 1:
+        _cmd_presets_set(args, start=start)
+    else:
         fail_skip(_presets_usage())
-    return False
+    return True
 
 
 def _cmd_presets_list(start: float) -> None:
@@ -255,20 +261,7 @@ def _print_detected_block(cfg: InterlockConfig | None) -> None:
         ui.kv_block([("unsupported preset", p) for p in cfg.unsupported_presets])
     ui.section("Thresholds")
     print("  Override via [tool.interlocks] in pyproject.toml.")
-    ui.kv_block([
-        ("coverage_min", str(cfg.coverage_min)),
-        ("crap_max", str(cfg.crap_max)),
-        ("complexity_max_ccn", str(cfg.complexity_max_ccn)),
-        ("complexity_max_args", str(cfg.complexity_max_args)),
-        ("complexity_max_loc", str(cfg.complexity_max_loc)),
-        ("mutation_min_coverage", str(cfg.mutation_min_coverage)),
-        ("mutation_max_runtime", str(cfg.mutation_max_runtime)),
-        ("mutation_min_score", str(cfg.mutation_min_score)),
-        ("enforce_crap", str(cfg.enforce_crap)),
-        ("enforce_behavior_attribution", str(cfg.enforce_behavior_attribution)),
-        ("run_mutation_in_ci", str(cfg.run_mutation_in_ci)),
-        ("enforce_mutation", str(cfg.enforce_mutation)),
-    ])
+    ui.kv_block([(key, str(getattr(cfg, key))) for key in _THRESHOLD_KEYS])
     ui.section("Crash Reports")
     print("  Local cache: ~/.cache/interlocks/crashes/")
     print("  On internal crashes, interactive terminals prompt before opening a GitHub issue.")
@@ -385,7 +378,7 @@ def main() -> None:
         cmd_help()
         sys.exit(1)
 
-    if any(a in ("-h", "--help") for a in raw_args):
+    if "-h" in raw_args or "--help" in raw_args:
         cmd_task_help(task_name)
         return
 

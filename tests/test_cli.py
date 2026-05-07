@@ -39,6 +39,20 @@ def _setup_minimal_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     return pyproject
 
 
+def _setup_project_with_interlocks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str
+) -> None:
+    """Minimal project + ``[tool.interlocks]`` table populated from ``body`` lines."""
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "pkg"\nversion = "0.0.0"\n\n[tool.interlocks]\n' + body + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+
 def test_tasks_dict_built_from_groups() -> None:
     expected = {name for _, group in TASK_GROUPS for name in group}
     assert set(TASKS.keys()) == expected
@@ -70,24 +84,7 @@ def test_cmd_help_prints_active_preset_and_resolved_values(
     capsys: pytest.CaptureFixture[str],
     clean_config_cache: None,
 ) -> None:
-    (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "pyproject.toml").write_text(
-        textwrap.dedent(
-            """
-            [project]
-            name = "pkg"
-            version = "0.0.0"
-
-            [tool.interlocks]
-            preset = "strict"
-            coverage_min = 91
-            """
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
+    _setup_project_with_interlocks(tmp_path, monkeypatch, 'preset = "strict"\ncoverage_min = 91')
 
     cmd_help()
 
@@ -131,23 +128,7 @@ def test_cmd_presets_prints_active_preset(
     capsys: pytest.CaptureFixture[str],
     clean_config_cache: None,
 ) -> None:
-    (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "pyproject.toml").write_text(
-        textwrap.dedent(
-            """
-            [project]
-            name = "pkg"
-            version = "0.0.0"
-
-            [tool.interlocks]
-            preset = "strict"
-            """
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
+    _setup_project_with_interlocks(tmp_path, monkeypatch, 'preset = "strict"')
 
     cmd_presets()
 
@@ -412,23 +393,7 @@ def test_cmd_config_lists_all_keys(
     capsys: pytest.CaptureFixture[str],
     clean_config_cache: None,
 ) -> None:
-    (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "__init__.py").write_text("", encoding="utf-8")
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "pyproject.toml").write_text(
-        textwrap.dedent(
-            """
-            [project]
-            name = "pkg"
-            version = "0.0.0"
-
-            [tool.interlocks]
-            preset = "baseline"
-            """
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
+    _setup_project_with_interlocks(tmp_path, monkeypatch, 'preset = "baseline"')
 
     cmd_config()
 

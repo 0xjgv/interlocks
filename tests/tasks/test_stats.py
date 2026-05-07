@@ -13,17 +13,19 @@ from pathlib import Path
 import pytest
 
 import interlocks
-from interlocks.config import InterlockConfig
+from interlocks.config import InterlockConfig, clear_cache
 from interlocks.metrics import CrapRow, MutationSummary
 from interlocks.tasks import stats as stats_mod
 from interlocks.tasks.stats import (
     TestInspection,
+    TrustReport,
     _collect_test_inspections,
     _compute_trust,
     _emoji,
     _flag_suspicious,
     _inspect_tree,
     _read_prev_trust,
+    _render,
     _write_trust,
     cmd_trust,
 )
@@ -343,6 +345,10 @@ _PYPROJECT = textwrap.dedent(
     [tool.coverage.run]
     source = ["mypkg"]
     branch = true
+
+    [tool.interlocks]
+    src_dir = "mypkg"
+    test_dir = "tests"
     """
 )
 
@@ -350,10 +356,7 @@ _PYPROJECT = textwrap.dedent(
 @pytest.fixture
 def tmp_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Small project with source + covering test; primes ``.coverage`` + ``coverage.xml``."""
-    (tmp_path / "pyproject.toml").write_text(
-        _PYPROJECT + '\n[tool.interlocks]\nsrc_dir = "mypkg"\ntest_dir = "tests"\n',
-        encoding="utf-8",
-    )
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
     pkg = tmp_path / "mypkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
@@ -363,17 +366,7 @@ def tmp_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tests / "__init__.py").write_text("", encoding="utf-8")
     (tests / "test_mod.py").write_text(_COV_TEST_SRC, encoding="utf-8")
     subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "coverage",
-            "run",
-            "-m",
-            "unittest",
-            "discover",
-            "-s",
-            "tests",
-        ],
+        [sys.executable, "-m", "coverage", "run", "-m", "unittest", "discover", "-s", "tests"],
         cwd=tmp_path,
         check=True,
     )
@@ -389,8 +382,6 @@ def test_cmd_trust_skips_without_coverage(
 ) -> None:
     (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    from interlocks.config import clear_cache
-
     clear_cache()
     monkeypatch.setattr(sys, "argv", ["interlocks", "trust"])
     cmd_trust()
@@ -531,8 +522,6 @@ def test_verdict_sentence_concat() -> None:
 
 
 def test_render_does_not_crash_on_empty_report(capsys: pytest.CaptureFixture[str]) -> None:
-    from interlocks.tasks.stats import TrustReport, _render
-
     report = TrustReport(
         score=100.0,
         prev_score=None,
@@ -551,8 +540,6 @@ def test_render_does_not_crash_on_empty_report(capsys: pytest.CaptureFixture[str
 
 def test_render_verbose_and_truncation(capsys: pytest.CaptureFixture[str]) -> None:
     """Verbose path shows every row; non-verbose truncates with overflow hints."""
-    from interlocks.tasks.stats import TrustReport, _render
-
     suspicious = [
         TestInspection(
             file="tests/t.py", name=f"test_{i}", loc=10, assert_count=0, trivial_asserts=0

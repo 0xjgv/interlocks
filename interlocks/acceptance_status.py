@@ -73,13 +73,18 @@ def classify_acceptance_with_details(cfg: InterlockConfig) -> AcceptanceClassifi
     if cfg.acceptance_runner == "off":
         return AcceptanceClassification(AcceptanceStatus.DISABLED, features_dir)
     required = cfg.require_acceptance
-    if not _features_dir_exists(features_dir):
-        return _classification(required, AcceptanceStatus.MISSING_FEATURES_DIR, features_dir)
+
+    def missing(required_status: AcceptanceStatus) -> AcceptanceClassification:
+        status = required_status if required else AcceptanceStatus.OPTIONAL_MISSING
+        return AcceptanceClassification(status, features_dir)
+
+    if features_dir is None or not features_dir.is_dir():
+        return missing(AcceptanceStatus.MISSING_FEATURES_DIR)
     files = feature_files(features_dir)
     if not files:
-        return _classification(required, AcceptanceStatus.MISSING_FEATURE_FILES, features_dir)
+        return missing(AcceptanceStatus.MISSING_FEATURE_FILES)
     if count_scenarios(files) == 0:
-        return _classification(required, AcceptanceStatus.MISSING_SCENARIOS, features_dir)
+        return missing(AcceptanceStatus.MISSING_SCENARIOS)
     if required:
         behavior_result = behavior_coverage_for_config(cfg, files)
         if not behavior_result.is_complete:
@@ -89,25 +94,6 @@ def classify_acceptance_with_details(cfg: InterlockConfig) -> AcceptanceClassifi
     return AcceptanceClassification(AcceptanceStatus.RUNNABLE, features_dir)
 
 
-def _features_dir_exists(features_dir: Path | None) -> bool:
-    return features_dir is not None and features_dir.is_dir()
-
-
-def _missing_acceptance_status(
-    required: bool, required_status: AcceptanceStatus
-) -> AcceptanceStatus:
-    if required:
-        return required_status
-    return AcceptanceStatus.OPTIONAL_MISSING
-
-
-def _classification(
-    required: bool, required_status: AcceptanceStatus, features_dir: Path | None
-) -> AcceptanceClassification:
-    status = _missing_acceptance_status(required, required_status)
-    return AcceptanceClassification(status, features_dir)
-
-
 def remediation_message(
     status: AcceptanceStatus,
     features_dir: Path | None,
@@ -115,22 +101,26 @@ def remediation_message(
 ) -> str:
     """Actionable message reused by acceptance command + stage enforcement."""
     scaffold_hint = "run `interlocks init-acceptance` to scaffold one"
-    if status is AcceptanceStatus.MISSING_FEATURES_DIR:
-        return f"acceptance: features directory not found — {scaffold_hint}"
-    if status is AcceptanceStatus.MISSING_FEATURE_FILES:
-        target = features_dir if features_dir is not None else Path("tests/features")
-        return f"acceptance: no `.feature` files under {target} — {scaffold_hint}"
-    if status is AcceptanceStatus.MISSING_SCENARIOS:
-        return (
-            "acceptance: feature files exist but contain no `Scenario` — add at least one scenario"
-        )
-    if status is AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE:
-        if behavior_result is None:
+    match status:
+        case AcceptanceStatus.MISSING_FEATURES_DIR:
+            return f"acceptance: features directory not found — {scaffold_hint}"
+        case AcceptanceStatus.MISSING_FEATURE_FILES:
+            target = features_dir if features_dir is not None else Path("tests/features")
+            return f"acceptance: no `.feature` files under {target} — {scaffold_hint}"
+        case AcceptanceStatus.MISSING_SCENARIOS:
             return (
-                "acceptance: behavior coverage incomplete — add or update Gherkin behavior markers"
+                "acceptance: feature files exist but contain no `Scenario`"
+                " — add at least one scenario"
             )
-        return format_behavior_coverage_failure(behavior_result)
-    return ""
+        case AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE:
+            if behavior_result is None:
+                return (
+                    "acceptance: behavior coverage incomplete"
+                    " — add or update Gherkin behavior markers"
+                )
+            return format_behavior_coverage_failure(behavior_result)
+        case _:
+            return ""
 
 
 def required_acceptance_failure_task(

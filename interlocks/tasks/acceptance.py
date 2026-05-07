@@ -35,6 +35,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _ATTRIBUTION_ENV = "INTERLOCKS_BEHAVIOR_ATTRIBUTION"
+_MISSING_FEATURES_NUDGE = (
+    "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
+)
 
 
 def task_acceptance() -> Task | None:
@@ -77,9 +80,7 @@ def cmd_acceptance() -> None:
         warn_skip("acceptance: disabled via acceptance_runner = 'off'")
         return
     if classification.status is AcceptanceStatus.OPTIONAL_MISSING:
-        warn_skip(
-            "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
-        )
+        warn_skip(_MISSING_FEATURES_NUDGE)
         return
     if classification.is_required_failure:
         fail_skip(
@@ -92,9 +93,7 @@ def cmd_acceptance() -> None:
         return
     task = task_acceptance_from_config(cfg)
     if task is None:
-        warn_skip(
-            "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
-        )
+        warn_skip(_MISSING_FEATURES_NUDGE)
         return
     run(task)
 
@@ -104,13 +103,7 @@ def attribution_enabled() -> bool:
 
 
 def with_attribution_capture(cfg: InterlockConfig, task: Task) -> Task:
-    symbols = tuple(
-        sorted({
-            behavior.public_symbol
-            for behavior in behavior_registry_for_config(cfg).behaviors
-            if behavior.public_symbol is not None
-        })
-    )
+    symbols = _public_symbols(cfg)
     cmd = _inject_pytest_plugin(task.cmd)
     if not symbols or cmd == task.cmd:
         return task
@@ -126,6 +119,9 @@ def with_attribution_capture(cfg: InterlockConfig, task: Task) -> Task:
 
 
 def _maybe_attribution_task(cfg: InterlockConfig, task: Task) -> Task:
+    # Env-guarded shim around with_attribution_capture. Kept as a separate
+    # private helper because tests/test_acceptance_attribution_wrap.py asserts
+    # the env-off no-op behaviour by name; inlining would erase that gate.
     if not attribution_enabled():
         return task
     return with_attribution_capture(cfg, task)
@@ -134,30 +130,30 @@ def _maybe_attribution_task(cfg: InterlockConfig, task: Task) -> Task:
 def _maybe_trace_task(cfg: InterlockConfig, task: Task) -> Task:
     if not trace_enabled() or not trace_can_wrap_command(task.cmd):
         return task
-    symbols = tuple(
+    symbols = _public_symbols(cfg)
+    if not symbols:
+        return task
+    return dataclasses.replace(task, cmd=trace_wrapper_cmd(cfg.project_root, symbols, task.cmd))
+
+
+def _public_symbols(cfg: InterlockConfig) -> tuple[str, ...]:
+    return tuple(
         sorted({
             behavior.public_symbol
             for behavior in behavior_registry_for_config(cfg).behaviors
             if behavior.public_symbol is not None
         })
     )
-    if not symbols:
-        return task
-    return dataclasses.replace(task, cmd=trace_wrapper_cmd(cfg.project_root, symbols, task.cmd))
 
 
 def _inject_pytest_plugin(cmd: list[str]) -> list[str]:
-    idx = _pytest_index(cmd)
-    if idx is None or PLUGIN_NAME in cmd:
+    try:
+        idx = cmd.index("pytest")
+    except ValueError:
+        return cmd
+    if PLUGIN_NAME in cmd:
         return cmd
     return [*cmd[: idx + 1], "-p", PLUGIN_NAME, *cmd[idx + 1 :]]
-
-
-def _pytest_index(cmd: list[str]) -> int | None:
-    try:
-        return cmd.index("pytest")
-    except ValueError:
-        return None
 
 
 def _pytest_bdd_task(cfg: InterlockConfig, features_dir: Path, features_arg: str) -> Task:

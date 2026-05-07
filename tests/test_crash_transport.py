@@ -57,8 +57,9 @@ _BASE_PAYLOAD: dict[str, Any] = {
 }
 
 
-def _silent_browser(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Default browser stub: no-op that reports failure to open."""
+@pytest.fixture
+def silent_browser(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub ``webbrowser.open`` to report failure (no GUI side effects under test)."""
     monkeypatch.setattr(webbrowser, "open", lambda *a, **kw: False)
 
 
@@ -71,46 +72,28 @@ def _decode_body(url: str) -> str:
     raise AssertionError(f"no body= parameter in url: {url}")
 
 
-def test_url_starts_with_repo_issues_endpoint(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _silent_browser(monkeypatch)
+def test_url_starts_with_repo_issues_endpoint(silent_browser: None) -> None:
     url = BrowserTransport.submit(_BASE_PAYLOAD, repo=_REPO)
     assert url.startswith("https://github.com/0xjgv/interlocks/issues/new?")
     assert "labels=crash-report" in url
-    capsys.readouterr()  # drain so other tests start clean
 
 
-def test_body_contains_exception_fingerprint_and_versions(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _silent_browser(monkeypatch)
-    url = BrowserTransport.submit(_BASE_PAYLOAD, repo=_REPO)
-    body = _decode_body(url)
-
+def test_body_contains_exception_fingerprint_and_versions(silent_browser: None) -> None:
+    body = _decode_body(BrowserTransport.submit(_BASE_PAYLOAD, repo=_REPO))
     assert "RuntimeError" in body
     assert "deadbeefcafebabe" in body
     assert "0.42.0" in body
     assert "3.13.1" in body
     assert "Please add what you were trying to do before submitting." in body
-    capsys.readouterr()
 
 
-def test_decoded_body_preserves_markdown_header(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _silent_browser(monkeypatch)
-    url = BrowserTransport.submit(_BASE_PAYLOAD, repo=_REPO)
-    body = _decode_body(url)
+def test_decoded_body_preserves_markdown_header(silent_browser: None) -> None:
+    body = _decode_body(BrowserTransport.submit(_BASE_PAYLOAD, repo=_REPO))
     # The "## Crash report" header proves that newline + hashes survived
     # the encode/decode round trip — i.e. we built the body before
     # quoting, not after.
     assert "## Crash report" in body
     assert "## Frames" in body
-    capsys.readouterr()
 
 
 def test_no_network_imports_in_module_source() -> None:
@@ -129,11 +112,8 @@ def test_no_network_imports_in_module_source() -> None:
 
 
 def test_oversized_body_truncates_with_local_path_pointer(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    silent_browser: None,
 ) -> None:
-    _silent_browser(monkeypatch)
-
     # 200 frames at ~80-char filenames will blow well past the 7800-char
     # encoded cap. Each interlocks frame line is roughly 100 chars before
     # encoding, and percent-encoding inflates non-ASCII-safe characters
@@ -158,7 +138,6 @@ def test_oversized_body_truncates_with_local_path_pointer(
 
     decoded = _decode_body(url)
     assert decoded.endswith("(full payload at /var/empty/foo.json)")
-    capsys.readouterr()
 
 
 def test_url_printed_to_stderr_exactly_once_when_browser_returns_false(

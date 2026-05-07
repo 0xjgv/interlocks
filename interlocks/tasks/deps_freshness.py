@@ -6,7 +6,7 @@ import json
 import sys
 
 from interlocks.config import InterlockConfig, invoker_prefix, load_config
-from interlocks.runner import capture, fail, ok
+from interlocks.runner import capture, dump_and_exit, fail, ok
 
 
 def freshness_cmd(cfg: InterlockConfig) -> list[str]:
@@ -14,14 +14,10 @@ def freshness_cmd(cfg: InterlockConfig) -> list[str]:
 
 
 def cmd_deps_freshness() -> None:
-    cfg = load_config()
-    result = capture(freshness_cmd(cfg))
+    result = capture(freshness_cmd(load_config()))
     if result.returncode != 0:
         fail("Dependency freshness: package-index lookup failed")
-        output = (result.stdout or "") + (result.stderr or "")
-        if output:
-            print(output, end="" if output.endswith("\n") else "\n")
-        sys.exit(result.returncode)
+        dump_and_exit(result.returncode, result.stdout, result.stderr)
 
     outdated = _outdated_packages(result.stdout)
     if not outdated:
@@ -29,10 +25,11 @@ def cmd_deps_freshness() -> None:
         return
 
     fail(f"Dependency freshness: {len(outdated)} outdated package(s)")
-    for package in outdated:
-        current = package.get("version", "?")
-        latest = package.get("latest_version", "?")
-        print(f"  - {package.get('name', '?')}: {current} -> {latest}")
+    for pkg in outdated:
+        print(
+            f"  - {pkg.get('name', '?')}: "
+            f"{pkg.get('version', '?')} -> {pkg.get('latest_version', '?')}"
+        )
     sys.exit(1)
 
 

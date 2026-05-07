@@ -90,40 +90,32 @@ def non_package_tests(tmp_path: Path) -> Path:
     return tmp_path
 
 
-@pytest.mark.slow
-def test_arch_passes_on_clean_project(clean_project: Path) -> None:
-    result = subprocess.run(
+def _run_arch(cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         [sys.executable, "-m", "interlocks.cli", "arch"],
-        cwd=clean_project,
+        cwd=cwd,
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+@pytest.mark.slow
+def test_arch_passes_on_clean_project(clean_project: Path) -> None:
+    result = _run_arch(clean_project)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
 
 
 @pytest.mark.slow
 def test_arch_fails_when_src_imports_tests(dirty_project: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "arch"],
-        cwd=dirty_project,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = _run_arch(dirty_project)
     assert result.returncode != 0
     assert "Production does not import tests" in (result.stdout + result.stderr)
 
 
 @pytest.mark.slow
 def test_arch_skips_when_tests_not_a_package(non_package_tests: Path) -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "arch"],
-        cwd=non_package_tests,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = _run_arch(non_package_tests)
     # Skipped gracefully: exit 0 and a nudge message.
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "arch:" in result.stdout

@@ -34,9 +34,7 @@ ROOT_ARTIFACTS = (
     "coverage.xml",
 )
 
-RECURSIVE_DIR_ARTIFACTS = frozenset({"__pycache__"})
 RECURSIVE_FILE_SUFFIXES = (".pyc", ".pyo")
-RECURSIVE_INFO_SUFFIX = ".egg-info"
 RECURSIVE_SKIP_DIRS = PY_SKIP_DIRS | frozenset({".git"})
 
 
@@ -57,7 +55,9 @@ def cmd_clean() -> None:
 
 def _iter_recursive_artifacts(root: Path) -> Iterator[Path]:
     for dirpath, dirnames, filenames in os.walk(root):
-        artifact_dirs = [name for name in dirnames if _is_recursive_artifact_dir(name)]
+        artifact_dirs = [
+            name for name in dirnames if name == "__pycache__" or name.endswith(".egg-info")
+        ]
         dirnames[:] = [
             name
             for name in dirnames
@@ -69,10 +69,6 @@ def _iter_recursive_artifacts(root: Path) -> Iterator[Path]:
         for filename in filenames:
             if filename.endswith(RECURSIVE_FILE_SUFFIXES):
                 yield base / filename
-
-
-def _is_recursive_artifact_dir(name: str) -> bool:
-    return name in RECURSIVE_DIR_ARTIFACTS or name.endswith(RECURSIVE_INFO_SUFFIX)
 
 
 def _remove_path(path: Path) -> None:

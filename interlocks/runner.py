@@ -133,6 +133,18 @@ def fail_skip(message: str) -> NoReturn:
     sys.exit(1)
 
 
+def dump_and_exit(rc: int, stdout: str | None, stderr: str | None) -> NoReturn:
+    """Print combined ``stdout + stderr`` (with trailing newline) then exit ``rc``.
+
+    Failure-path helper for tasks that ran a subprocess via ``capture`` and need
+    to surface its output before exiting with the captured returncode.
+    """
+    output = (stdout or "") + (stderr or "")
+    if output:
+        print(output, end="" if output.endswith("\n") else "\n")
+    sys.exit(rc)
+
+
 def arg_value(flag: str, default: str) -> str:
     """Return the value of ``--flag=value`` in sys.argv, else ``default``."""
     return next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith(flag)), default)

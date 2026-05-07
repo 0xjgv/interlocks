@@ -8,7 +8,7 @@ import tomllib
 from pathlib import Path
 
 from interlocks.config import find_project_root, load_config
-from interlocks.runner import Task, capture, fail, ok, python_m, run, warn_skip
+from interlocks.runner import Task, capture, dump_and_exit, fail, ok, python_m, run, warn_skip
 
 # pip-audit emits one of these IDs only when it actually finds a vulnerability;
 # absence of all three means the non-zero exit is environmental (network failure,
@@ -59,16 +59,15 @@ def cmd_audit(*, allow_network_skip: bool = False) -> None:
         run(task)
         return
     result = capture(task.cmd)
-    output = (result.stdout or "") + (result.stderr or "")
     if result.returncode == 0:
         ok("Audit: no known vulnerabilities found")
         return
-    if _VULN_ID_PATTERN.search(output):
-        fail("Audit: pip-audit reported known vulnerabilities")
-        if output:
-            print(output, end="" if output.endswith("\n") else "\n")
-        sys.exit(result.returncode)
-    warn_skip("audit: pip-audit failed without a vulnerability ID — treating as transient")
+    output = (result.stdout or "") + (result.stderr or "")
+    if not _VULN_ID_PATTERN.search(output):
+        warn_skip("audit: pip-audit failed without a vulnerability ID — treating as transient")
+        return
+    fail("Audit: pip-audit reported known vulnerabilities")
+    dump_and_exit(result.returncode, result.stdout, result.stderr)
 
 
 def _package_parent() -> Path:
@@ -76,8 +75,6 @@ def _package_parent() -> Path:
 
 
 def _project_has_dependencies() -> bool:
-    pyproject = find_project_root() / "pyproject.toml"
-    with pyproject.open("rb") as f:
-        project = tomllib.load(f).get("project", {})
-    deps = project.get("dependencies", [])
+    with (find_project_root() / "pyproject.toml").open("rb") as f:
+        deps = tomllib.load(f).get("project", {}).get("dependencies", [])
     return isinstance(deps, list) and bool(deps)

@@ -6,19 +6,19 @@ uses — so this acts as an end-to-end guardrail on the public command surface.
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then
+
+from tests.step_defs.conftest import run_interlock_text
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_cli.feature"))
 
 
 @given(parsers.parse('I run "interlocks {subcmd}"'), target_fixture="cli_output")
 def _run_interlock(subcmd: str) -> str:
-    return _run_interlocks(Path.cwd(), *subcmd.split())
+    return run_interlock_text(Path.cwd(), *subcmd.split())
 
 
 @given(
@@ -27,18 +27,7 @@ def _run_interlock(subcmd: str) -> str:
 )
 def _run_interlock_with_traceability_gap(subcmd: str, tmp_path: Path) -> str:
     _write_traceability_gap_project(tmp_path)
-    return _run_interlocks(tmp_path, *subcmd.split())
-
-
-def _run_interlocks(cwd: Path, *args: str) -> str:
-    result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout + result.stderr
+    return run_interlock_text(tmp_path, *subcmd.split())
 
 
 def _write_traceability_gap_project(root: Path) -> None:

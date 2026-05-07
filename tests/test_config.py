@@ -24,6 +24,14 @@ def _write(path: Path, text: str) -> None:
     path.write_text(textwrap.dedent(text), encoding="utf-8")
 
 
+def _setup_pyproject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
+    """Create ``tmp_path/tests`` + ``pyproject.toml`` with ``body`` and chdir."""
+    (tmp_path / "tests").mkdir()
+    _write(tmp_path / "pyproject.toml", body)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
 # ─────────────── find_project_root ──────────────────────────────────
 
 
@@ -98,9 +106,9 @@ def test_threshold_defaults_when_absent(tmp_project: Path) -> None:
 
 
 def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "thresh"
@@ -121,7 +129,6 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         enforce_mutation = true
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.coverage_min == 90
     assert cfg.crap_max == 25.5
@@ -140,9 +147,9 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 def test_skip_project_policy_resolves_labels(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "skip-policy"
@@ -152,7 +159,6 @@ def test_skip_project_policy_resolves_labels(
         skip = ["lint", "typecheck", "lint"]
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -163,9 +169,9 @@ def test_skip_project_policy_resolves_labels(
 def test_skip_project_policy_rejects_unknown_label(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "skip-bad"
@@ -175,7 +181,6 @@ def test_skip_project_policy_rejects_unknown_label(
         skip = ["nope"]
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     from interlocks.config import InterlockConfigError
 
@@ -186,9 +191,9 @@ def test_skip_project_policy_rejects_unknown_label(
 def test_invalid_threshold_types_fall_back_to_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "badthresh"
@@ -199,7 +204,6 @@ def test_invalid_threshold_types_fall_back_to_defaults(
         crap_max = true
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.coverage_min == 80
     assert cfg.crap_max == 30.0
@@ -212,16 +216,15 @@ def test_behavior_attribution_enforcement_auto_on_for_interlocks(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "interlocks"
         version = "0.0.0"
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -239,9 +242,9 @@ def test_behavior_attribution_enforcement_project_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "interlocks"
@@ -251,7 +254,6 @@ def test_behavior_attribution_enforcement_project_override(
         enforce_behavior_attribution = false
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -265,9 +267,9 @@ def test_require_acceptance_default_false(tmp_project: Path) -> None:
 
 
 def test_require_acceptance_explicit_true(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "req-acc"
@@ -277,7 +279,6 @@ def test_require_acceptance_explicit_true(tmp_path: Path, monkeypatch: pytest.Mo
         require_acceptance = true
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.require_acceptance is True
 
@@ -285,9 +286,9 @@ def test_require_acceptance_explicit_true(tmp_path: Path, monkeypatch: pytest.Mo
 def test_require_acceptance_invalid_falls_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "req-acc-bad"
@@ -297,7 +298,6 @@ def test_require_acceptance_invalid_falls_back(
         require_acceptance = "yes"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.require_acceptance is False
 
@@ -308,9 +308,9 @@ def test_require_acceptance_invalid_falls_back(
 def test_baseline_preset_resolves_low_friction_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "baseline"
@@ -320,7 +320,6 @@ def test_baseline_preset_resolves_low_friction_defaults(
         preset = "baseline"
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -338,9 +337,9 @@ def test_baseline_preset_resolves_low_friction_defaults(
 def test_strict_preset_resolves_blocking_gate_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "strict"
@@ -350,7 +349,6 @@ def test_strict_preset_resolves_blocking_gate_defaults(
         preset = "strict"
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -368,9 +366,9 @@ def test_strict_preset_resolves_blocking_gate_defaults(
 def test_legacy_preset_resolves_ratcheting_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "legacy"
@@ -380,7 +378,6 @@ def test_legacy_preset_resolves_ratcheting_defaults(
         preset = "legacy"
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -395,9 +392,9 @@ def test_legacy_preset_resolves_ratcheting_defaults(
 def test_project_explicit_value_overrides_project_preset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "strict-override"
@@ -409,7 +406,6 @@ def test_project_explicit_value_overrides_project_preset(
         enforce_mutation = false
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -422,9 +418,9 @@ def test_project_explicit_value_overrides_project_preset(
 def test_unsupported_preset_is_reported_without_resolving(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "unsupported"
@@ -434,7 +430,6 @@ def test_unsupported_preset_is_reported_without_resolving(
         preset = "agent-safe"
         """,
     )
-    monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
 
@@ -447,11 +442,11 @@ def test_unsupported_preset_is_reported_without_resolving(
 
 
 def test_overrides_win_over_autodetect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
     (tmp_path / "spec").mkdir()
     (tmp_path / "source").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "sample"
@@ -465,7 +460,6 @@ def test_overrides_win_over_autodetect(tmp_path: Path, monkeypatch: pytest.Monke
         pytest_args = ["-x", "--tb=short"]
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.src_dir == (tmp_path / "source").resolve()
     assert cfg.test_dir == (tmp_path / "spec").resolve()
@@ -477,15 +471,14 @@ def test_overrides_win_over_autodetect(tmp_path: Path, monkeypatch: pytest.Monke
 def test_invalid_runner_override_falls_back_to_detect(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [tool.interlocks]
         test_runner = "nose"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     # Bad value is ignored — detection falls through; no pytest signals → unittest.
     assert cfg.test_runner in ("pytest", "unittest")

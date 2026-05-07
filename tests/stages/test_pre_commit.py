@@ -101,20 +101,9 @@ def test_pre_commit_in_process_dispatches(
     staged: list[str],
     expected_task_descs: list[str],
 ) -> None:
-    from interlocks.stages import pre_commit as pre_commit_mod
+    calls = _pre_commit_calls(monkeypatch, staged)
 
-    calls: list[object] = []
-    monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
-    monkeypatch.setattr(pre_commit_mod, "cmd_fix", lambda files: calls.append(("fix", files)))
-    monkeypatch.setattr(
-        pre_commit_mod, "cmd_format", lambda files: calls.append(("format", files))
-    )
-    monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
-    monkeypatch.setattr(
-        pre_commit_mod,
-        "run_tasks",
-        lambda tasks: calls.append(("run_tasks", [t.description for t in tasks])),
-    )
+    from interlocks.stages import pre_commit as pre_commit_mod
 
     pre_commit_mod.cmd_pre_commit()
     assert calls == [

@@ -55,9 +55,9 @@ def _mutant_in_changed(mutant_key: str, changed: set[str]) -> bool:
     which isn't part of the module file path — strip it before resolving.
     """
     head = mutant_key.split("__mutmut_", 1)[0]
-    module = head.rsplit(".", 1)[0]
-    rel = module.replace(".", "/") + ".py"
-    return any(c == rel or c.endswith("/" + rel) for c in changed)
+    rel = head.rsplit(".", 1)[0].replace(".", "/") + ".py"
+    suffix = f"/{rel}"
+    return rel in changed or any(c.endswith(suffix) for c in changed)
 
 
 def _dir_prefix(d: str) -> str:
@@ -149,11 +149,20 @@ def _make_pulse_thread(
     return threading.Thread(target=_pulse, daemon=True)
 
 
+def _erase_pulse_line(max_width: int) -> None:
+    """CR-pad-CR to wipe the pulse line; no-op if ``max_width == 0``.
+
+    Caller holds ``_PRINT_LOCK``.
+    """
+    if max_width:
+        sys.stdout.write("\r" + " " * max_width + "\r")
+
+
 def _finalize_progress(last_progress: str | None, max_width: int) -> None:
     """Clear any in-place pulse line and emit the final progress newline."""
     if max_width:
         with _PRINT_LOCK:
-            sys.stdout.write("\r" + " " * max_width + "\r")
+            _erase_pulse_line(max_width)
             sys.stdout.flush()
     if last_progress is not None:
         sys.stdout.write(f"  {last_progress}\n")
@@ -207,8 +216,7 @@ def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
             return
         if _is_keep_line(stripped):
             with _PRINT_LOCK:
-                if pulse.max_width:
-                    sys.stdout.write("\r" + " " * pulse.max_width + "\r")
+                _erase_pulse_line(pulse.max_width)
                 sys.stdout.write(line)
                 sys.stdout.flush()
 

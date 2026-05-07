@@ -10,30 +10,33 @@ import pytest
 from interlocks.config import load_config
 
 
-def _write(path: Path, text: str) -> None:
-    path.write_text(textwrap.dedent(text), encoding="utf-8")
+def _setup_pyproject(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path:
+    """Create ``tmp_path/tests`` + ``pyproject.toml`` with ``body`` and chdir."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(textwrap.dedent(body), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
 
 
 def test_defaults_when_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "dflt"
         version = "0.0.0"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.mutation_ci_mode == "off"
     assert cfg.mutation_since_ref == "origin/main"
 
 
 def test_project_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "proj"
@@ -44,7 +47,6 @@ def test_project_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
         mutation_since_ref = "origin/develop"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.mutation_ci_mode == "incremental"
     assert cfg.mutation_since_ref == "origin/develop"
@@ -53,9 +55,9 @@ def test_project_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
 def test_invalid_mode_falls_back_to_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "badmode"
@@ -65,7 +67,6 @@ def test_invalid_mode_falls_back_to_default(
         mutation_ci_mode = "sometimes"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.mutation_ci_mode == "off"
 
@@ -73,9 +74,9 @@ def test_invalid_mode_falls_back_to_default(
 def test_invalid_since_ref_type_falls_back_to_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "badref"
@@ -85,7 +86,6 @@ def test_invalid_since_ref_type_falls_back_to_default(
         mutation_since_ref = 42
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.mutation_since_ref == "origin/main"
 
@@ -94,25 +94,24 @@ def test_invalid_since_ref_type_falls_back_to_default(
 
 
 def test_changed_ref_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "ch-default"
         version = "0.0.0"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.changed_ref == "origin/main"
     assert cfg.value_sources["changed_ref"] == "bundled-default"
 
 
 def test_changed_ref_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "ch-override"
@@ -122,7 +121,6 @@ def test_changed_ref_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         changed_ref = "HEAD"
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.changed_ref == "HEAD"
     assert cfg.value_sources["changed_ref"] == "project-configured"
@@ -131,9 +129,9 @@ def test_changed_ref_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_invalid_changed_ref_type_falls_back_to_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "tests").mkdir()
-    _write(
-        tmp_path / "pyproject.toml",
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
         """
         [project]
         name = "ch-bad"
@@ -143,6 +141,5 @@ def test_invalid_changed_ref_type_falls_back_to_default(
         changed_ref = 42
         """,
     )
-    monkeypatch.chdir(tmp_path)
     cfg = load_config()
     assert cfg.changed_ref == "origin/main"

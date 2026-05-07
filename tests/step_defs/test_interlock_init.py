@@ -7,11 +7,12 @@ path exercises the same entry point users hit on the CLI.
 from __future__ import annotations
 
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then, when
+
+from tests.step_defs.conftest import run_interlock_in_cwd
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_init.feature"))
 
@@ -37,13 +38,7 @@ def _dir_with_pyproject(tmp_path: Path) -> InitContext:
 
 @when(parsers.parse('I run "interlocks {subcmd}" there'))
 def _run_interlock(ctx: InitContext, subcmd: str) -> None:
-    ctx.result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *subcmd.split()],
-        cwd=ctx.project,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    ctx.result = run_interlock_in_cwd(ctx.project, *subcmd.split())
 
 
 @then("the command exits successfully")

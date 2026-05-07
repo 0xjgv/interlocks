@@ -13,7 +13,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from interlocks.acceptance_trace import frame_module_names, symbols_by_function
+from interlocks.acceptance_trace import _match_public_symbol, symbols_by_function
 from interlocks.behavior_attribution import write_evidence
 
 PAYLOAD_ENV = "INTERLOCKS_BEHAVIOR_ATTRIBUTION_PAYLOAD"
@@ -116,7 +116,7 @@ def _tracer(
         key = _CURRENT_SCENARIO.get()
         if key is None:
             return trace
-        symbol = _matched_symbol(frame, event, symbol_index)
+        symbol = _match_public_symbol(frame, event, symbol_index)
         if symbol is not None:
             reached_by_scenario.setdefault(key, set()).add(symbol)
         return trace
@@ -252,34 +252,29 @@ def _scenario_line(scenario: object) -> int:
     return 0
 
 
-def _matched_symbol(frame: Any, event: str, symbol_index: dict[str, dict[str, str]]) -> str | None:
-    if event != "call" or frame.f_globals is None:
-        return None
-    candidates = symbol_index.get(frame.f_code.co_name)
-    if not candidates:
-        return None
-    for module in frame_module_names(frame):
-        symbol = candidates.get(module)
-        if symbol is not None:
-            return symbol
-    return None
-
-
 def _encode_scenario_key(key: tuple[Path, int]) -> str:
     feature_path, scenario_line = key
     return json.dumps({"feature_path": str(feature_path), "scenario_line": scenario_line})
 
 
 def _decode_scenario_key(raw: str) -> tuple[Path, int] | None:
+    data = _loads_dict(raw)
+    if data is None:
+        return None
+    feature_path = data.get("feature_path")
+    scenario_line = data.get("scenario_line")
+    if not isinstance(feature_path, str) or not isinstance(scenario_line, int):
+        return None
+    return (Path(feature_path), scenario_line)
+
+
+def _loads_dict(raw: str) -> dict[str, Any] | None:
+    """Parse a JSON object, returning None on malformed input or non-object payloads."""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return None
-    feature_path = data.get("feature_path") if isinstance(data, dict) else None
-    scenario_line = data.get("scenario_line") if isinstance(data, dict) else None
-    if not isinstance(feature_path, str) or not isinstance(scenario_line, int):
-        return None
-    return (Path(feature_path), scenario_line)
+    return data if isinstance(data, dict) else None
 
 
 def _merge_subprocess_events(
@@ -299,11 +294,8 @@ def _merge_subprocess_events(
 
 
 def _parse_subprocess_event(line: str) -> tuple[tuple[Path, int], str] | None:
-    try:
-        data = json.loads(line)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict):
+    data = _loads_dict(line)
+    if data is None:
         return None
     symbol = data.get("symbol")
     raw_scenario = data.get("scenario")
@@ -349,7 +341,7 @@ def _tracer_for_subprocess(public_symbols: tuple[str, ...], reached: set[str]) -
     symbol_index = symbols_by_function(public_symbols)
 
     def trace(frame: Any, event: str, _arg: object) -> Any:
-        symbol = _matched_symbol(frame, event, symbol_index)
+        symbol = _match_public_symbol(frame, event, symbol_index)
         if symbol is not None:
             reached.add(symbol)
         return trace

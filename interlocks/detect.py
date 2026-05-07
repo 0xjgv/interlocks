@@ -64,17 +64,13 @@ def _deps_mention(pattern: re.Pattern[str], pyproject: dict[str, Any]) -> bool:
     return any(pattern.search(str(dep)) for dep in _iter_declared_deps(pyproject))
 
 
-def _deps_mention_pytest(pyproject: dict[str, Any]) -> bool:
-    return _deps_mention(_PYTEST_WORD, pyproject)
-
-
 def detect_test_runner(
     project_root: Path, pyproject: dict[str, Any], test_dir: Path
 ) -> TestRunner:
     """Pick pytest vs unittest for ``project_root`` using the already-resolved ``test_dir``."""
     if _has_pytest_config(project_root, pyproject, test_dir):
         return "pytest"
-    if _deps_mention_pytest(pyproject):
+    if _deps_mention(_PYTEST_WORD, pyproject):
         return "pytest"
     return "unittest"
 

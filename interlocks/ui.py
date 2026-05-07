@@ -29,6 +29,12 @@ _YELLOW = "\033[33m"
 _DIM = "\033[2m"
 _RESET = "\033[0m"
 
+_STATE_COLORS: dict[State, str] = {
+    "ok": _GREEN,
+    "fail": _RED,
+    "warn": _YELLOW,
+}
+
 
 def use_color() -> bool:
     """True when ANSI colors should be emitted."""
@@ -160,13 +166,6 @@ def stage_footer(elapsed_s: float) -> None:
 def command_footer(start_time: float) -> None:
     """Print an elapsed footer for non-stage commands."""
     stage_footer(time.monotonic() - start_time)
-
-
-_STATE_COLORS: dict[State, str] = {
-    "ok": _GREEN,
-    "fail": _RED,
-    "warn": _YELLOW,
-}
 
 
 def _plain_len(text: str) -> int:

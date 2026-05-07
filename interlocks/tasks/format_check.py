@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-from interlocks.runner import Task, run, tool
-from interlocks.tasks._ruff import ruff_config_args
+from interlocks.runner import Task, run
+from interlocks.tasks._ruff import make_ruff_task
 
 
 def task_format_check() -> Task:
-    return Task(
-        "Format check",
-        tool("ruff", "format", "--check", *ruff_config_args(), "."),
-        label="format",
-        display="ruff format --check",
-    )
+    return make_ruff_task("format-check")
 
 
 def cmd_format_check() -> None:

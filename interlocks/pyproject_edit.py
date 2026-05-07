@@ -81,16 +81,16 @@ def _rewrite(text: str, new_paths: list[str]) -> str:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
-    directory = path.parent
-    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(directory))
+    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
         with suppress(FileNotFoundError):
-            Path(tmp_name).chmod(path.stat().st_mode)
-        Path(tmp_name).replace(path)
+            tmp.chmod(path.stat().st_mode)
+        tmp.replace(path)
     except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)
         raise
 
 

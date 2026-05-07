@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -134,12 +135,14 @@ def make_tmp_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def run_interlock_in_cwd(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def run_interlock_in_cwd(
+    cwd: Path, *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run ``python -m interlocks.cli <args>`` with ``cwd`` as project root.
 
-    Mirrors the ``_run_interlock`` fixture in ``test_interlock_cli.py`` but lets the
-    caller pin ``cwd`` — required for stage scenarios that operate on an inline
-    tmp project instead of the interlocks repo itself.
+    Used by every step-def that drives the CLI as a subprocess. Pass ``env``
+    to override the inherited environment (e.g. crash-injection scenarios or
+    PYTHONPATH augmentation via :func:`interlocks_pythonpath_env`).
     """
     return subprocess.run(
         [sys.executable, "-m", "interlocks.cli", *args],
@@ -147,4 +150,30 @@ def run_interlock_in_cwd(cwd: Path, *args: str) -> subprocess.CompletedProcess[s
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
+
+
+def run_interlock_text(cwd: Path, *args: str, env: dict[str, str] | None = None) -> str:
+    """Run the CLI and return combined stdout+stderr.
+
+    Convenience wrapper for scenarios that only assert on textual output.
+    """
+    result = run_interlock_in_cwd(cwd, *args, env=env)
+    return result.stdout + result.stderr
+
+
+def interlocks_pythonpath_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Return an environ dict with the in-tree interlocks package on PYTHONPATH.
+
+    Subprocess probes need this when an outer interpreter's site-packages
+    might shadow the in-tree source — same concern flagged in
+    ``test_preflight.py`` and ``test_doctor.py``.
+    """
+    import interlocks  # local to keep module-import cheap
+
+    env = dict(base) if base is not None else os.environ.copy()
+    pkg_root = str(Path(interlocks.__file__).resolve().parent.parent)
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{pkg_root}{os.pathsep}{existing}" if existing else pkg_root
+    return env

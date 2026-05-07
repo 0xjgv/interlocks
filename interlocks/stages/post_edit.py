@@ -9,6 +9,11 @@ from interlocks.config import load_config
 from interlocks.git import changed_py_files
 from interlocks.runner import Task, run, tool
 
+_RUFF_STEPS = (
+    ("Fix lint errors", "fix", ("check", "--fix")),
+    ("Format code", "format", ("format",)),
+)
+
 
 def cmd_post_edit() -> None:
     files = changed_py_files()
@@ -18,23 +23,15 @@ def cmd_post_edit() -> None:
     ui.banner(load_config())
     ui.section("Post-edit")
     try:
-        run(
-            Task(
-                "Fix lint errors",
-                tool("ruff", "check", "--fix", *files),
-                label="fix",
-                display="ruff check --fix",
-            ),
-            no_exit=True,
-        )
-        run(
-            Task(
-                "Format code",
-                tool("ruff", "format", *files),
-                label="format",
-                display="ruff format",
-            ),
-            no_exit=True,
-        )
+        for description, label, args in _RUFF_STEPS:
+            run(
+                Task(
+                    description,
+                    tool("ruff", *args, *files),
+                    label=label,
+                    display=f"ruff {' '.join(args)}",
+                ),
+                no_exit=True,
+            )
     finally:
         ui.stage_footer(time.monotonic() - start)

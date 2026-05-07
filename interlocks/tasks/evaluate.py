@@ -16,7 +16,6 @@ from interlocks.acceptance_status import feature_files as _shared_feature_files
 from interlocks.acceptance_trace import format_trace_evidence, load_trace_evidence
 from interlocks.behavior_coverage import (
     BehaviorCoverageValidationResult,
-    FeatureBehaviorParse,
     behavior_coverage_for_parsed_features,
     behavior_registry_for_config,
     parse_feature_behaviors,
@@ -75,6 +74,13 @@ _ACCEPTANCE_TRACE = ClosurePath(
 )
 _CI_STAGE = ClosurePath("interlocks ci", "stage", "PR-grade merge gate owner")
 _NIGHTLY_STAGE = ClosurePath("interlocks nightly", "stage", "long-running gate owner")
+_INIT_ACCEPTANCE = ClosurePath(
+    "interlocks init-acceptance", "task", "scaffolds acceptance feature files"
+)
+_ACCEPTANCE_RUNNER = ClosurePath(
+    "interlocks acceptance", "task", "executes Gherkin scenarios outside evaluate"
+)
+_AUDIT = ClosurePath("interlocks audit", "task", "vulnerability audit owns severity policy")
 
 
 def cmd_evaluate() -> None:
@@ -193,9 +199,7 @@ def _acceptance_item(cfg: InterlockConfig) -> EvaluationItem:
             0,
             detail,
             "Run `interlocks init-acceptance` to scaffold feature files.",
-            closure=ClosurePath(
-                "interlocks init-acceptance", "task", "scaffolds acceptance feature files"
-            ),
+            closure=_INIT_ACCEPTANCE,
         )
     if scenario_total == 0:
         return _item(
@@ -205,16 +209,7 @@ def _acceptance_item(cfg: InterlockConfig) -> EvaluationItem:
             f"Add at least one Scenario under {cfg.features_dir_arg or 'features/'}.",
             closure=_ACCEPTANCE_TRACE,
         )
-    return _score_acceptance(cfg, parsed_features, scenario_total, traced, detail)
 
-
-def _score_acceptance(
-    cfg: InterlockConfig,
-    parsed_features: FeatureBehaviorParse,
-    scenario_total: int,
-    traced: int,
-    detail: str,
-) -> EvaluationItem:
     behavior_result = behavior_coverage_for_parsed_features(cfg, parsed_features)
     has_registry = bool(behavior_registry_for_config(cfg).behaviors)
     ci_wired = cfg.acceptance_runner != "off"
@@ -235,9 +230,7 @@ def _score_acceptance(
             1,
             detail,
             "Enable acceptance runner so `interlocks ci` can run feature scenarios.",
-            closure=ClosurePath(
-                "interlocks acceptance", "task", "executes Gherkin scenarios outside evaluate"
-            ),
+            closure=_ACCEPTANCE_RUNNER,
         )
     missing = scenario_total - traced
     return _item(
@@ -378,6 +371,8 @@ def _dependency_rules_item(cfg: InterlockConfig) -> EvaluationItem:
 
 def _dependency_freshness_item(cfg: InterlockConfig) -> EvaluationItem:
     detail = "outdated-package policy is explicit"
+    if cfg.evaluate_dependency_freshness:
+        return _item("deps-freshness", 3, detail)
     closure = ClosurePath(
         cfg.dependency_freshness_command,
         "task",
@@ -386,8 +381,6 @@ def _dependency_freshness_item(cfg: InterlockConfig) -> EvaluationItem:
             f"{cfg.dependency_freshness_stage} owns slow verification outside default PR CI"
         ),
     )
-    if cfg.evaluate_dependency_freshness:
-        return _item("deps-freshness", 3, detail)
     return _item(
         "deps-freshness",
         0,
@@ -424,7 +417,6 @@ def _audit_severity_item(cfg: InterlockConfig) -> EvaluationItem:
     audit_exposed = _cli_source_contains('"audit"')
     audit_in_ci = _ci_source_contains("task_audit(")
     detail = "severity threshold for vulnerability audit"
-    closure = ClosurePath("interlocks audit", "task", "vulnerability audit owns severity policy")
 
     if not audit_exposed:
         return _item(
@@ -432,7 +424,7 @@ def _audit_severity_item(cfg: InterlockConfig) -> EvaluationItem:
             0,
             detail,
             "Expose `interlocks audit` before configuring severity policy.",
-            closure=closure,
+            closure=_AUDIT,
         )
     if not audit_in_ci:
         return _item(
@@ -449,7 +441,7 @@ def _audit_severity_item(cfg: InterlockConfig) -> EvaluationItem:
         2,
         detail,
         'Set audit_severity_threshold = "high" for explicit high-severity policy.',
-        closure=closure,
+        closure=_AUDIT,
     )
 
 
@@ -569,10 +561,6 @@ def _format_action(item: EvaluationItem) -> str:
     )
 
 
-def _traceability_totals(feature_files: list[Path]) -> tuple[int, int]:
-    return traceable_totals_for_parsed_features(parse_feature_behaviors(feature_files))
-
-
 def _read_ci_evidence(cfg: InterlockConfig) -> CIEvidence | None:
     try:
         data = json.loads(cfg.ci_evidence_path.read_text(encoding="utf-8"))
@@ -600,36 +588,21 @@ def _tool_section(pyproject: dict[str, Any], name: str) -> object:
 
 
 def _complexity_score_action(cfg: InterlockConfig) -> tuple[int, str | None]:
-    thresholds_ready = _complexity_thresholds_ready(cfg)
-    ci_wired = _complexity_ci_wired()
+    has_thresholds = _has_complexity_thresholds(cfg)
+    crap_set = _positive_finite(cfg.crap_max)
+    thresholds_ready = has_thresholds and crap_set
+    ci_wired = _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap")
 
     if thresholds_ready and cfg.enforce_crap and ci_wired:
         return 3, None
     if not thresholds_ready:
-        return _missing_complexity_threshold_action(cfg)
+        return (
+            1 if (has_thresholds or crap_set) else 0,
+            "Set positive complexity_max_* and crap_max thresholds.",
+        )
     if not cfg.enforce_crap:
-        return _advisory_complexity_action(ci_wired)
+        return 2 if ci_wired else 1, "Set enforce_crap = true."
     return 2, "Wire task_complexity() and cmd_crap() into `interlocks ci`."
-
-
-def _complexity_thresholds_ready(cfg: InterlockConfig) -> bool:
-    return _has_complexity_thresholds(cfg) and _positive_finite(cfg.crap_max)
-
-
-def _missing_complexity_threshold_action(cfg: InterlockConfig) -> tuple[int, str]:
-    has_any_threshold = _has_complexity_thresholds(cfg) or _positive_finite(cfg.crap_max)
-    return (
-        1 if has_any_threshold else 0,
-        "Set positive complexity_max_* and crap_max thresholds.",
-    )
-
-
-def _advisory_complexity_action(ci_wired: bool) -> tuple[int, str]:
-    return 2 if ci_wired else 1, "Set enforce_crap = true."
-
-
-def _complexity_ci_wired() -> bool:
-    return _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap")
 
 
 def _has_complexity_thresholds(cfg: InterlockConfig) -> bool:

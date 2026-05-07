@@ -14,7 +14,10 @@ from interlocks.runner import capture, generate_coverage_xml, python_m, tool
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-_LIZARD_LINE = re.compile(r"^\s*(\d+)\s+(\d+)\s+\d+\s+(\d+)\s+\d+\s+(\S+)@(\d+)-(\d+)@(.+)$")
+_LIZARD_LINE = re.compile(
+    r"^\s*(?P<nloc>\d+)\s+(?P<ccn>\d+)\s+\d+\s+(?P<args>\d+)\s+\d+\s+"
+    r"(?P<name>\S+)@(?P<start>\d+)-(?P<end>\d+)@(?P<path>.+)$"
+)
 
 PY_SKIP_DIRS = frozenset({".venv", "venv", "__pycache__", ".tox", "node_modules"})
 
@@ -148,16 +151,15 @@ def _parse_lizard(stdout: str) -> list[FunctionStats]:
         m = _LIZARD_LINE.match(line)
         if not m:
             continue
-        nloc_s, ccn_s, args_s, name, start_s, end_s, path = m.groups()
         rows.append(
             FunctionStats(
-                path=path,
-                name=name,
-                start=int(start_s),
-                end=int(end_s),
-                nloc=int(nloc_s),
-                ccn=int(ccn_s),
-                args=int(args_s),
+                path=m["path"],
+                name=m["name"],
+                start=int(m["start"]),
+                end=int(m["end"]),
+                nloc=int(m["nloc"]),
+                ccn=int(m["ccn"]),
+                args=int(m["args"]),
             )
         )
     return rows

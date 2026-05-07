@@ -12,7 +12,7 @@ import tomllib
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
 from interlocks.detect import (
@@ -417,43 +417,18 @@ def _interlock_table(pyproject: dict[str, Any]) -> dict[str, Any]:
     return table if isinstance(table, dict) else {}
 
 
-def _runner_override(table: dict[str, Any]) -> TestRunner | None:
-    value = table.get("test_runner")
-    if value == "pytest":
-        return "pytest"
-    if value == "unittest":
-        return "unittest"
-    return None
+_ENUM_OPTIONS: dict[str, tuple[str, ...]] = {
+    "test_runner": ("pytest", "unittest"),
+    "test_invoker": ("python", "uv"),
+    "acceptance_runner": ("pytest-bdd", "behave", "off"),
+    "mutation_ci_mode": ("off", "incremental", "full"),
+    "audit_severity_threshold": ("low", "medium", "high", "critical"),
+}
 
 
-def _invoker_override(table: dict[str, Any]) -> TestInvoker | None:
-    value = table.get("test_invoker")
-    if value == "python":
-        return "python"
-    if value == "uv":
-        return "uv"
-    return None
-
-
-def _acceptance_runner_override(table: dict[str, Any]) -> AcceptanceRunner | None:
-    value = table.get("acceptance_runner")
-    if value in ("pytest-bdd", "behave", "off"):
-        return value
-    return None
-
-
-def _mutation_ci_mode_override(table: dict[str, Any]) -> MutationCIMode | None:
-    value = table.get("mutation_ci_mode")
-    if value in ("off", "incremental", "full"):
-        return value
-    return None
-
-
-def _audit_severity_threshold_override(table: dict[str, Any]) -> AuditSeverityThreshold | None:
-    value = table.get("audit_severity_threshold")
-    if value in ("low", "medium", "high", "critical"):
-        return value
-    return None
+def _enum_override(table: dict[str, Any], key: str) -> str | None:
+    value = table.get(key)
+    return value if value in _ENUM_OPTIONS[key] else None
 
 
 @dataclass(frozen=True)
@@ -624,20 +599,13 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
     table, value_sources, preset, unsupported_presets = _resolve_config_table(project_table)
 
     paths = _resolved_paths(project_root, pyproject, table)
-    runner_override = _runner_override(table)
-    invoker_override = _invoker_override(table)
-    acceptance_runner = _acceptance_runner_override(table)
+    runner_override = cast("TestRunner | None", _enum_override(table, "test_runner"))
+    invoker_override = cast("TestInvoker | None", _enum_override(table, "test_invoker"))
+    acceptance_runner = cast("AcceptanceRunner | None", _enum_override(table, "acceptance_runner"))
     pytest_args = tuple(str(a) for a in (table.get("pytest_args") or ()))
 
-    test_runner: TestRunner = runner_override or detect_test_runner(
-        project_root, pyproject, paths.test_dir
-    )
-    test_invoker: TestInvoker = invoker_override or detect_test_invoker(project_root)
-    run_acceptance_in_check, require_acceptance, mutation_ci_mode, mutation_since_ref = (
-        _resolve_flags(table)
-    )
-    skip = frozenset(table.get("skip", ()))
-    audit_severity_threshold = _audit_severity_threshold_override(table)
+    test_runner = runner_override or detect_test_runner(project_root, pyproject, paths.test_dir)
+    test_invoker = invoker_override or detect_test_invoker(project_root)
     thresholds = _threshold_overrides(table)
     if "enforce_behavior_attribution" not in thresholds:
         thresholds["enforce_behavior_attribution"] = _default_enforce_behavior_attribution(
@@ -645,13 +613,6 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         )
         if thresholds["enforce_behavior_attribution"]:
             value_sources.setdefault("enforce_behavior_attribution", _SOURCE_AUTO)
-    dependency_freshness_command = _string_value(
-        table, "dependency_freshness_command", InterlockConfig.dependency_freshness_command
-    )
-    dependency_freshness_stage = _string_value(
-        table, "dependency_freshness_stage", InterlockConfig.dependency_freshness_stage
-    )
-    changed_ref = _string_value(table, "changed_ref", InterlockConfig.changed_ref)
     ci_evidence_path = _resolved_path(
         table.get("ci_evidence_path"),
         project_root / InterlockConfig.ci_evidence_path,
@@ -676,15 +637,23 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         pytest_args=pytest_args,
         acceptance_runner=acceptance_runner,
         features_dir=paths.features_dir,
-        run_acceptance_in_check=run_acceptance_in_check,
-        require_acceptance=require_acceptance,
-        mutation_ci_mode=mutation_ci_mode,
-        mutation_since_ref=mutation_since_ref,
-        changed_ref=changed_ref,
-        skip=skip,
-        dependency_freshness_command=dependency_freshness_command,
-        dependency_freshness_stage=dependency_freshness_stage,
-        audit_severity_threshold=audit_severity_threshold,
+        run_acceptance_in_check=table.get(
+            "run_acceptance_in_check", InterlockConfig.run_acceptance_in_check
+        ),
+        require_acceptance=table.get("require_acceptance", InterlockConfig.require_acceptance),
+        mutation_ci_mode=table.get("mutation_ci_mode", InterlockConfig.mutation_ci_mode),
+        mutation_since_ref=table.get("mutation_since_ref", InterlockConfig.mutation_since_ref),
+        changed_ref=table.get("changed_ref", InterlockConfig.changed_ref),
+        skip=frozenset(table.get("skip", ())),
+        dependency_freshness_command=table.get(
+            "dependency_freshness_command", InterlockConfig.dependency_freshness_command
+        ),
+        dependency_freshness_stage=table.get(
+            "dependency_freshness_stage", InterlockConfig.dependency_freshness_stage
+        ),
+        audit_severity_threshold=cast(
+            "AuditSeverityThreshold | None", _enum_override(table, "audit_severity_threshold")
+        ),
         ci_evidence_path=ci_evidence_path,
         value_sources=_complete_value_sources(value_sources, table, overrides=overrides),
         unsupported_presets=unsupported_presets,
@@ -744,29 +713,6 @@ def _resolved_path(
     return fallback
 
 
-def _string_value(table: dict[str, Any], key: str, default: str) -> str:
-    value = table.get(key)
-    return value if isinstance(value, str) else default
-
-
-def _resolve_flags(table: dict[str, Any]) -> tuple[bool, bool, MutationCIMode, str]:
-    """Resolve (run_acceptance_in_check, require_acceptance, mutation_ci_mode, mutation_since)."""
-    run_override = _coerce_bool(table.get("run_acceptance_in_check"))
-    run_acceptance_in_check = (
-        run_override if run_override is not None else InterlockConfig.run_acceptance_in_check
-    )
-    require_override = _coerce_bool(table.get("require_acceptance"))
-    require_acceptance = (
-        require_override if require_override is not None else InterlockConfig.require_acceptance
-    )
-    mutation_ci_mode = _mutation_ci_mode_override(table) or InterlockConfig.mutation_ci_mode
-    since_ref_raw = table.get("mutation_since_ref")
-    mutation_since_ref = (
-        since_ref_raw if isinstance(since_ref_raw, str) else InterlockConfig.mutation_since_ref
-    )
-    return run_acceptance_in_check, require_acceptance, mutation_ci_mode, mutation_since_ref
-
-
 _STRING_KEYS = (
     "src_dir",
     "test_dir",
@@ -777,13 +723,6 @@ _STRING_KEYS = (
     "dependency_freshness_stage",
     "ci_evidence_path",
 )
-_ENUM_PARSERS = {
-    "test_runner": _runner_override,
-    "test_invoker": _invoker_override,
-    "acceptance_runner": _acceptance_runner_override,
-    "mutation_ci_mode": _mutation_ci_mode_override,
-    "audit_severity_threshold": _audit_severity_threshold_override,
-}
 
 
 def _resolve_config_table(
@@ -842,23 +781,21 @@ def _explicit_config_overrides(table: dict[str, Any]) -> dict[str, Any]:
         value = table.get(key)
         if isinstance(value, str):
             overrides[key] = value
-    value = table.get("pytest_args")
-    if isinstance(value, list):
-        overrides["pytest_args"] = value
+    pytest_args = table.get("pytest_args")
+    if isinstance(pytest_args, list):
+        overrides["pytest_args"] = pytest_args
     skip = _skip_override(table.get("skip"))
     if skip is not None:
         overrides["skip"] = skip
-    for key, parser in _ENUM_PARSERS.items():
-        parsed = parser(table)
+    for enum_key in _ENUM_OPTIONS:
+        parsed = _enum_override(table, enum_key)
         if parsed is not None:
-            overrides[key] = parsed
+            overrides[enum_key] = parsed
     overrides.update(_threshold_overrides(table))
-    value = _coerce_bool(table.get("run_acceptance_in_check"))
-    if value is not None:
-        overrides["run_acceptance_in_check"] = value
-    value = _coerce_bool(table.get("require_acceptance"))
-    if value is not None:
-        overrides["require_acceptance"] = value
+    for bool_key in ("run_acceptance_in_check", "require_acceptance"):
+        coerced = _coerce_bool(table.get(bool_key))
+        if coerced is not None:
+            overrides[bool_key] = coerced
     return overrides
 
 
@@ -920,28 +857,6 @@ _BOOL_THRESHOLDS = (
 )
 
 
-def _threshold_overrides(table: dict[str, Any]) -> dict[str, Any]:
-    """Parse known threshold keys from ``[tool.interlocks]`` with type coercion.
-
-    Invalid values (non-numeric, wrong type) fall through silently — the
-    dataclass default applies. Keeps config parsing permissive.
-    """
-    overrides: dict[str, Any] = {}
-    for key in _INT_THRESHOLDS:
-        value = _coerce_int(table.get(key))
-        if value is not None:
-            overrides[key] = value
-    for key in _FLOAT_THRESHOLDS:
-        value = coerce_float(table.get(key))
-        if value is not None:
-            overrides[key] = value
-    for key in _BOOL_THRESHOLDS:
-        value = _coerce_bool(table.get(key))
-        if value is not None:
-            overrides[key] = value
-    return overrides
-
-
 def _coerce_int(raw: object) -> int | None:
     if raw is None or isinstance(raw, bool):
         return None
@@ -965,6 +880,25 @@ def _coerce_bool(raw: object) -> bool | None:
     if isinstance(raw, bool):
         return raw
     return None
+
+
+def _threshold_overrides(table: dict[str, Any]) -> dict[str, Any]:
+    """Parse known threshold keys from ``[tool.interlocks]`` with type coercion.
+
+    Invalid values (non-numeric, wrong type) fall through silently — the
+    dataclass default applies. Keeps config parsing permissive.
+    """
+    overrides: dict[str, Any] = {}
+    for keys, coerce in (
+        (_INT_THRESHOLDS, _coerce_int),
+        (_FLOAT_THRESHOLDS, coerce_float),
+        (_BOOL_THRESHOLDS, _coerce_bool),
+    ):
+        for key in keys:
+            value = coerce(table.get(key))
+            if value is not None:
+                overrides[key] = value
+    return overrides
 
 
 def clear_cache() -> None:

@@ -425,20 +425,20 @@ def behavior_coverage_for_parsed_features(
 
 def format_behavior_coverage_failure(result: BehaviorCoverageValidationResult) -> str:
     lines = ["acceptance: behavior coverage incomplete — add or update Gherkin behavior markers"]
-    for behavior_id in result.duplicate_behavior_ids:
-        lines.append(
-            f"invalid duplicate behavior ID: {behavior_id} — keep one live registry entry"
-        )
-    for behavior_id in result.uncovered_behavior_ids:
-        lines.append(
-            f"uncovered behavior ID: {behavior_id} — add `# req: {behavior_id}` "
-            f"or `@req-{behavior_id}` to a runnable Scenario"
-        )
-    for scenario in result.stale_scenario_behaviors:
-        lines.append(
-            f"stale behavior ID: {scenario.behavior_id} at "
-            f"{scenario.feature_path}:{scenario.scenario_line} — update marker or registry"
-        )
+    lines.extend(
+        f"invalid duplicate behavior ID: {behavior_id} — keep one live registry entry"
+        for behavior_id in result.duplicate_behavior_ids
+    )
+    lines.extend(
+        f"uncovered behavior ID: {behavior_id} — add `# req: {behavior_id}` "
+        f"or `@req-{behavior_id}` to a runnable Scenario"
+        for behavior_id in result.uncovered_behavior_ids
+    )
+    lines.extend(
+        f"stale behavior ID: {scenario.behavior_id} at "
+        f"{scenario.feature_path}:{scenario.scenario_line} — update marker or registry"
+        for scenario in result.stale_scenario_behaviors
+    )
     return "\n".join(lines)
 
 
@@ -480,12 +480,8 @@ def _parse_feature_behaviors(path: Path) -> FeatureBehaviorParse:
         if ids:
             pending_ids.extend(ids)
             continue
-        if not stripped:
+        if not stripped or not stripped.startswith(("@", "#")):
             pending_ids = []
-            continue
-        if stripped.startswith(("@", "#")):
-            continue
-        pending_ids = []
     return FeatureBehaviorParse(scenario_count, tuple(scenarios))
 
 
@@ -499,14 +495,7 @@ def _marker_ids(stripped: str) -> tuple[str, ...]:
 
 
 def _dedupe_preserve_order(values: Iterable[str]) -> list[str]:
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        deduped.append(value)
-    return deduped
+    return list(dict.fromkeys(values))
 
 
 def _duplicate_behavior_ids(behaviors: Sequence[Behavior]) -> tuple[str, ...]:

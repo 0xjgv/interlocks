@@ -128,17 +128,21 @@ def validate_attribution(
     aggregate_reached_symbols: tuple[str, ...] = (),
 ) -> AttributionResult:
     behaviors_by_id = {behavior.behavior_id: behavior for behavior in registry.behaviors}
-    public_behaviors = tuple(
-        behavior for behavior in registry.behaviors if behavior.public_symbol is not None
+    symbol_less = tuple(b for b in registry.behaviors if b.public_symbol is None)
+    mis_attributed, gaps, claimed_ids, attributed_ids = _classify_claims(
+        behaviors_by_id, scenarios, evidence
     )
-    symbol_less = tuple(
-        behavior for behavior in registry.behaviors if behavior.public_symbol is None
+    unresolved = tuple(
+        b
+        for b in registry.behaviors
+        if b.public_symbol is not None
+        and b.behavior_id in claimed_ids
+        and b.behavior_id not in attributed_ids
     )
-    classified = _classify_claims(behaviors_by_id, scenarios, evidence)
     return AttributionResult(
-        mis_attributed=tuple(sorted(classified[0])),
-        unresolved_behaviors=_unresolved_behaviors(public_behaviors, classified[2], classified[3]),
-        instrumentation_gaps=tuple(sorted(classified[1])),
+        mis_attributed=tuple(sorted(mis_attributed)),
+        unresolved_behaviors=unresolved,
+        instrumentation_gaps=tuple(sorted(gaps)),
         informational_symbol_less=tuple(sorted(symbol_less)),
         aggregate_reached_symbols=tuple(sorted(set(aggregate_reached_symbols))),
         evidence_failure=evidence.failure if evidence is not None else None,
@@ -155,14 +159,14 @@ def _classify_claims(
         for reach in (evidence.scenarios if evidence is not None else ())
     }
     attributed_ids: set[str] = set()
-    claimed_public_ids: set[str] = set()
+    claimed_ids: set[str] = set()
     mis_attributed: list[AttributionClaimFailure] = []
     gaps: list[AttributionClaimFailure] = []
     for scenario in sorted(scenarios):
         behavior = behaviors_by_id.get(scenario.behavior_id)
         if behavior is None or behavior.public_symbol is None:
             continue
-        claimed_public_ids.add(behavior.behavior_id)
+        claimed_ids.add(behavior.behavior_id)
         claim = AttributionClaimFailure(scenario, behavior.public_symbol)
         reach = reach_by_key.get(_scenario_key(scenario.feature_path, scenario.scenario_line))
         if reach is None:
@@ -171,39 +175,36 @@ def _classify_claims(
             attributed_ids.add(behavior.behavior_id)
         else:
             mis_attributed.append(claim)
-    return mis_attributed, gaps, claimed_public_ids, attributed_ids
-
-
-def _unresolved_behaviors(
-    public_behaviors: tuple[Behavior, ...],
-    claimed_public_ids: set[str],
-    attributed_ids: set[str],
-) -> tuple[Behavior, ...]:
-    return tuple(
-        behavior
-        for behavior in public_behaviors
-        if behavior.behavior_id in claimed_public_ids
-        and behavior.behavior_id not in attributed_ids
-    )
+    return mis_attributed, gaps, claimed_ids, attributed_ids
 
 
 def format_attribution_failure(result: AttributionResult) -> str:
     lines = ["behavior-attribution: scenario claims do not match runtime evidence"]
     if result.evidence_failure:
         lines.append(f"  evidence failure: {result.evidence_failure}")
-    _append_claim_failures(lines, "mis-attributed", result.mis_attributed)
-    _append_unresolved(lines, result.unresolved_behaviors)
-    _append_claim_failures(
-        lines,
-        "instrumentation gaps",
-        result.instrumentation_gaps,
-        suffix=" — no per-scenario evidence recorded",
-    )
+    if result.mis_attributed:
+        lines.append("  mis-attributed:")
+        for failure in result.mis_attributed:
+            detail = (
+                f" claimed {failure.scenario.behavior_id} "
+                f"but did not reach {failure.public_symbol}"
+            )
+            lines.append(_claim_line(failure, detail))
+    if result.unresolved_behaviors:
+        lines.append("  unresolved behavior symbols:")
+        for behavior in result.unresolved_behaviors:
+            lines.append(
+                f"    - {behavior.behavior_id} — {behavior.summary} — "
+                f"declared {behavior.public_symbol} but no claiming scenario reached it"
+            )
+    if result.instrumentation_gaps:
+        lines.append("  instrumentation gaps:")
+        for failure in result.instrumentation_gaps:
+            lines.append(_claim_line(failure, " — no per-scenario evidence recorded"))
     if result.aggregate_reached_symbols:
+        joined = ", ".join(result.aggregate_reached_symbols)
         lines.append(
-            "  aggregate trace fallback: "
-            + ", ".join(result.aggregate_reached_symbols)
-            + " (diagnostic only; does not satisfy attribution)"
+            f"  aggregate trace fallback: {joined} (diagnostic only; does not satisfy attribution)"
         )
     if result.informational_symbol_less:
         lines.append("  informational symbol-less behaviors:")
@@ -212,36 +213,12 @@ def format_attribution_failure(result: AttributionResult) -> str:
     return "\n".join(lines)
 
 
-def _append_claim_failures(
-    lines: list[str],
-    heading: str,
-    failures: tuple[AttributionClaimFailure, ...],
-    *,
-    suffix: str | None = None,
-) -> None:
-    if not failures:
-        return
-    lines.append(f"  {heading}:")
-    for failure in failures:
-        detail = suffix or (
-            f" claimed {failure.scenario.behavior_id} but did not reach {failure.public_symbol}"
-        )
-        lines.append(
-            "    - "
-            f"{failure.scenario.feature_path}:{failure.scenario.scenario_line} "
-            f'"{failure.scenario.scenario_title}"{detail}'
-        )
-
-
-def _append_unresolved(lines: list[str], behaviors: tuple[Behavior, ...]) -> None:
-    if not behaviors:
-        return
-    lines.append("  unresolved behavior symbols:")
-    for behavior in behaviors:
-        lines.append(
-            f"    - {behavior.behavior_id} — {behavior.summary} — "
-            f"declared {behavior.public_symbol} but no claiming scenario reached it"
-        )
+def _claim_line(failure: AttributionClaimFailure, detail: str) -> str:
+    scenario = failure.scenario
+    return (
+        f"    - {scenario.feature_path}:{scenario.scenario_line} "
+        f'"{scenario.scenario_title}"{detail}'
+    )
 
 
 def _parse_reach(raw: object) -> ScenarioReach | None:

@@ -18,11 +18,9 @@ from interlocks.crash import storage
 
 
 @pytest.fixture(autouse=True)
-def _isolated_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def _isolated_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Redirect ``XDG_CACHE_HOME`` at every test so we never touch the real cache."""
-    cache_root = tmp_path / "cache"
-    monkeypatch.setenv("XDG_CACHE_HOME", str(cache_root))
-    return cache_root
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
 
 
 def test_cache_dir_creates_chain_with_0700() -> None:

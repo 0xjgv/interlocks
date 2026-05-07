@@ -30,6 +30,10 @@ _LABEL = "attribution"
 _COMMAND = "behavior-attribution"
 
 
+def _skip(detail: str) -> None:
+    ui.row(_LABEL, _COMMAND, "skipped", detail=detail, state="warn")
+
+
 def _validate_current_project(cfg: InterlockConfig) -> AttributionResult | None:
     registry = behavior_registry_for_config(cfg)
     if not any(behavior.public_symbol for behavior in registry.behaviors):
@@ -60,27 +64,15 @@ def _refresh_evidence_if_needed(cfg: InterlockConfig) -> None:
             )
         )
     if classification.status is not AcceptanceStatus.RUNNABLE:
-        ui.row(
-            _LABEL,
-            _COMMAND,
-            "skipped",
-            detail="acceptance is not runnable; no evidence to refresh",
-            state="warn",
-        )
+        _skip("acceptance is not runnable; no evidence to refresh")
         return
     if detect_acceptance_runner(cfg) == "behave":
-        ui.row(
-            _LABEL,
-            _COMMAND,
-            "skipped",
-            detail="runtime attribution supports pytest-bdd only",
-            state="warn",
-        )
+        _skip("runtime attribution supports pytest-bdd only")
         return
 
     acceptance = task_acceptance_with_attribution(cfg)
     if acceptance is None:
-        ui.row(_LABEL, _COMMAND, "skipped", detail="acceptance task unavailable", state="warn")
+        _skip("acceptance task unavailable")
         return
     run(acceptance)
 
@@ -92,7 +84,7 @@ def cmd_behavior_attribution(*, refresh: bool = True) -> None:
         _refresh_evidence_if_needed(cfg)
     result = _validate_current_project(cfg)
     if result is None:
-        ui.row(_LABEL, _COMMAND, "skipped", detail="no public symbols declared", state="warn")
+        _skip("no public symbols declared")
         return
     if result.is_complete and not result.has_warnings:
         ui.row(_LABEL, _COMMAND, "ok", state="ok")
@@ -110,19 +102,12 @@ def cmd_behavior_attribution(*, refresh: bool = True) -> None:
 def cmd_behavior_attribution_cached_advisory() -> None:
     """Fast advisory mirror used by `interlocks check`."""
     cfg = load_config()
-    path = evidence_path(cfg)
-    if not evidence_is_fresh(cfg, path):
-        ui.row(
-            _LABEL,
-            _COMMAND,
-            "skipped",
-            detail="no fresh evidence — run `interlocks behavior-attribution`",
-            state="warn",
-        )
+    if not evidence_is_fresh(cfg, evidence_path(cfg)):
+        _skip("no fresh evidence — run `interlocks behavior-attribution`")
         return
     result = _validate_current_project(cfg)
     if result is None:
-        ui.row(_LABEL, _COMMAND, "skipped", detail="no public symbols declared", state="warn")
+        _skip("no public symbols declared")
         return
     if result.is_complete and not result.has_warnings:
         ui.row(_LABEL, _COMMAND, "ok", state="ok")
