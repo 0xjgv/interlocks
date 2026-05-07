@@ -6,6 +6,7 @@ wheels/
 *.egg-info
 
 # Virtual environments
+.venv-py*
 .venv
 
 # >>> interlocks managed >>>
@@ -29,5 +30,6 @@ dist/
 .claude/skills/
 .claude/*.lock
 .humanlayer/
+.factory/
 openspec/
 .codex/
