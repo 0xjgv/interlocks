@@ -108,6 +108,12 @@ class BehaviorRegistry:
 INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     Behavior("cli-commands", "cli", "help lists supported public commands", "interlocks.cli:main"),
     Behavior(
+        "cli-commands-advanced",
+        "cli",
+        "advanced help lists all commands including internal and alias commands",
+        "interlocks.cli:main",
+    ),
+    Behavior(
         "cli-version", "cli", "version command prints package version", "interlocks.cli:main"
     ),
     Behavior("cli-quiet", "cli", "quiet flag suppresses banner chrome", "interlocks.cli:main"),

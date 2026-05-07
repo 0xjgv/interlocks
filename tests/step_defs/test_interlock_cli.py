@@ -11,6 +11,7 @@ from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then
 
+from interlocks.cli import TASKS
 from tests.step_defs.conftest import run_interlock_text
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_cli.feature"))
@@ -60,6 +61,12 @@ def _lists_command(cli_output: str, name: str) -> None:
     assert f"  {tag} " in cli_output or f"  {tag}\n" in cli_output, (
         f"expected {tag!r} in help output; got:\n{cli_output}"
     )
+
+
+@then("the output lists every registered command")
+def _lists_every_registered_command(cli_output: str) -> None:
+    for name in TASKS:
+        _lists_command(cli_output, name)
 
 
 @then(parsers.parse('the output contains "{needle}"'))

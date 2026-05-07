@@ -57,9 +57,10 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
         assert bin_path.exists(), f"entry point missing at {bin_path}"
         assert bin_path.stat().st_mode & 0o111, f"entry point not executable at {bin_path}"
 
-    help_out = run([interlocks_bin, "help"]).stdout
-    for expected in ("check", "pre-commit", "ci", "nightly"):
-        assert expected in help_out, f"`interlocks help` output missing {expected!r}:\n{help_out}"
+    help_out = run([interlocks_bin, "help", "--advanced"]).stdout
+    for expected in ("check", "ci", "pre-commit", "nightly"):
+        tag = f"[{expected}]"
+        assert tag in help_out, f"help --advanced missing {tag!r}"
 
     version = _project_version()
     version_cmds: list[list[str | Path]] = [

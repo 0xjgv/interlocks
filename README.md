@@ -3,23 +3,14 @@
 For DevEx and platform teams standardizing Python quality across repositories:
 
 ```bash
-cd your-python-project
-uvx --from interlocks il doctor  # try without installing
-uvx --from interlocks il check   # local edit loop
+uvx --from interlocks il doctor
+uvx --from interlocks il check
+uvx --from 'interlocks>=0.1,<0.2' il ci
 ```
 
+These three commands cover the full adoption arc: diagnose a project, run the local quality loop, and gate a pull request with a pinned spec. No install required to start.
+
 interlocks gives one local/hook/CI command surface for ruff, basedpyright, coverage.py, mutmut, deptry, import-linter, pip-audit, and lizard, while driving the project's pytest/unittest tests and pytest-bdd or behave acceptance suite when available. New repositories can start with auto-detected paths and bundled tool defaults; mature repositories can opt into named presets or explicit `[tool.interlocks]` thresholds when they need stronger gates.
-
-## How to Run Interlocks
-
-| Use case | Command | Notes |
-| --- | --- | --- |
-| Exploration or ad hoc checks | `uvx --from interlocks il check` | Runs the latest PyPI release without installing. |
-| Repeatable CI or shared workflows | `uvx --from 'interlocks>=0.1,<0.2' il ci` or `uvx --from interlocks==0.1.7 il ci` | Range-pin within a compatible line, or exact-pin when you need full reproducibility. |
-| Frequent local use | `uv tool install interlocks`, then `il check` | Installs the CLI once for repeated local runs. |
-| Alternative installed path | `pipx install interlocks`, then `il check` | Use when `pipx` is your installed-tool manager. |
-
-Use latest `uvx` for exploration. Use pinned or range-pinned specs for repeatable CI, prompts, and shared docs. Check the installed version with `il version`.
 
 ## Who This Is For
 
@@ -27,16 +18,22 @@ Use interlocks when you want one deterministic Python quality loop across a repo
 
 It is not a hosted dashboard, a polyglot quality platform, or a replacement for project-owned tests. It standardizes the repeatable Python gates so humans and agents review against the same evidence.
 
-## First-Run Adoption Loop
+## Getting Started
 
-### 1. Try Without Installing
+### 1. Diagnose and Explore
 
 ```bash
 uvx --from interlocks il doctor
 uvx --from interlocks il check
 ```
 
-The core quality tools ship with the CLI. Project-owned test runners and acceptance runners are invoked when the target repo already uses them. Unpinned `uvx` follows the latest PyPI release, which is right for exploration; use a pinned or range-pinned spec for repeatable shared automation.
+`doctor` performs static local inspection only: nearest `pyproject.toml`, detected source/test/features paths, runner, invoker, active preset, resolved gate values, PATH visibility, blockers, warnings, local integration state, and shortest next steps. It does not run tests, typecheck, coverage, mutation, dependency audit, or network checks.
+
+`check` runs the local edit loop: fix, format, typecheck, tests, optional acceptance tests, advisory dependency hygiene, cached CRAP feedback when fresh coverage exists, and the suppressions report. It is the command to run after edits before pushing.
+
+The core quality tools ship with the CLI. Unpinned `uvx` follows the latest PyPI release, which is right for exploration.
+
+### 2. Install and Wire Local Integrations
 
 For frequent local use, install once:
 
@@ -47,37 +44,19 @@ il check
 
 `pipx install interlocks` is also supported when `pipx` is your installed-tool manager.
 
-### 2. Install Local Integrations
+Wire local integrations with a single command:
 
 ```bash
 cd your-python-project
 interlocks setup
 interlocks setup --check
-interlocks setup --ci=github --check   # optional CI readiness check
-interlocks setup --ci=github           # optional GitHub Actions installer
 ```
 
-`setup` idempotently installs local feedback loops: git pre-commit hook, Claude Code Stop hook, `AGENTS.md` / `CLAUDE.md` interlocks block, and bundled Claude skill at `.claude/skills/interlocks/SKILL.md`. `setup --check` is read-only and exits non-zero when any local integration is missing or stale. CI is explicit: `setup --ci=github` creates `.github/workflows/interlocks.yml` only when no existing workflow invokes interlocks.
+`setup` idempotently installs local feedback loops: git pre-commit hook, Claude Code Stop hook, `AGENTS.md` / `CLAUDE.md` interlocks block, and bundled Claude skill at `.claude/skills/interlocks/SKILL.md`. `setup --check` is read-only and exits non-zero when any local integration is missing or stale.
 
-### 3. Diagnose Readiness
+For GitHub Actions CI, run `interlocks setup --ci=github --check` to detect existing wiring, or `interlocks setup --ci=github` to create `.github/workflows/interlocks.yml` only when no existing workflow invokes interlocks.
 
-```bash
-interlocks doctor
-```
-
-`doctor` performs static local inspection only: nearest `pyproject.toml`, detected source/test/features paths, runner, invoker, active preset, resolved gate values, PATH visibility, blockers, warnings, local integration state, and shortest next steps. It does not run tests, typecheck, coverage, mutation, dependency audit, or network checks.
-
-If the repository is ready, `doctor` points you at `interlocks check` and CI wiring. If it is blocked, it prioritizes the minimum setup fixes first, such as `interlocks init`, missing paths, unreadable config, unsupported presets, or missing runnable tool resolution.
-
-### 4. Run Local Checks
-
-```bash
-interlocks check
-```
-
-`check` runs the local edit loop: fix, format, typecheck, tests, optional acceptance tests, advisory dependency hygiene, cached CRAP feedback when fresh coverage exists, and the suppressions report. It is the command to run after edits before pushing.
-
-### 5. Wire CI
+### 3. Wire CI
 
 For repeatable CI, pin or range-pin the package spec:
 
@@ -121,7 +100,37 @@ The reusable action installs interlocks, runs `interlocks ci`, and writes a conc
 
 The action does not duplicate lint, typecheck, coverage, CRAP, dependency, architecture, acceptance, or mutation logic; the CLI remains the source of truth.
 
-## Why This Matters for AI-Authored Code
+## Brownfield Adoption
+
+For onboarding interlocks one PR at a time on a legacy codebase, `interlocks check --changed[=<ref>]` scopes file-level gates (fix, format, typecheck, CRAP) to the `.py` files changed vs the base ref:
+
+```bash
+interlocks check --changed             # scope vs cfg.changed_ref (default origin/main)
+interlocks check --changed=HEAD~1      # scope vs explicit ref
+```
+
+Graph-wide gates (deps, behavior-attribution, acceptance) and the test suite are skipped with a banner — running them under `--changed` would re-introduce the pre-existing failures that the flag is meant to filter out. Run `interlocks test` separately when you want the full suite. Override the default base with `[tool.interlocks] changed_ref = "main"` (or any git ref). `pre-commit` and `ci` are unchanged.
+
+## Debugging with Individual Gates
+
+When `interlocks check` or `interlocks ci` fails, run the failing gate directly to focus the feedback:
+
+```bash
+il lint
+il typecheck
+il test
+il coverage --min=80
+il deps
+il audit
+il arch
+il acceptance
+```
+
+Pass `--help` to any gate for available flags. `interlocks help` shows the common path, and `interlocks help --advanced` lists every subcommand.
+
+## Advanced Evidence Gates
+
+For mature repositories and AI-authored code review, go beyond the local edit loop with `crap`, `mutation`, `trust`, and `evaluate`. Detailed flags are in the Tasks Reference.
 
 When agents write most of the PRs, human review stops being the quality floor. Deterministic gates become the part that scales:
 
@@ -150,15 +159,6 @@ preset = "baseline"  # "baseline" | "strict" | "legacy"
 - `legacy` is for ratcheting existing repositories: very permissive thresholds, advisory gates, mutation off in CI.
 
 `agent-safe` is intentionally unsupported. If configured, `interlocks doctor` reports it as an unsupported preset instead of resolving agent-specific defaults.
-
-### Progressive Adoption: `--changed`
-
-```bash
-interlocks check --changed             # scope vs cfg.changed_ref (default origin/main)
-interlocks check --changed=HEAD~1      # scope vs explicit ref
-```
-
-For onboarding interlocks one PR at a time on a legacy codebase, `interlocks check --changed[=<ref>]` scopes file-level gates (fix, format, typecheck, CRAP) to the `.py` files changed vs the base ref. Graph-wide gates (deps, behavior-attribution, acceptance) and the test suite are skipped with a banner — running them under `--changed` would re-introduce the pre-existing failures that the flag is meant to filter out. Run `interlocks test` separately when you want the full suite. Override the default base with `[tool.interlocks] changed_ref = "main"` (or any git ref). `pre-commit` and `ci` are unchanged.
 
 ## Configuration
 
@@ -270,10 +270,7 @@ Yes for Python repositories that want deterministic local/CI quality gates. The 
 | `interlocks nightly` | Scheduled jobs | coverage -> audit (warn-skips on transient pip-audit failures) -> mutation, always blocking on `mutation_min_score` |
 | `interlocks post-edit` | Editor/agent hook interface | advisory ruff fix + format on changed Python files |
 | `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill; `--ci=github` installs/checks GitHub CI wiring |
-| `interlocks setup-hooks` | Narrow hook installer | writes hooks that call `interlocks pre-commit` and `interlocks post-edit` |
 | `interlocks clean` | Local cleanup | removes caches, build artifacts, coverage output, mutation state, and `__pycache__/` |
-
-`interlocks pre-commit` and `interlocks post-edit` are the stable hook interfaces. `interlocks setup` is the default local onboarding command. `interlocks setup --check` verifies hooks, agent docs, and the Claude skill without writing. `interlocks setup --ci=github --check` verifies GitHub CI wiring separately. Narrow commands (`setup-hooks`, `agents`, `setup-skill`) remain available as escape hatches.
 
 `mutation_ci_mode` picks how `interlocks ci` invokes mutmut:
 
@@ -306,7 +303,7 @@ Advanced gates:
 - `crap --max=N [--changed-only]`: CRAP complexity x coverage gate. Blocking depends on `enforce_crap`.
 - `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only]`: mutmut. Advisory unless `enforce_mutation = true` or `--min-score=` is passed.
 - `trust [--refresh] [--no-trend]`: actionable trust report combining coverage, CRAP, mutation, suspicious-test AST inspection, recent git diff, and next actions. `--refresh` runs coverage first with `--min=0`.
-- `evaluate`: static quality checklist scoring 11 automatable checks (acceptance, unit-tests, coverage, mutation, complexity, deps, deps-freshness, security, audit-severity, pr-speed, ci) for a 0–33 verdict. Reports gap-closure command, task/stage kind, and rationale without running tests, audits, mutation, or package-index lookups. Three checks read explicit policy: `evaluate_dependency_freshness` (deps-freshness), `audit_severity_threshold` (audit-severity), `pr_ci_runtime_budget_seconds` + `.interlocks/ci.json` (pr-speed).
+- `evaluate`: static quality checklist scoring 11 automatable checks (acceptance, unit-tests, coverage, mutation, complexity, deps, deps-freshness, security, audit-severity, pr-speed, ci) for a 0-33 verdict. Reports gap-closure command, task/stage kind, and rationale without running tests, audits, mutation, or package-index lookups. Three checks read explicit policy: `evaluate_dependency_freshness` (deps-freshness), `audit_severity_threshold` (audit-severity), `pr_ci_runtime_budget_seconds` + `.interlocks/ci.json` (pr-speed).
 
 Scaffolding:
 
@@ -372,33 +369,6 @@ The bundled `pyrightconfig.json` uses standard mode, suppresses selected noisy d
 
 `interlocks deps` and `interlocks mutation` ship no bundled fallback: deptry applies its built-ins, and mutmut reads the project's `pyproject.toml`.
 
-## Hooks
-
-Use the stable hook interfaces directly when integrating with your own hook manager:
-
-```bash
-interlocks pre-commit
-interlocks post-edit
-```
-
-Use the default local onboarding command when you want interlocks to write common integrations:
-
-```bash
-interlocks setup
-interlocks setup --check
-```
-
-It installs:
-
-- `.git/hooks/pre-commit`: runs `interlocks pre-commit`. Skip with `git commit --no-verify` when necessary.
-- `.claude/settings.json` Stop hook: runs `interlocks post-edit` after Claude Code sessions and preserves existing Stop hooks.
-- `AGENTS.md` / `CLAUDE.md`: appends the interlocks guidance block when no interlocks reference exists.
-- `.claude/skills/interlocks/SKILL.md`: installs the bundled Claude skill.
-
-`interlocks setup --check` verifies those same artifacts without writing. Use `interlocks doctor` for full project readiness. Narrow commands (`setup-hooks`, `agents`, `setup-skill`) remain available when you want one integration only.
-
-Hooks reference the Python that installed interlocks, so rerun `interlocks setup` after switching install locations or interpreters.
-
 ## Crash Reporting
 
 When interlocks itself crashes, the CLI prints a pre-filled GitHub Issues URL to stderr alongside the canonical Python traceback. The URL opens in your default browser if one is available; the URL on stderr is the contract, browser-open is convenience. **interlocks never opens a network connection of its own** — only your browser does, only if you choose to follow the link.
@@ -436,6 +406,18 @@ To share a crash manually, attach the payload JSON to your issue or paste releva
 ## Inspiration
 
 Inspired by [Uncle Bob Martin](https://x.com/unclebobmartin/status/2047661738456121506?s=20). Since *Clean Code*, we tend to forget the fundamentals — clean code, deterministic gates, fast feedback. These fundamentals are back stronger than ever, especially as agents write more of the code.
+
+## Troubleshooting: Integration Escape Hatches
+
+`interlocks setup` is the recommended integration entrypoint and handles hooks, agent docs, and the Claude skill in one command. For cases where you need to install or verify a single integration independently, narrow commands are available:
+
+- `setup-hooks`: writes only the git pre-commit hook (`interlocks pre-commit`) and Claude Code Stop hook (`interlocks post-edit`). Use when you want to manage agent docs and the skill separately.
+- `agents`: appends or creates the `AGENTS.md` / `CLAUDE.md` interlocks guidance block only.
+- `setup-skill`: installs or refreshes `.claude/skills/interlocks/SKILL.md` only.
+
+Hooks reference the Python that installed interlocks, so rerun `interlocks setup` after switching install locations or interpreters.
+
+`interlocks pre-commit` and `interlocks post-edit` are the stable hook interfaces when integrating with a custom hook manager.
 
 ## Maintainer Release Process
 

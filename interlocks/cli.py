@@ -60,20 +60,30 @@ if TYPE_CHECKING:
     from interlocks.config import InterlockConfig
 
 
-def cmd_help() -> None:
+def cmd_help(*, advanced: bool = False) -> None:
     start = time.monotonic()
     cfg = load_optional_config()
     ui.command_banner("help", cfg)
     ui.section("Usage")
     print("  Usage: interlocks <command>")
-    ui.section("Commands")
-    width = max(len(name) for name in TASKS) + 2
-    for group_name, group in TASK_GROUPS:
-        print()
-        print(f"{group_name}:")
-        for name, (_, description) in group.items():
-            tag = f"[{name}]"
-            print(f"  {tag:<{width}}  {description}{_alias_suffix(name)}")
+    if advanced:
+        ui.section("Commands")
+        width = max(len(name) for name in TASKS) + 2
+        for group_name, group in TASK_GROUPS:
+            print()
+            print(f"{group_name}:")
+            for name, (_, description) in group.items():
+                _print_command_row(name, description, width)
+    else:
+        names = _help_group_command_names()
+        width = max(len(name) for name in names) + 2
+        for group_name, group_names in _HELP_GROUPS:
+            ui.section(group_name)
+            for name in group_names:
+                _, description = TASKS[name]
+                _print_command_row(name, description, width)
+        ui.section("More")
+        print("  Run `interlocks help --advanced` to see the full command catalog.")
     _print_detected_block(cfg)
     ui.command_footer(start)
 
@@ -86,8 +96,12 @@ def cmd_task_help(task_name: str) -> None:
     ui.section("Usage")
     print(f"  Usage: interlocks {task_name}")
     ui.section("Command")
-    print(f"  [{task_name}]  {description}{_alias_suffix(task_name)}")
+    _print_command_row(task_name, description, len(task_name) + 2)
     ui.command_footer(start)
+
+
+def cmd_help_from_argv() -> None:
+    cmd_help(advanced="--advanced" in sys.argv[1:])
 
 
 _TOOL_INTERLOCK_HEADER = re.compile(r"^\[tool\.interlocks\]\s*$", re.MULTILINE)
@@ -229,6 +243,41 @@ def _write_project_preset(pyproject: Path, preset: str) -> None:
 ALIASES: dict[str, str] = {"attribution": "behavior-attribution"}
 
 
+_HELP_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Start here", ("doctor", "check", "ci", "setup")),
+    (
+        "Common gates",
+        (
+            "fix",
+            "format",
+            "lint",
+            "typecheck",
+            "test",
+            "coverage",
+            "audit",
+            "deps",
+            "arch",
+            "acceptance",
+        ),
+    ),
+    ("Project", ("init", "config", "presets", "version")),
+)
+
+
+def _help_group_command_names() -> tuple[str, ...]:
+    names = tuple(name for _, group_names in _HELP_GROUPS for name in group_names)
+    missing = [name for name in names if name not in TASKS]
+    if missing:
+        missing_names = ", ".join(sorted(missing))
+        raise RuntimeError(f"help group references unknown command(s): {missing_names}")
+    return names
+
+
+def _print_command_row(name: str, description: str, width: int) -> None:
+    tag = f"[{name}]"
+    print(f"  {tag:<{width}}  {description}{_alias_suffix(name)}")
+
+
 def _alias_suffix(name: str) -> str:
     aliases = sorted(alias for alias, canonical in ALIASES.items() if canonical == name)
     if not aliases:
@@ -353,7 +402,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
     (
         "Other",
         {
-            "help": (cmd_help, "Show this help message"),
+            "help": (cmd_help_from_argv, "Show this help message"),
         },
     ),
 ]
@@ -368,7 +417,7 @@ def main() -> None:
     args = [a for a in raw_args if not a.startswith("-")]
 
     if not args:
-        cmd_help()
+        cmd_help_from_argv()
         return
 
     requested = args[0]

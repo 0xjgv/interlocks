@@ -22,6 +22,26 @@ from interlocks.config import (
 )
 from interlocks.tasks.config import cmd_config
 
+_DEFAULT_HELP_GROUPS = (
+    ("Start here", ("doctor", "check", "ci", "setup")),
+    (
+        "Common gates",
+        (
+            "fix",
+            "format",
+            "lint",
+            "typecheck",
+            "test",
+            "coverage",
+            "audit",
+            "deps",
+            "arch",
+            "acceptance",
+        ),
+    ),
+    ("Project", ("init", "config", "presets", "version")),
+)
+
 
 @pytest.fixture
 def clean_config_cache() -> Iterator[None]:
@@ -69,13 +89,23 @@ def test_cmd_help_prints_usage_and_groups(capsys: pytest.CaptureFixture[str]) ->
     assert "command=help" in out
     assert "Usage: interlocks <command>" in out
     assert "── Usage" in out
+    assert "── More" in out
+    assert "help --advanced" in out
+    for group_name, names in _DEFAULT_HELP_GROUPS:
+        assert f"── {group_name}" in out
+        for name in names:
+            assert f"[{name}]" in out
+    assert "[evaluate]" not in out
+
+
+def test_cmd_help_advanced_prints_all_groups(capsys: pytest.CaptureFixture[str]) -> None:
+    cmd_help(advanced=True)
+    out = capsys.readouterr().out
     assert "── Commands" in out
-    assert "Tasks:" in out
-    assert "Stages:" in out
-    assert "[help]" in out  # known command listed with bracket tag
-    assert "[fix]" in out
-    assert "[check]" in out
-    assert "[evaluate]" in out
+    for group_name, group in TASK_GROUPS:
+        assert f"{group_name}:" in out
+        for name in group:
+            assert f"[{name}]" in out
 
 
 def test_cmd_help_prints_active_preset_and_resolved_values(
@@ -350,7 +380,7 @@ def test_main_dispatches_alias_to_canonical(
 def test_cmd_help_lists_behavior_attribution_alias(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    cmd_help()
+    cmd_help(advanced=True)
 
     out = capsys.readouterr().out
     assert "[behavior-attribution]" in out

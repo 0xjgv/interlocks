@@ -493,7 +493,7 @@ def _subprocess_env() -> dict[str, str]:
 
 def test_cli_help_lists_trust() -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "help"],
+        [sys.executable, "-m", "interlocks.cli", "help", "--advanced"],
         capture_output=True,
         text=True,
         check=False,

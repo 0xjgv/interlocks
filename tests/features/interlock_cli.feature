@@ -1,42 +1,36 @@
 @cli
 Feature: interlocks CLI surface area
   As a user about to run the quality gates
-  I want `interlocks help` to list every command I rely on
+  I want `interlocks help` to teach the common path
   So that I can see at a glance what's wired up
 
   # req: cli-commands
-  Scenario: Core commands are advertised
+  Scenario: Default help lists start-here and common gate commands
     Given I run "interlocks help"
-    Then the output lists the command "fix"
+    Then the output lists the command "doctor"
+    And the output lists the command "check"
+    And the output lists the command "ci"
+    And the output lists the command "setup"
+    And the output lists the command "fix"
     And the output lists the command "format"
     And the output lists the command "lint"
     And the output lists the command "typecheck"
     And the output lists the command "test"
+    And the output lists the command "coverage"
     And the output lists the command "audit"
     And the output lists the command "deps"
-    And the output lists the command "deps-freshness"
     And the output lists the command "arch"
     And the output lists the command "acceptance"
-    And the output lists the command "behavior-attribution"
     And the output lists the command "init"
-    And the output lists the command "init-acceptance"
-    And the output lists the command "setup"
-    And the output lists the command "agents"
-    And the output lists the command "setup-skill"
-    And the output lists the command "coverage"
-    And the output lists the command "crap"
-    And the output lists the command "mutation"
-    And the output lists the command "check"
-    And the output lists the command "pre-commit"
-    And the output lists the command "ci"
-    And the output lists the command "nightly"
-    And the output lists the command "post-edit"
-    And the output lists the command "setup-hooks"
-    And the output lists the command "clean"
-    And the output lists the command "evaluate"
     And the output lists the command "config"
     And the output lists the command "version"
-    And the output lists the command "help"
+    And the output contains "help --advanced"
+
+  # req: cli-commands-advanced
+  Scenario: Advanced help lists every command including internal and alias commands
+    Given I run "interlocks help --advanced"
+    Then the output lists every registered command
+    And the output contains "alias: attribution"
 
   @smoke
   # req: cli-version
