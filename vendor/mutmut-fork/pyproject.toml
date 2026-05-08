@@ -8,11 +8,16 @@
 #
 # Everything except the metadata (name/description/authors/urls) mirrors
 # upstream mutmut at SHA e31d923c734383ddb7df4aa439ab3c60fd7d629a
-# (version 3.5.0). Keep it in sync when bumping the pinned SHA.
+# (upstream version 3.5.0). Keep it in sync when bumping the pinned SHA.
+#
+# Local version 3.5.1 is a metadata-only bump — same upstream SHA, republished
+# under the renamed distribution `interlocks-mutmut` (was `interlock-mutmut`).
+# Bump the patch component on future metadata-only republishes; align the
+# major.minor with the upstream SHA's release.
 
 [project]
 name = "interlocks-mutmut"
-version = "3.5.0"
+version = "3.5.1"
 description = "interlocks-published fork of mutmut for PyPI-only installs (no git required at install time)."
 keywords = ["mutmut", "mutant", "mutation", "test", "testing", "interlocks"]
 authors = [

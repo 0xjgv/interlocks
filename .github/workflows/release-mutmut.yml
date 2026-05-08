@@ -67,14 +67,14 @@ jobs:
       - name: Validate artifacts
         working-directory: /tmp/mutmut-fork
         run: |
-          unzip -l dist/interlock_mutmut-*.whl | grep ' mutmut/'
+          unzip -l dist/interlocks_mutmut-*.whl | grep ' mutmut/'
           uvx twine check dist/*
 
       - name: Smoke-test wheel
         working-directory: /tmp/mutmut-fork
         run: |
           uv venv /tmp/interlocks-mutmut-smoke
-          uv pip install --python /tmp/interlocks-mutmut-smoke/bin/python dist/interlock_mutmut-*.whl
+          uv pip install --python /tmp/interlocks-mutmut-smoke/bin/python dist/interlocks_mutmut-*.whl
           /tmp/interlocks-mutmut-smoke/bin/python -c 'import mutmut; print(mutmut.__version__)'
           /tmp/interlocks-mutmut-smoke/bin/mutmut --help
 
