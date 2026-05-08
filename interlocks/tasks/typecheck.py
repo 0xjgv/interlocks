@@ -5,7 +5,7 @@ from __future__ import annotations
 from interlocks.config import InterlockConfig, load_config
 from interlocks.defaults_path import config_flag_if_absent
 from interlocks.detect import detect_target_interpreter
-from interlocks.runner import Task, run, tool
+from interlocks.runner import Task, run, uvx_tool
 
 
 def _typecheck_project_args(cfg: InterlockConfig) -> list[str]:
@@ -34,11 +34,12 @@ def task_typecheck(files: list[str] | None = None) -> Task:
     targets = files if files else [cfg.src_dir_arg]
     return Task(
         "Type check",
-        tool(
+        uvx_tool(
             "basedpyright",
             *_typecheck_project_args(cfg),
             *_typecheck_pythonpath_args(cfg),
             *targets,
+            version=cfg.tool_version("basedpyright"),
         ),
         label="typecheck",
         display=f"basedpyright {' '.join(targets)}",

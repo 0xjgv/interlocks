@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from interlocks.config import load_config
-from interlocks.runner import Task, run, tool
+from interlocks.runner import Task, run, uvx_tool
 
 
 def task_complexity() -> Task:
@@ -13,7 +13,7 @@ def task_complexity() -> Task:
         targets.append(cfg.test_dir_arg)
     return Task(
         "Complexity (lizard)",
-        tool(
+        uvx_tool(
             "lizard",
             *targets,
             "-C",
@@ -25,6 +25,7 @@ def task_complexity() -> Task:
             "-i",
             "0",
             "-w",
+            version=cfg.tool_version("lizard"),
         ),
         label="complexity",
         display=(

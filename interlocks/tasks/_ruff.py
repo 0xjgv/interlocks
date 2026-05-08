@@ -11,7 +11,7 @@ from typing import NamedTuple
 
 from interlocks.config import load_config
 from interlocks.defaults_path import config_flag_if_absent
-from interlocks.runner import Task, tool
+from interlocks.runner import Task, uvx_tool
 
 
 def ruff_config_args() -> list[str]:
@@ -45,9 +45,16 @@ _RUFF_SPECS: dict[str, _RuffSpec] = {
 def make_ruff_task(name: str, files: list[str] | None = None) -> Task:
     """Build the ``Task`` for a registered ruff wrapper. ``files`` defaults to ``['.']``."""
     spec = _RUFF_SPECS[name]
+    cfg = load_config()
     return Task(
         spec.title,
-        tool("ruff", *spec.args, *ruff_config_args(), *(files or ["."])),
+        uvx_tool(
+            "ruff",
+            *spec.args,
+            *ruff_config_args(),
+            *(files or ["."]),
+            version=cfg.tool_version("ruff"),
+        ),
         label=spec.label,
         display=spec.display,
     )

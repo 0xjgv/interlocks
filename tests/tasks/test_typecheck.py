@@ -160,7 +160,10 @@ def test_typecheck_uses_target_venv_pythonpath_for_non_uv_project(
 
     assert "--pythonpath" in cmd
     assert cmd[cmd.index("--pythonpath") + 1] == str(python)
-    assert "basedpyright" in Path(cmd[0]).name
+    # uvx dispatches the basedpyright entrypoint — verify it's resolved as a
+    # console script, not invoked via ``python -m``.
+    assert cmd[0] == "uvx"
+    assert "basedpyright" in cmd
     assert "-m" not in cmd[:2]
 
 

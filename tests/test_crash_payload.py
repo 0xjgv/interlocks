@@ -40,6 +40,8 @@ ALLOWLIST_KEYS = {
     "frames",
     "ci",
     "stage",
+    "uv_version",
+    "uvx_version",
 }
 
 
@@ -160,8 +162,9 @@ def test_timestamp_utc_iso8601_second_precision(
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", ts)
 
 
-def test_schema_version_is_one(force_interlocks_frame: None) -> None:
-    assert _build()["schema_version"] == 1
+def test_schema_version_is_two(force_interlocks_frame: None) -> None:
+    """Schema bumped to 2 with uv_version + uvx_version fields."""
+    assert _build()["schema_version"] == 2
 
 
 def test_interlocks_version_matches_package(force_interlocks_frame: None) -> None:
@@ -242,4 +245,4 @@ def test_ci_false_when_unset(
 
 def test_schema_version_constant_exposed() -> None:
     """Schema version is a module constant so storage/transport can reference it."""
-    assert payload_mod.SCHEMA_VERSION == 1
+    assert payload_mod.SCHEMA_VERSION == 2

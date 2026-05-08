@@ -21,7 +21,8 @@ import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
-from interlocks.config import COVERAGE_REQUIREMENT, clear_cache
+from interlocks.config import clear_cache
+from interlocks.defaults.tools import default_pin
 from tests.step_defs.conftest import run_interlock_in_cwd
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_tasks.feature"))
@@ -515,9 +516,21 @@ def _output_contains(needle: str, cli_result: CliResult) -> None:
 
 @then("the coverage commands inject Coverage.py through uv")
 def _coverage_uses_uv_with(coverage_commands: CoverageCommands) -> None:
-    expected_prefix = ["uv", "run", "--with", COVERAGE_REQUIREMENT, "python", "-m", "coverage"]
-    assert all(cmd[:7] == expected_prefix for cmd in coverage_commands.commands), (
-        f"expected all coverage commands to use uv injection; got {coverage_commands.commands!r}"
+    spec = f"coverage=={default_pin('coverage')}"
+    expected_prefix = [
+        "uv",
+        "run",
+        "--with",
+        spec,
+        "--index-strategy",
+        "first-index",
+        "python",
+        "-m",
+        "coverage",
+    ]
+    cmds = coverage_commands.commands
+    assert all(cmd[: len(expected_prefix)] == expected_prefix for cmd in cmds), (
+        f"expected all coverage commands to use uv injection; got {cmds!r}"
     )
 
 

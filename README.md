@@ -44,6 +44,20 @@ il check
 
 `pipx install interlocks` is also supported when `pipx` is your installed-tool manager.
 
+> **Why a tool install, not a project dep?** From 0.2 onward interlocks ships
+> zero runtime dependencies and dispatches every gate (`ruff`, `basedpyright`,
+> `coverage`, `mutmut`, `deptry`, `import-linter`, `lizard`, `pip-audit`)
+> through `uvx` / `uv run --with` at pinned versions baked into the package.
+> Installing it as a project dep used to drag a ~100-package transitive graph
+> into your resolver and clashed with libraries like `litellm`. As a tool, its
+> environment is isolated from yours.
+
+After installing, populate the cache so subsequent runs work offline:
+
+```bash
+interlocks warm
+```
+
 Wire local integrations with a single command:
 
 ```bash
@@ -61,9 +75,9 @@ For GitHub Actions CI, run `interlocks setup --ci=github --check` to detect exis
 For repeatable CI, pin or range-pin the package spec:
 
 ```bash
-uvx --from 'interlocks>=0.1,<0.2' il ci
+uvx --from 'interlocks>=0.2,<0.3' il ci
 # or exact-pin:
-uvx --from interlocks==0.1.7 il ci
+uvx --from interlocks==0.2.0 il ci
 ```
 
 If interlocks is installed in the CI environment, the direct command is:
@@ -90,12 +104,12 @@ jobs:
       - uses: 0xjgv/interlocks@v1
 ```
 
-The reusable action installs interlocks, runs `interlocks ci`, and writes a concise `GITHUB_STEP_SUMMARY` when GitHub provides the summary file. By default, it installs the latest PyPI release; when reproducibility matters, pin the package through the existing `install-command` input:
+The reusable action installs interlocks via `uv tool install`, restores the uvx tool cache from `actions/cache@v4`, runs `interlocks warm`, then runs `interlocks ci` with `UV_OFFLINE=1`. It writes a concise `GITHUB_STEP_SUMMARY` when GitHub provides the summary file. The default installs the latest PyPI release; when reproducibility matters, pin the package through the existing `install-command` input:
 
 ```yaml
       - uses: 0xjgv/interlocks@v1
         with:
-          install-command: python -m pip install 'interlocks>=0.1,<0.2'
+          install-command: uv tool install 'interlocks>=0.2,<0.3'
 ```
 
 The action does not duplicate lint, typecheck, coverage, CRAP, dependency, architecture, acceptance, or mutation logic; the CLI remains the source of truth.

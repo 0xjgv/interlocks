@@ -17,6 +17,7 @@ from typing import IO, NoReturn
 
 from interlocks import ui
 from interlocks.config import InterlockUserError, load_config, require_pyproject
+from interlocks.defaults.tools import UV_INDEX_FLAG
 from interlocks.skip import filter_tasks
 
 # Re-exported for historical callers (e.g. tasks/stats.py).
@@ -43,6 +44,7 @@ PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
     "setup-hooks",
     "setup-skill",
     "version",
+    "warm",
     "help",
 })
 
@@ -69,11 +71,43 @@ def results_snapshot() -> list[tuple[str, bool]]:
 
 
 def tool(name: str, *args: str) -> list[str]:
-    """Resolve a co-installed console script; fall back to PATH, then bare name."""
+    """Resolve a co-installed console script; fall back to PATH, then bare name.
+
+    Retained for callers (currently ``git``-style boundary tools) that don't go
+    through ``uvx``. Prefer ``uvx_tool`` for analyzers and ``uv_run_with`` for
+    tools that must share the user's interpreter.
+    """
     local = _BIN / name
     if local.exists():
         return [str(local), *args]
     return [shutil.which(name) or name, *args]
+
+
+def uvx_tool(package: str, *args: str, version: str, entrypoint: str | None = None) -> list[str]:
+    """Build ``uvx --from <package>@<version> <entrypoint or package> <args>``.
+
+    Stateless analyzers (ruff, basedpyright, deptry, etc.) run in their own
+    isolated env so the consumer's resolver never sees their deps. Pass
+    ``entrypoint`` when the console script name diverges from the package name
+    (``import-linter`` ships ``lint-imports``); the default is ``package``.
+    Version comes from ``cfg.tool_version(package)`` at the call site — passing
+    it in keeps this helper config-free for unit testing.
+    """
+    spec = f"{package}=={version}"
+    script = entrypoint or package
+    return ["uvx", "--from", spec, *UV_INDEX_FLAG, script, *args]
+
+
+def uv_run_with(package: str, *args: str, version: str) -> list[str]:
+    """Build ``uv run --with <package>@<version> <args>``.
+
+    Used for tools that must share the user's interpreter (coverage.py, mutmut)
+    so they can import the project's runtime code under test. The caller
+    supplies the inner argv tail — typically ``python -m <module> ...`` or a
+    console-script name.
+    """
+    spec = f"{package}=={version}"
+    return ["uv", "run", "--with", spec, *UV_INDEX_FLAG, *args]
 
 
 def python_m(module: str, *args: str) -> list[str]:

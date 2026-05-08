@@ -9,7 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from interlocks.runner import Task, _truncate_dump, reset_results, results_snapshot, run_tasks
+from interlocks.runner import (
+    Task,
+    _truncate_dump,
+    reset_results,
+    results_snapshot,
+    run_tasks,
+    uv_run_with,
+    uvx_tool,
+)
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _WAIT_FOR_MARKER = (
@@ -318,3 +326,64 @@ def test_dump_failure_caps_long_stderr_in_run_tasks(
     assert "err-199" in out
     assert "err-100" not in out
     assert "lines omitted" in out
+
+
+# ─────────────── uvx / uv run dispatch helpers ─────────────────────────
+
+
+def test_uvx_tool_default_entrypoint_uses_package_name() -> None:
+    cmd = uvx_tool("ruff", "check", ".", version="0.15.12")
+    assert cmd == [
+        "uvx",
+        "--from",
+        "ruff==0.15.12",
+        "--index-strategy",
+        "first-index",
+        "ruff",
+        "check",
+        ".",
+    ]
+
+
+def test_uvx_tool_explicit_entrypoint_overrides_package_name() -> None:
+    """import-linter ships its CLI as ``lint-imports`` — entrypoint diverges."""
+    cmd = uvx_tool("import-linter", "--config", "x.ini", version="2.8", entrypoint="lint-imports")
+    assert cmd == [
+        "uvx",
+        "--from",
+        "import-linter==2.8",
+        "--index-strategy",
+        "first-index",
+        "lint-imports",
+        "--config",
+        "x.ini",
+    ]
+
+
+def test_uvx_tool_strict_equality_pin() -> None:
+    """``==<pin>`` shape — tested explicitly so a future refactor can't silently widen."""
+    cmd = uvx_tool("basedpyright", version="1.39.3")
+    assert cmd[1] == "--from"
+    assert cmd[2] == "basedpyright==1.39.3"
+    assert "==" in cmd[2]
+
+
+def test_uv_run_with_passes_inner_argv() -> None:
+    cmd = uv_run_with("interlock-mutmut", "python", "-m", "mutmut", "run", version="3.5.0")
+    assert cmd == [
+        "uv",
+        "run",
+        "--with",
+        "interlock-mutmut==3.5.0",
+        "--index-strategy",
+        "first-index",
+        "python",
+        "-m",
+        "mutmut",
+        "run",
+    ]
+
+
+def test_uv_run_with_strict_equality_pin() -> None:
+    cmd = uv_run_with("coverage", "coverage", "run", "-m", "pytest", version="7.13.5")
+    assert cmd[1:5] == ["run", "--with", "coverage==7.13.5", "--index-strategy"]

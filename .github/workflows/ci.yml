@@ -28,10 +28,26 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      # Cache uvx-fetched tool wheels keyed on bundled pins. Cold cache → warm
+      # step pays the network cost once; subsequent runs ride the cache and
+      # `UV_OFFLINE=1` keeps gates hermetic.
+      - name: Restore uvx tool cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uvx-tools-${{ runner.os }}-${{ matrix.python }}-${{ hashFiles('interlocks/defaults/tools.py', 'interlocks/defaults/tools.txt') }}
+          restore-keys: |
+            uvx-tools-${{ runner.os }}-${{ matrix.python }}-
+
       - name: Install project
         run: uv sync
 
+      - name: Warm uvx cache
+        run: uv run interlocks warm
+
       - name: Run interlocks ci
+        env:
+          UV_OFFLINE: "1"
         run: uv run interlocks ci
 
       - name: Wheel install smoke test

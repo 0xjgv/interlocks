@@ -30,8 +30,8 @@ uvx --from interlocks il setup --check
 Unpinned `uvx` is acceptable for ad hoc or exploratory runs because it follows the latest PyPI release. Use pinned or range-pinned specs for repeatable prompts, CI snippets, and shared docs:
 
 ```sh
-uvx --from 'interlocks>=0.1,<0.2' il ci
-uvx --from interlocks==0.1.7 il ci
+uvx --from 'interlocks>=0.2,<0.3' il ci
+uvx --from interlocks==0.2.0 il ci
 ```
 
 For frequent local human use, `uv tool install interlocks` is appropriate; `pipx install interlocks` is the alternative installed path.

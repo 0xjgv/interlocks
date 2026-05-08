@@ -15,8 +15,21 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Restore uvx tool cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uvx-tools-${{ runner.os }}-3.11-${{ hashFiles('interlocks/defaults/tools.py', 'interlocks/defaults/tools.txt') }}
+          restore-keys: |
+            uvx-tools-${{ runner.os }}-3.11-
+
       - name: Install project
         run: uv sync
 
+      - name: Warm uvx cache
+        run: uv run interlocks warm
+
       - name: Run interlocks nightly
+        env:
+          UV_OFFLINE: "1"
         run: uv run interlocks nightly

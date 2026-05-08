@@ -12,9 +12,15 @@ import tomllib
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import Any, Literal, TypeVar, cast
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
+from interlocks.defaults.tools import DEFAULTS as TOOL_DEFAULTS
+from interlocks.defaults.tools import UV_INDEX_FLAG
 from interlocks.detect import (
     detect_features_dir,
     detect_src_dir,
@@ -417,6 +423,23 @@ def _interlock_table(pyproject: dict[str, Any]) -> dict[str, Any]:
     return table if isinstance(table, dict) else {}
 
 
+def _tool_version_overrides(table: dict[str, Any]) -> dict[str, str]:
+    """Parse ``[tool.interlocks.tools]`` into ``{tool_name: pin_string}``.
+
+    Only entries naming a known tool with a string value are kept; unknown
+    keys and non-string values fall through silently so defaults apply.
+    Mirrors the permissive shape of ``_threshold_overrides``.
+    """
+    raw = table.get("tools")
+    if not isinstance(raw, dict):
+        return {}
+    overrides: dict[str, str] = {}
+    for name, value in raw.items():
+        if name in TOOL_DEFAULTS and isinstance(value, str) and value:
+            overrides[name] = value
+    return overrides
+
+
 _ENUM_OPTIONS: dict[str, tuple[str, ...]] = {
     "test_runner": ("pytest", "unittest"),
     "test_invoker": ("python", "uv"),
@@ -470,6 +493,7 @@ class InterlockConfig:
     pr_ci_runtime_budget_seconds: int = 0
     pr_ci_evidence_max_age_hours: int = 24
     ci_evidence_path: Path = Path(".interlocks/ci.json")
+    tool_versions: Mapping[str, str] = field(default_factory=dict)
     value_sources: dict[str, str] = field(default_factory=dict)
     unsupported_presets: tuple[str, ...] = ()
 
@@ -502,8 +526,17 @@ class InterlockConfig:
             return None
         return self.relpath(self.features_dir)
 
+    def tool_version(self, name: str) -> str:
+        """Resolve the version pin for tool ``name``.
 
-COVERAGE_REQUIREMENT = "coverage>=7.13.5"
+        Precedence: ``[tool.interlocks.tools]`` override > bundled default in
+        :mod:`interlocks.defaults.tools`. Raises ``KeyError`` when ``name`` is
+        not a known tool.
+        """
+        override = self.tool_versions.get(name)
+        if override is not None:
+            return override
+        return TOOL_DEFAULTS[name]
 
 
 def python_command_prefix(cfg: InterlockConfig) -> list[str]:
@@ -529,7 +562,8 @@ def invoker_prefix(cfg: InterlockConfig) -> list[str]:
 def coverage_invoker_prefix(cfg: InterlockConfig) -> list[str]:
     """Argv prefix for Coverage.py while preserving target-project dependencies."""
     if cfg.test_invoker == "uv":
-        return ["uv", "run", "--with", COVERAGE_REQUIREMENT, "python", "-m"]
+        spec = f"coverage=={cfg.tool_version('coverage')}"
+        return ["uv", "run", "--with", spec, *UV_INDEX_FLAG, "python", "-m"]
     return invoker_prefix(cfg)
 
 
@@ -627,6 +661,7 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         "test_invoker": invoker_override,
         "acceptance_runner": acceptance_runner,
     }
+    tool_versions = _tool_version_overrides(project_table)
     return InterlockConfig(
         project_root=project_root,
         src_dir=paths.src_dir,
@@ -655,6 +690,7 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
             "AuditSeverityThreshold | None", _enum_override(table, "audit_severity_threshold")
         ),
         ci_evidence_path=ci_evidence_path,
+        tool_versions=MappingProxyType(tool_versions),
         value_sources=_complete_value_sources(value_sources, table, overrides=overrides),
         unsupported_presets=unsupported_presets,
         **thresholds,

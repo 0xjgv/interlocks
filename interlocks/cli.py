@@ -52,6 +52,7 @@ from interlocks.tasks.stats import cmd_trust
 from interlocks.tasks.test import cmd_test
 from interlocks.tasks.typecheck import cmd_typecheck
 from interlocks.tasks.version import cmd_version
+from interlocks.tasks.warm import cmd_warm
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -397,6 +398,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             ),
             "presets": (cmd_presets, "Show preset options or set one with `presets set <preset>`"),
             "version": (cmd_version, "print interlocks version"),
+            "warm": (
+                cmd_warm,
+                "Pre-fetch bundled tool wheels into ~/.cache/uv (for offline runs)",
+            ),
         },
     ),
     (

@@ -19,7 +19,7 @@ from interlocks.runner import (
     arg_value,
     fail,
     ok,
-    python_m,
+    uv_run_with,
     warn_skip,
 )
 
@@ -352,7 +352,18 @@ def cmd_mutation(
     if globs and not ui.is_quiet():
         print(f"  mutating {len(globs)} module(s) changed vs {cfg.mutation_since_ref}")
 
-    completed, log_path = _run_mutmut([*python_m("mutmut"), "run", *(globs or [])], timeout)
+    completed, log_path = _run_mutmut(
+        uv_run_with(
+            "interlock-mutmut",
+            "python",
+            "-m",
+            "mutmut",
+            "run",
+            *(globs or []),
+            version=cfg.tool_version("interlock-mutmut"),
+        ),
+        timeout,
+    )
 
     summary = read_mutation_summary()
     if summary is None:

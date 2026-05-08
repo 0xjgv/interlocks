@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from interlocks.config import (
-    COVERAGE_REQUIREMENT,
     InterlockConfig,
     build_coverage_test_command,
     coverage_invoker_prefix,
@@ -27,8 +26,8 @@ def _coverage_import_check_cmd(cfg: InterlockConfig) -> list[str] | None:
         return None
     message = (
         "interlocks: Coverage.py is not importable in the target Python environment. "
-        f"Install `{COVERAGE_REQUIREMENT}` there, or use a uv-managed project so "
-        "Interlocks can inject Coverage.py at runtime.\n"
+        f"Install `coverage>={cfg.tool_version('coverage')}` there, or use a uv-managed "
+        "project so Interlocks can inject Coverage.py at runtime.\n"
     )
     code = (
         "import importlib.util, sys; "

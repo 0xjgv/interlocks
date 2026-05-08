@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from interlocks.runner import Task
+from interlocks.defaults.tools import default_pin
+from interlocks.runner import Task, uvx_tool
 from interlocks.tasks import audit as audit_mod
 
 _PYPROJECT = textwrap.dedent(
@@ -52,8 +53,20 @@ def test_audit_clean_deps_passes(tmp_project: Path) -> None:
     )
 
 
-def test_audit_invokes_pip_audit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fast in-process check: cmd_audit builds a Task wrapping pip-audit and calls run()."""
+def test_audit_invokes_pip_audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fast in-process check: cmd_audit builds a uvx-dispatched pip-audit Task and runs it."""
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "audit-probe"
+            version = "0.0.1"
+            dependencies = ["requests"]
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
     captured: dict[str, Task] = {}
 
     def fake_run(task: Task, **_: object) -> None:
@@ -64,8 +77,7 @@ def test_audit_invokes_pip_audit(monkeypatch: pytest.MonkeyPatch) -> None:
 
     task = captured["task"]
     assert task.description == "Dep audit"
-    assert "pip_audit" in task.cmd
-    assert task.cmd[-1] == "."
+    assert task.cmd == uvx_tool("pip-audit", ".", version=default_pin("pip-audit"))
 
 
 def test_audit_prints_configured_severity_policy(

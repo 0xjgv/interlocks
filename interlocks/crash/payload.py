@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
+import subprocess
 import sys
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -39,7 +41,29 @@ from interlocks.crash.scrubber import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+
+def _binary_version(name: str) -> str | None:
+    """Return ``<name> --version`` output's first line, or ``None`` if unavailable.
+
+    Best-effort: missing binary, non-zero exit, or any subprocess hiccup yields
+    ``None`` — crash reporting must never fail because uv is missing.
+    """
+    if shutil.which(name) is None:
+        return None
+    try:
+        result = subprocess.run(  # noqa: S603 (trusted bin lookup via shutil.which)
+            [name, "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    output = (result.stdout or result.stderr or "").splitlines()
+    return output[0].strip() if output else None
 
 
 def build_payload(
@@ -93,4 +117,9 @@ def build_payload(
         "frames": frames,
         "ci": os.environ.get("CI") == "true",
         "stage": subcommand,
+        # Tool dispatch chain — every gate runs through ``uvx``/``uv run``;
+        # capturing the resolved binary versions makes "tool X failed at version
+        # Y" reports actionable when uv itself ships a regression.
+        "uv_version": _binary_version("uv"),
+        "uvx_version": _binary_version("uvx"),
     }

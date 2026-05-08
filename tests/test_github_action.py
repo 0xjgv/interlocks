@@ -78,9 +78,15 @@ def test_action_metadata_delegates_to_interlock_ci() -> None:
     action = (Path(__file__).resolve().parent.parent / "action.yml").read_text(encoding="utf-8")
 
     assert "using: composite" in action
-    assert "actions/setup-python@" in action
-    assert "default: python -m pip install interlocks" in action
+    # interlocks 0.2 ships through `uv tool install` rather than pip — the
+    # action sets up uv, restores the uvx cache, warms it, then runs offline.
+    assert "astral-sh/setup-uv@" in action
+    assert "default: uv tool install interlocks" in action
     assert "default: interlocks ci" in action
+    assert "actions/cache@v4" in action
+    assert "interlocks warm" in action
+    assert 'UV_OFFLINE: "1"' in action
     assert 'python -m interlocks.github_action --command "${{ inputs.command }}"' in action
     assert "ruff" not in action
     assert "coverage run" not in action
+    assert "pip install interlocks" not in action

@@ -34,7 +34,7 @@ There is **no opt-out toggle that enables background network egress** — interl
 Crash reports are user-confirmed, not automated:
 
 1. The boundary classifier in `interlocks/crash/boundary.py` catches only interlocks-internal exceptions (frames whose `co_filename` is inside the installed `interlocks/` package). User errors like `InterlockUserError` and external tool failures never reach the capture path.
-2. The payload, defined in `interlocks/crash/payload.py`, is built from a fixed allowlist: `interlocks_version`, `python_version`, `platform_system`, `platform_machine`, `subcommand`, `exception_type`, `frames`, `timestamp_utc`, `ci`, `fingerprint`.
+2. The payload, defined in `interlocks/crash/payload.py`, is built from a fixed allowlist: `interlocks_version`, `python_version`, `platform_system`, `platform_machine`, `subcommand`, `exception_type`, `frames`, `timestamp_utc`, `ci`, `fingerprint`, `uv_version`, `uvx_version`. The `uv*` fields capture only the version strings reported by those binaries (e.g. `"uv 0.9.6 (...)"`); they are never extended to environment, paths, or arguments.
 3. Interactive terminals ask `Report this crash to the interlocks maintainers? Y/n`. Non-interactive runs skip reporting and keep the local payload only.
 4. The transport in `interlocks/crash/transport.py` builds a `https://github.com/.../issues/new?title=...&body=...&labels=crash-report` URL, prints it to stderr, and *attempts* `webbrowser.open` only after the user accepts. The only HTTP client that ever runs is the user's browser.
 5. Local files live at `~/.cache/interlocks/crashes/<fingerprint>.json` (mode 0600 in mode 0700 dir). A `dedup.json` window of 30 days prevents repeat URL prompts for the same fingerprint.

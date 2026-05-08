@@ -1,14 +1,13 @@
-"""Dependency audit via pip-audit."""
+"""Dependency audit via pip-audit (dispatched through uvx)."""
 
 from __future__ import annotations
 
 import re
 import sys
 import tomllib
-from pathlib import Path
 
 from interlocks.config import find_project_root, load_config
-from interlocks.runner import Task, capture, dump_and_exit, fail, ok, python_m, run, warn_skip
+from interlocks.runner import Task, capture, dump_and_exit, fail, ok, run, uvx_tool, warn_skip
 
 # pip-audit emits one of these IDs only when it actually finds a vulnerability;
 # absence of all three means the non-zero exit is environmental (network failure,
@@ -16,31 +15,25 @@ from interlocks.runner import Task, capture, dump_and_exit, fail, ok, python_m, 
 _VULN_ID_PATTERN = re.compile(r"\b(?:GHSA-[\w-]+|CVE-\d{4}-\d+|PYSEC-\d{4}-\d+)\b")
 
 
-def task_audit(*, allow_network_skip: bool = False) -> Task:
-    if not allow_network_skip:
-        return _pip_audit_task()
-    return Task(
-        "Dep audit",
-        [
-            sys.executable,
-            "-c",
-            f"import sys; sys.path.insert(0, {str(_package_parent())!r}); "
-            "from interlocks.tasks.audit import cmd_audit; cmd_audit(allow_network_skip=True)",
-        ],
-        display="python -m pip_audit",
-        label="audit",
-    )
+def task_audit() -> Task:
+    return _pip_audit_task()
 
 
 def _pip_audit_task() -> Task:
+    cfg = load_config()
     if not _project_has_dependencies():
         return Task(
             "Dep audit",
             [sys.executable, "-c", "print('No known vulnerabilities found')"],
-            display="python -m pip_audit",
+            display="pip-audit",
             label="audit",
         )
-    return Task("Dep audit", python_m("pip_audit", "."), label="audit")
+    return Task(
+        "Dep audit",
+        uvx_tool("pip-audit", ".", version=cfg.tool_version("pip-audit")),
+        label="audit",
+        display="pip-audit .",
+    )
 
 
 def cmd_audit(*, allow_network_skip: bool = False) -> None:
@@ -68,10 +61,6 @@ def cmd_audit(*, allow_network_skip: bool = False) -> None:
         return
     fail("Audit: pip-audit reported known vulnerabilities")
     dump_and_exit(result.returncode, result.stdout, result.stderr)
-
-
-def _package_parent() -> Path:
-    return Path(__file__).resolve().parents[2]
 
 
 def _project_has_dependencies() -> bool:

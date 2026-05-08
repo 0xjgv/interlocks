@@ -64,7 +64,7 @@ def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:
         task_format_check(),
         task_lint(),
         task_complexity(),
-        task_audit(allow_network_skip=True),
+        task_audit(),
         task_deps(),
         task_typecheck(),
         task_coverage(),

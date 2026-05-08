@@ -155,7 +155,7 @@ def test_coverage_uv_injects_coverage_without_project_dependency(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """uv projects get Coverage.py via `--with`, not from a project console script."""
-    from interlocks.config import COVERAGE_REQUIREMENT
+    from interlocks.defaults.tools import default_pin
     from interlocks.tasks.coverage import task_coverage
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
@@ -165,9 +165,19 @@ def test_coverage_uv_injects_coverage_without_project_dependency(
 
     task = task_coverage()
 
+    spec = f"coverage=={default_pin('coverage')}"
     assert task.pre_cmds == (_coverage_run_cmd(task.pre_cmds),)
     for cmd in (task.cmd, task.pre_cmds[0]):
-        assert cmd[:6] == ["uv", "run", "--with", COVERAGE_REQUIREMENT, "python", "-m"]
+        assert cmd[:8] == [
+            "uv",
+            "run",
+            "--with",
+            spec,
+            "--index-strategy",
+            "first-index",
+            "python",
+            "-m",
+        ]
         assert "uv run coverage" not in " ".join(cmd)
 
 

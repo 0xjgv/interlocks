@@ -34,6 +34,35 @@ Trusted Publishers:
 ```bash
 git status --short --branch
 interlocks check
+```
+
+Regenerate the hash-pinned tool sidecar so `interlocks warm` can verify wheels in offline / hermetic environments. Run on the same Python the release workflow uses (3.11) to keep wheel hashes reproducible:
+
+```bash
+uv pip compile interlocks/defaults/tools.in \
+  --generate-hashes \
+  -o interlocks/defaults/tools.txt
+git add interlocks/defaults/tools.txt
+git diff --cached interlocks/defaults/tools.txt
+git commit -m "chore(tools): refresh hash-pinned tools.txt for vX.Y.Z"
+```
+
+If `interlocks/defaults/tools.in` does not yet exist, generate it from `tools.py`:
+
+```bash
+python - <<'PY'
+from interlocks.defaults.tools import DEFAULTS
+from pathlib import Path
+Path("interlocks/defaults/tools.in").write_text(
+    "\n".join(f"{name}=={ver}" for name, ver in DEFAULTS.items()) + "\n",
+    encoding="utf-8",
+)
+PY
+```
+
+Then build:
+
+```bash
 rm -rf dist
 uv build
 uvx twine check dist/*

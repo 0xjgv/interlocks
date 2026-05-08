@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from interlocks.config import InterlockConfig, load_config
-from interlocks.runner import Task, run, tool
+from interlocks.runner import Task, run, uvx_tool
 
 
 def task_deps() -> Task:
@@ -19,7 +19,13 @@ def _deptry_cmd(cfg: InterlockConfig) -> list[str]:
     # No bundled-config fallback: deptry's `--config` doubles as the project-manifest
     # pointer (for dep discovery), so pointing it at a shared default breaks detection.
     # Deptry's built-in defaults apply automatically when the project has no [tool.deptry].
-    return tool("deptry", cfg.src_dir_arg, "--known-first-party", cfg.src_dir.name)
+    return uvx_tool(
+        "deptry",
+        cfg.src_dir_arg,
+        "--known-first-party",
+        cfg.src_dir.name,
+        version=cfg.tool_version("deptry"),
+    )
 
 
 def cmd_deps() -> None:

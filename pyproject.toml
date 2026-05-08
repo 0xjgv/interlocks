@@ -1,6 +1,6 @@
 [project]
 name = "interlocks"
-version = "0.1.7"
+version = "0.2.0"
 description = "Zero-config Python quality interlocks: lint, format, typecheck, test, coverage, acceptance, audit, deps, architecture, complexity, CRAP, mutation — all behind `interlocks <task>` (or `il <task>`)."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,16 +15,10 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = [
-    "basedpyright>=1.39.3",
-    "coverage>=7.13.5",
-    "deptry>=0.25.1",
-    "import-linter>=2.8,<2.9",
-    "interlock-mutmut>=3.5.0",
-    "lizard>=1.22.1",
-    "pip-audit>=2.7",
-    "ruff>=0.15.12",
-]
+dependencies = []
+# interlocks dispatches every CLI tool through uvx / uv run --with at the pins
+# in interlocks/defaults/tools.py — none of them are runtime dependencies. The
+# published wheel is a thin dispatcher; consumer resolvers never see our graph.
 
 [project.urls]
 Homepage = "https://github.com/0xjgv/interlocks"
@@ -146,6 +140,15 @@ ignore = [
     "S603",     # subprocess call without shell=true check (intentional)
     "S607",     # partial executable path (intentional — tools co-installed with interlocks)
 ]
+"interlocks/tasks/warm.py" = [
+    "S404",     # subprocess module import (intentional — invokes uv / uvx)
+    "S603",     # subprocess call without shell=true check (intentional)
+    "S607",     # partial executable path (intentional — uv / uvx on PATH)
+]
+"interlocks/crash/payload.py" = [
+    "S404",     # subprocess module import (best-effort `uv --version` probe; never raises)
+    "S607",     # partial executable path (intentional — uv / uvx on PATH)
+]
 "interlocks/git.py" = [
     "S404",     # subprocess module import (intentional — git wrapper)
     "S603",     # subprocess call without shell=true check (intentional)
@@ -237,8 +240,6 @@ pytest_add_cli_args = [
 # (pytest-bdd, etc.) that interlocks itself doesn't ship with.
 extend_exclude = ["interlocks/defaults"]
 
-[tool.deptry.per_rule_ignores]
-DEP002 = ["basedpyright", "coverage", "deptry", "import-linter", "interlock-mutmut", "lizard", "pip-audit", "ruff"]
 
 # ── Import-Linter ──────────────────────────────────────────────────
 # Declaring explicit contracts overrides the default (src ↛ tests) that

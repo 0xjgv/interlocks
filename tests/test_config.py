@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from interlocks.config import (
-    COVERAGE_REQUIREMENT,
     InterlockConfig,
     build_coverage_test_command,
     build_test_command,
@@ -18,6 +17,7 @@ from interlocks.config import (
     invoker_prefix,
     load_config,
 )
+from interlocks.defaults.tools import default_pin
 
 
 def _write(path: Path, text: str) -> None:
@@ -142,6 +142,66 @@ def test_threshold_overrides_apply(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert cfg.enforce_behavior_attribution is True
     assert cfg.run_mutation_in_ci is True
     assert cfg.enforce_mutation is True
+
+
+def test_tool_version_returns_bundled_default_when_unset(tmp_project: Path) -> None:
+    from interlocks.defaults.tools import DEFAULTS
+
+    cfg = load_config()
+    assert cfg.tool_version("ruff") == DEFAULTS["ruff"]
+    assert cfg.tool_version("basedpyright") == DEFAULTS["basedpyright"]
+
+
+def test_tool_version_project_override_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "thresh"
+        version = "0.0.0"
+
+        [tool.interlocks.tools]
+        ruff = "0.14.0"
+        basedpyright = "1.40.0"
+        """,
+    )
+    cfg = load_config()
+    assert cfg.tool_version("ruff") == "0.14.0"
+    assert cfg.tool_version("basedpyright") == "1.40.0"
+    # Unconfigured tool falls back to bundled default.
+    from interlocks.defaults.tools import DEFAULTS
+
+    assert cfg.tool_version("deptry") == DEFAULTS["deptry"]
+
+
+def test_tool_version_unknown_raises(tmp_project: Path) -> None:
+    cfg = load_config()
+    with pytest.raises(KeyError):
+        cfg.tool_version("not-a-real-tool")
+
+
+def test_tool_version_ignores_non_string_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Permissive parser: bad TOML values fall through to bundled default."""
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "thresh"
+        version = "0.0.0"
+
+        [tool.interlocks.tools]
+        ruff = 12345
+        """,
+    )
+    from interlocks.defaults.tools import DEFAULTS
+
+    assert load_config().tool_version("ruff") == DEFAULTS["ruff"]
 
 
 def test_skip_project_policy_resolves_labels(
@@ -541,11 +601,14 @@ def test_build_coverage_test_command_pytest() -> None:
 
 def test_build_coverage_test_command_uv() -> None:
     cfg = _cfg(test_invoker="uv", test_runner="unittest")
+    spec = f"coverage=={default_pin('coverage')}"
     assert build_coverage_test_command(cfg) == [
         "uv",
         "run",
         "--with",
-        COVERAGE_REQUIREMENT,
+        spec,
+        "--index-strategy",
+        "first-index",
         "python",
         "-m",
         "coverage",

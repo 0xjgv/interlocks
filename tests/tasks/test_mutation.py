@@ -363,10 +363,11 @@ def test_cmd_mutation_passes_globs_to_mutmut(
 
     assert captured_argv, "expected _run_mutmut to be called"
     argv = captured_argv[0]
-    assert "mutmut" in " ".join(argv)
-    # mutmut requires `run` BEFORE positional globs; globs sorted by _changed_to_globs.
-    assert "run" in argv
-    run_idx = argv.index("run")
+    assert "mutmut" in argv
+    # mutmut requires `run` BEFORE positional globs. Find the mutmut subcommand `run`
+    # (the LAST `run` — the first is `uv run` from `uv_run_with`).
+    run_idx = len(argv) - 1 - argv[::-1].index("run")
+    assert argv[run_idx - 1] == "mutmut"
     assert argv[run_idx + 1 :] == ["mypkg.mod.*", "mypkg.other.*"]
 
 
@@ -413,8 +414,10 @@ def test_cmd_mutation_invokes_popen_with_run_then_globs(
     cmd_mutation(changed_only=True)
 
     argv = captured["argv"]
-    assert "run" in argv
-    run_idx = argv.index("run")
+    assert "mutmut" in argv
+    # Find the mutmut subcommand `run` — the LAST `run`, since `uv run` precedes it.
+    run_idx = len(argv) - 1 - argv[::-1].index("run")
+    assert argv[run_idx - 1] == "mutmut"
     assert argv[run_idx + 1 :] == ["mypkg.mod.*", "mypkg.other.*"]
 
 

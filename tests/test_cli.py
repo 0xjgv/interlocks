@@ -407,6 +407,9 @@ _INTERNAL_CONFIG_FIELDS: frozenset[str] = frozenset({
     "project_root",
     "value_sources",
     "unsupported_presets",
+    # ``tool_versions`` is a sub-table override map ([tool.interlocks.tools]),
+    # not a single-key threshold — it isn't surfaced by ``interlocks config``.
+    "tool_versions",
 })
 
 

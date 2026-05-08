@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-08
+
+### Breaking
+
+- **Install model changed**: interlocks no longer ships any runtime
+  dependencies. The published wheel is a thin dispatcher that invokes every
+  CLI tool (`ruff`, `basedpyright`, `coverage`, `mutmut`, `deptry`,
+  `import-linter`, `lizard`, `pip-audit`) through `uvx` or `uv run --with` at
+  pinned versions baked into the package. **Install via `uv tool install
+  interlocks` or `pipx install interlocks`** — using `uv add --group dev
+  interlocks` no longer pulls the gate tools into your project resolver.
+  Adding interlocks to `[project].dependencies` still works, but its zero
+  declared deps mean the gates won't be available at import time without
+  going through the dispatcher. **Migration**: replace any `uv add` /
+  `requirements.txt` entry for interlocks with `uv tool install interlocks`.
+- The `0xjgv/interlocks@v1` GitHub action now installs through
+  `uv tool install`, restores `~/.cache/uv` via `actions/cache@v4`, runs
+  `interlocks warm`, and executes the CI command with `UV_OFFLINE=1`. Override
+  the `install-command` input if you need a different install vector — but
+  `pip install interlocks` no longer brings the toolchain with it.
+- Crash payload schema bumped to `2`: adds `uv_version` and `uvx_version`
+  fields. Older readers must accept the additional keys or upgrade.
+
+### Added
+
+- `interlocks warm` pre-fetches the bundled tool wheels into `~/.cache/uv`
+  so subsequent runs work under `UV_OFFLINE=1`. When the release-shipped
+  `interlocks/defaults/tools.txt` (hash-pinned via `uv pip compile
+  --generate-hashes`) is present, warming verifies wheels with
+  `--require-hashes`; otherwise it falls back to per-tool uvx probes.
+- `[tool.interlocks.tools]` table override: pin individual tools (e.g.
+  `ruff = "0.14.0"`) without forking the package. Resolution chain mirrors
+  the threshold resolver — CLI flag > project table > bundled default.
+- `interlocks/defaults/tools.py` exposes `DEFAULTS` and `default_pin(name)`
+  as the single source of truth for tool versions.
+- New runner helpers: `uvx_tool(package, *args, version=, entrypoint=)` for
+  stateless analyzers and `uv_run_with(package, *args, version=)` for tools
+  that must share the user's interpreter (coverage.py, mutmut). Both pass
+  `--index-strategy first-index` to defend against dependency confusion.
+- Bundled CI workflows (`ci.yml`, `nightly.yml`, `release.yml`) restore
+  `~/.cache/uv` from `actions/cache@v4` keyed on `hashFiles` of
+  `interlocks/defaults/tools.{py,txt}`, run `interlocks warm`, and execute
+  gates with `UV_OFFLINE=1`.
+
+### Changed
+
+- `[project].dependencies = []` — interlocks itself declares no Python
+  package dependencies. The wheel is ~40 KB of dispatch code plus bundled
+  configs.
+- `audit` no longer self-forks pip-audit through interlocks's interpreter;
+  it now dispatches through `uvx pip-audit==<pin> .` like every other gate.
+- `mutation` now invokes `mutmut` through `uv run --with
+  interlock-mutmut==<pin>` so it carries the user's runtime + dev deps
+  rather than relying on its own interpreter to import the project.
+
 ## [0.1.7] - 2026-05-06
 
 ### Added

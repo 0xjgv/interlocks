@@ -9,17 +9,20 @@ import tempfile
 from pathlib import Path
 
 from interlocks.config import InterlockConfig, load_config
+from interlocks.defaults.tools import entrypoint
 from interlocks.defaults_path import has_project_config
 from interlocks.defaults_path import path as defaults_path
-from interlocks.runner import Task, run, tool, warn_skip
+from interlocks.runner import Task, run, uvx_tool, warn_skip
 
 
 def task_arch() -> Task | None:
     cfg = load_config()
+    version = cfg.tool_version("import-linter")
+    script = entrypoint("import-linter")
     if has_project_config(cfg, "importlinter", sidecars=(".importlinter", "setup.cfg")):
         return Task(
             "Architecture (import-linter)",
-            tool("lint-imports"),
+            uvx_tool("import-linter", version=version, entrypoint=script),
             label="arch",
             display="lint-imports",
         )
@@ -28,7 +31,13 @@ def task_arch() -> Task | None:
         return None
     return Task(
         "Architecture (default: src ↛ tests)",
-        tool("lint-imports", "--config", str(default_cfg)),
+        uvx_tool(
+            "import-linter",
+            "--config",
+            str(default_cfg),
+            version=version,
+            entrypoint=script,
+        ),
         label="arch",
         display="lint-imports (default: src ↛ tests)",
     )
