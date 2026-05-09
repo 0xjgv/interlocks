@@ -50,6 +50,21 @@ jobs:
           UV_OFFLINE: "1"
         run: uv run interlocks ci
 
+      - name: Advisory dogfood evaluation
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.python == '3.11'
+        env:
+          UV_OFFLINE: "1"
+        run: uv run interlocks evaluate
+
       - name: Wheel install smoke test
         if: hashFiles('tests/test_wheel_install.py') != ''
         run: uv run pytest -m slow tests/test_wheel_install.py
+
+  self-test-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./
+        with:
+          install-command: "uv tool install ."
+          command: "interlocks ci"

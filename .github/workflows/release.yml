@@ -35,6 +35,11 @@ jobs:
           UV_OFFLINE: "1"
         run: uv run interlocks ci
 
+      - name: Run interlocks nightly
+        env:
+          UV_OFFLINE: "1"
+        run: uv run interlocks nightly
+
       - name: Wheel install smoke test
         if: hashFiles('tests/test_wheel_install.py') != ''
         run: uv run pytest -m slow tests/test_wheel_install.py
@@ -113,6 +118,30 @@ jobs:
 
       - name: Build sdist and wheel
         run: uv build
+
+      - name: Restore uvx tool cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uvx-tools-${{ runner.os }}-3.11-${{ hashFiles('interlocks/defaults/tools.py', 'interlocks/defaults/tools.txt') }}
+          restore-keys: |
+            uvx-tools-${{ runner.os }}-3.11-
+
+      - name: Smoke-test built wheel
+        env:
+          SMOKE_VENV: /tmp/release-smoke
+          SMOKE_PROJECT: /tmp/release-smoke-project
+        run: |
+          uv venv "$SMOKE_VENV"
+          uv pip install --python "$SMOKE_VENV/bin/python" dist/interlocks-*.whl
+          "$SMOKE_VENV/bin/interlocks" --help
+          "$SMOKE_VENV/bin/interlocks" version
+          mkdir -p "$SMOKE_PROJECT"
+          cd "$SMOKE_PROJECT"
+          git init -q
+          "$SMOKE_VENV/bin/interlocks" init
+          "$SMOKE_VENV/bin/interlocks" doctor
+          "$SMOKE_VENV/bin/interlocks" check
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
