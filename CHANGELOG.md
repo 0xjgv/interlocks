@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `audit` no longer self-forks pip-audit through interlocks's interpreter;
   it now dispatches through `uvx pip-audit==<pin> .` like every other gate.
 - `mutation` now invokes `mutmut` through `uv run --with
-  interlock-mutmut==<pin>` so it carries the user's runtime + dev deps
+  interlocks-mutmut==<pin>` so it carries the user's runtime + dev deps
   rather than relying on its own interpreter to import the project.
 
 ## [0.1.7] - 2026-05-06

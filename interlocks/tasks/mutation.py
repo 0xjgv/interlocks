@@ -354,13 +354,13 @@ def cmd_mutation(
 
     completed, log_path = _run_mutmut(
         uv_run_with(
-            "interlock-mutmut",
+            "interlocks-mutmut",
             "python",
             "-m",
             "mutmut",
             "run",
             *(globs or []),
-            version=cfg.tool_version("interlock-mutmut"),
+            version=cfg.tool_version("interlocks-mutmut"),
         ),
         timeout,
     )

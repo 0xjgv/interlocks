@@ -5,7 +5,7 @@ For DevEx and platform teams standardizing Python quality across repositories:
 ```bash
 uvx --from interlocks il doctor
 uvx --from interlocks il check
-uvx --from 'interlocks>=0.1,<0.2' il ci
+uvx --from 'interlocks>=0.2,<0.3' il ci
 ```
 
 These three commands cover the full adoption arc: diagnose a project, run the local quality loop, and gate a pull request with a pinned spec. No install required to start.

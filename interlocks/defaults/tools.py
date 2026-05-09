@@ -26,7 +26,7 @@ DEFAULTS: Mapping[str, str] = MappingProxyType({
     "coverage": "7.13.5",
     "deptry": "0.25.1",
     "import-linter": "2.8",
-    "interlock-mutmut": "3.5.0",
+    "interlocks-mutmut": "3.5.1",
     "lizard": "1.22.1",
     "pip-audit": "2.10.0",
     "ruff": "0.15.12",

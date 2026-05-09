@@ -9,7 +9,7 @@ Maintainer-only release notes for publishing both packages from this repo.
 | `interlocks-mutmut` | vendored mutmut fork template | `vendor/mutmut-fork/pyproject.toml` | `release-mutmut.yml` | `mutmut-vX.Y.Z` |
 | `interlocks` | root CLI package | `pyproject.toml` | `release.yml` | `vX.Y.Z` |
 
-`interlocks` currently depends on `interlock-mutmut`. Before publishing the mutmut fork, confirm the root dependency, vendored template name, workflow publisher URLs, PyPI/TestPyPI project names, and smoke-test install command all use the same distribution name.
+From 0.2.0 `interlocks` declares zero runtime dependencies; the mutmut fork is invoked at runtime via `uv run --with interlocks-mutmut==<pin>` against the version listed in `interlocks/defaults/tools.py`. Before publishing the mutmut fork, confirm the runtime pin name in `interlocks/defaults/tools.py` + `interlocks/tasks/mutation.py`, the vendored template name, workflow publisher URLs, PyPI/TestPyPI project names, and smoke-test install command all use the same distribution name (`interlocks-mutmut`).
 
 ## One-time setup
 
@@ -166,11 +166,9 @@ gh run watch "$(gh run list --workflow release-mutmut.yml --limit 1 --json datab
 
 ### Smoke-test PyPI package
 
-Use the confirmed mutmut fork distribution name from the naming check above.
-
 ```bash
 uv venv /tmp/interlocks-mutmut-smoke
-uv pip install --python /tmp/interlocks-mutmut-smoke/bin/python <mutmut-fork-distribution>
+uv pip install --python /tmp/interlocks-mutmut-smoke/bin/python interlocks-mutmut
 /tmp/interlocks-mutmut-smoke/bin/python -c 'import mutmut; print(mutmut.__version__)'
 /tmp/interlocks-mutmut-smoke/bin/mutmut --help
 ```
@@ -242,10 +240,8 @@ mkdir -p "${smoke_dir}/.git"
 
 ## Verify published versions
 
-Use the confirmed mutmut fork distribution name from the naming check above.
-
 ```bash
-python -m pip index versions <mutmut-fork-distribution>
+python -m pip index versions interlocks-mutmut
 python -m pip index versions interlocks
 gh release view "mutmut-v${version}"
 gh release view "v${version}"

@@ -2,7 +2,7 @@
 
 Zero-config Python quality CLI: lint, format, typecheck, test, coverage, acceptance, audit, deps, arch, CRAP, mutation. Self-dogfooded.
 
-Python 3.11+, uv-managed. Tools: ruff, basedpyright, coverage.py, pytest + pytest-bdd, interlock-mutmut, deptry, import-linter, pip-audit, lizard.
+Python 3.11+, uv-managed. From 0.2.0 the wheel ships zero runtime deps; gates are dispatched through `uvx` / `uv run --with` at versions pinned in `interlocks/defaults/tools.py`. Tools: ruff, basedpyright, coverage.py, pytest + pytest-bdd, interlocks-mutmut, deptry, import-linter, pip-audit, lizard.
 
 ## Project map
 
@@ -29,6 +29,7 @@ You own this product and the codebase.
 | `interlocks pre-commit` | Pre-commit stage (auto via hook) |
 | `interlocks ci` | PR/CI stage |
 | `interlocks nightly` | Nightly cron stage |
+| `interlocks warm` | Pre-fetch bundled tool wheels into `~/.cache/uv` for `UV_OFFLINE=1` |
 | `interlocks setup` | Install local hooks, agent docs, Claude skill |
 | `interlocks setup --check` | Verify local integrations read-only |
 | `interlocks setup --ci=github` | Install GitHub Actions workflow when absent |
@@ -51,6 +52,7 @@ You own this product and the codebase.
 - All overrides live under `[tool.interlocks]` in `pyproject.toml` — run `interlocks config` for the full key list, do not duplicate defaults in docs
 - Precedence: CLI flag > `[tool.interlocks]` > bundled defaults in `interlocks/defaults/`
 - Project's own `[tool.<tool>]` or sidecar (`ruff.toml`, `.coveragerc`, `pyrightconfig.json`, `.importlinter`) replaces the bundled default for that tool
+- Per-tool version pins resolve through `[tool.interlocks.tools]` (e.g. `ruff = "0.14.0"`) > `interlocks/defaults/tools.py::DEFAULTS`. Read pins via `cfg.tool_version(name)`; never hardcode a version string at a call site
 </important>
 
 <important if="you are touching crash handling or the boundary in interlocks/cli.py">

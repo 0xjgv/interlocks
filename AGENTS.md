@@ -9,6 +9,7 @@ Tests live in `tests/`, with focused task and stage coverage under `tests/tasks/
 ## Build, Test, and Development Commands
 
 - `uv run interlocks check` - primary post-edit workflow: fix, format, typecheck, tests, suppressions report, and cached CRAP advisory.
+- `uv run interlocks warm` - pre-fetch the bundled tool wheels (`interlocks/defaults/tools.py`) into `~/.cache/uv` so subsequent runs work under `UV_OFFLINE=1`. From 0.2.0 the wheel ships zero runtime deps and dispatches every gate through `uvx` / `uv run --with`.
 - `uv run interlocks ci` - CI parity suite: format-check, lint, complexity, audit (warn-skip on network), deps, typecheck, coverage, arch, acceptance, CRAP, optional mutation per `mutation_ci_mode`. Writes `.interlocks/ci.json` timing evidence and coverage artifacts.
 - `uv run interlocks nightly` - long-running gates: coverage, audit, mutation (blocking on `mutation_min_score`).
 - `uv run interlocks pre-commit` - staged-file checks used by the git hook.

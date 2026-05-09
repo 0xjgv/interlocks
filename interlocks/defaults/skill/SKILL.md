@@ -63,6 +63,7 @@ Branch on intent:
 - **Investigating one failure** → run the single gate: `il lint`, `il typecheck`, `il coverage`, etc.
 - **Setting up a fresh repo** → `il init` (greenfield only) → `il setup` → `il check` → `il doctor` if blocked → optional `il setup --ci=github`.
 - **Long-running gates** → `il nightly` (full coverage + mutation).
+- **Hermetic / offline CI** → `il warm` once to pre-fetch bundled tool wheels into `~/.cache/uv`, then run gates with `UV_OFFLINE=1`. Cached by `interlocks/defaults/tools.py` pins.
 
 ## Reading the output
 

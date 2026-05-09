@@ -369,12 +369,12 @@ def test_uvx_tool_strict_equality_pin() -> None:
 
 
 def test_uv_run_with_passes_inner_argv() -> None:
-    cmd = uv_run_with("interlock-mutmut", "python", "-m", "mutmut", "run", version="3.5.0")
+    cmd = uv_run_with("interlocks-mutmut", "python", "-m", "mutmut", "run", version="3.5.1")
     assert cmd == [
         "uv",
         "run",
         "--with",
-        "interlock-mutmut==3.5.0",
+        "interlocks-mutmut==3.5.1",
         "--index-strategy",
         "first-index",
         "python",

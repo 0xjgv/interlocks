@@ -9,6 +9,7 @@
 | `interlocks pre-commit` | Pre-commit stage, normally run by the installed git hook |
 | `interlocks ci` | PR/CI stage with blocking verification |
 | `interlocks nightly` | Scheduled long-running coverage/audit/mutation stage |
+| `interlocks warm` | Pre-fetch bundled tool wheels into `~/.cache/uv` for `UV_OFFLINE=1` |
 | `interlocks setup` | Install local hooks, agent docs, and Claude skill |
 | `interlocks setup --check` | Verify local integrations read-only |
 | `interlocks config` | List `[tool.interlocks]` keys, resolved values, and sources |
