@@ -37,6 +37,7 @@ DEFAULTS: Mapping[str, str] = MappingProxyType({
 # entrypoint without each call site re-encoding the divergence.
 ENTRYPOINTS: Mapping[str, str] = MappingProxyType({
     "import-linter": "lint-imports",
+    "interlocks-mutmut": "mutmut",
 })
 
 # Defends against dependency-confusion in mirrored / private-index environments —

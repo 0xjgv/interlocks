@@ -8,8 +8,11 @@ without touching the network. Two modes:
   ``uv pip install --require-hashes`` against a throw-away target so every wheel
   is verified and lands in the user's cache.
 * Otherwise (development checkout with no ``tools.txt``), warm falls back to
-  per-tool ``uvx --from <pkg>==<ver> <entry> --version`` to populate the cache
-  with the same pins, just without hash enforcement.
+  per-tool ``uvx --from <pkg>==<ver> <entry> --help`` to populate the cache
+  with the same pins, just without hash enforcement. ``--help`` is the most
+  portable probe: ``--version`` is unsupported by ``lint-imports`` and breaks
+  on ``mutmut`` whose ``click.version_option`` reads metadata for the literal
+  package name ``mutmut`` rather than our ``interlocks-mutmut`` distribution.
 """
 
 from __future__ import annotations
@@ -62,7 +65,7 @@ def _warm_per_tool() -> bool:
     """Best-effort fallback: probe each pinned tool through uvx so its wheel lands in cache."""
     failed: list[str] = []
     for name, version in DEFAULTS.items():
-        cmd = uvx_tool(name, "--version", version=version, entrypoint=entrypoint(name))
+        cmd = uvx_tool(name, "--help", version=version, entrypoint=entrypoint(name))
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
         spec = f"{name}=={version}"
         if result.returncode == 0:
