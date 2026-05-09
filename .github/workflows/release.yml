@@ -97,6 +97,20 @@ jobs:
             exit 1
           fi
 
+      - name: Require green ci.yml on main for tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          conclusion=$(gh run list \
+            --workflow=ci.yml --branch=main --commit="$sha" \
+            --json conclusion --jq '.[0].conclusion // "missing"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::ci.yml on main is '$conclusion' for $sha — refusing to publish" >&2
+            exit 1
+          fi
+          echo "ci.yml succeeded on main for $sha"
+
       - name: Build sdist and wheel
         run: uv build
 
