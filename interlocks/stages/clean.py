@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from interlocks import ui
 from interlocks.config import load_config
 from interlocks.metrics import PY_SKIP_DIRS
-from interlocks.runner import Task, run, tool
+from interlocks.runner import Task, run, uvx_tool
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -41,23 +41,33 @@ RECURSIVE_SKIP_DIRS = PY_SKIP_DIRS | frozenset({".git"})
 def cmd_clean() -> None:
     """Remove cache, build, coverage, and generated artifacts."""
     start = time.monotonic()
-    ui.banner(load_config())
+    cfg = load_config()
+    ui.banner(cfg)
     ui.section("Cleaning Up")
     try:
         for name in ROOT_ARTIFACTS:
             _remove_path(Path(name))
         for path in _iter_recursive_artifacts(Path()):
             _remove_path(path)
-        run(Task("Ruff clean", tool("ruff", "clean"), label="clean", display="ruff clean"))
+        run(
+            Task(
+                "Ruff clean",
+                uvx_tool("ruff", "clean", version=cfg.tool_version("ruff")),
+                label="clean",
+                display="ruff clean",
+            )
+        )
     finally:
         ui.stage_footer(time.monotonic() - start)
 
 
+def _is_artifact_dir(name: str) -> bool:
+    return name == "__pycache__" or name.endswith(".egg-info")
+
+
 def _iter_recursive_artifacts(root: Path) -> Iterator[Path]:
     for dirpath, dirnames, filenames in os.walk(root):
-        artifact_dirs = [
-            name for name in dirnames if name == "__pycache__" or name.endswith(".egg-info")
-        ]
+        artifact_dirs = [name for name in dirnames if _is_artifact_dir(name)]
         dirnames[:] = [
             name
             for name in dirnames

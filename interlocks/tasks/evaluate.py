@@ -587,19 +587,25 @@ def _tool_section(pyproject: dict[str, Any], name: str) -> object:
     return tool.get(name)
 
 
-def _complexity_score_action(cfg: InterlockConfig) -> tuple[int, str | None]:
+def _thresholds_status(cfg: InterlockConfig) -> tuple[bool, bool]:
+    """``(thresholds_ready, partial)`` — partial is True when only one of the two is set."""
     has_thresholds = _has_complexity_thresholds(cfg)
     crap_set = _positive_finite(cfg.crap_max)
-    thresholds_ready = has_thresholds and crap_set
-    ci_wired = _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap")
+    return has_thresholds and crap_set, has_thresholds or crap_set
+
+
+def _ci_complexity_wired() -> bool:
+    return _ci_source_contains("task_complexity(") and _ci_source_contains("cmd_crap")
+
+
+def _complexity_score_action(cfg: InterlockConfig) -> tuple[int, str | None]:
+    thresholds_ready, partial = _thresholds_status(cfg)
+    ci_wired = _ci_complexity_wired()
 
     if thresholds_ready and cfg.enforce_crap and ci_wired:
         return 3, None
     if not thresholds_ready:
-        return (
-            1 if (has_thresholds or crap_set) else 0,
-            "Set positive complexity_max_* and crap_max thresholds.",
-        )
+        return 1 if partial else 0, "Set positive complexity_max_* and crap_max thresholds."
     if not cfg.enforce_crap:
         return 2 if ci_wired else 1, "Set enforce_crap = true."
     return 2, "Wire task_complexity() and cmd_crap() into `interlocks ci`."

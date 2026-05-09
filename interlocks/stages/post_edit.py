@@ -7,7 +7,7 @@ import time
 from interlocks import ui
 from interlocks.config import load_config
 from interlocks.git import changed_py_files
-from interlocks.runner import Task, run, tool
+from interlocks.runner import Task, run, uvx_tool
 
 _RUFF_STEPS = (
     ("Fix lint errors", "fix", ("check", "--fix")),
@@ -20,14 +20,16 @@ def cmd_post_edit() -> None:
     if not files:
         return
     start = time.monotonic()
-    ui.banner(load_config())
+    cfg = load_config()
+    ui.banner(cfg)
     ui.section("Post-edit")
+    ruff_version = cfg.tool_version("ruff")
     try:
         for description, label, args in _RUFF_STEPS:
             run(
                 Task(
                     description,
-                    tool("ruff", *args, *files),
+                    uvx_tool("ruff", *args, *files, version=ruff_version),
                     label=label,
                     display=f"ruff {' '.join(args)}",
                 ),

@@ -50,6 +50,11 @@ source-include = ["interlocks/defaults/**", "action.yml"]
 dev = [
     "pytest>=9.0.3",
     "pytest-bdd>=8.1",
+    # Coverage is dispatched via uvx for consumer projects, but interlocks's own
+    # coverage gate uses test_invoker="python", which calls `.venv/bin/python -m
+    # coverage` directly. Dev installs the same pin from interlocks/defaults/tools.py
+    # so self-dogfooding works without a second uvx hop.
+    "coverage>=7.13.5",
 ]
 
 # ── interlocks (self-config; all keys optional — defaults come from auto-detect) ──

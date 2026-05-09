@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from interlocks.runner import capture, generate_coverage_xml, python_m, tool
+from interlocks.config import load_config
+from interlocks.runner import capture, generate_coverage_xml, python_m, uvx_tool
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -141,7 +142,8 @@ def function_coverage(lines: dict[int, int], start: int, end: int) -> float:
 
 def lizard_functions(src_arg: str) -> list[FunctionStats]:
     """Invoke lizard on ``src_arg`` and return parsed function rows."""
-    res = capture(tool("lizard", src_arg))
+    cfg = load_config()
+    res = capture(uvx_tool("lizard", src_arg, version=cfg.tool_version("lizard")))
     return _parse_lizard(res.stdout)
 
 

@@ -178,38 +178,53 @@ def _classify_claims(
     return mis_attributed, gaps, claimed_ids, attributed_ids
 
 
+def _format_mis_attributed(failures: tuple[AttributionClaimFailure, ...]) -> Iterable[str]:
+    yield "  mis-attributed:"
+    for failure in failures:
+        detail = (
+            f" claimed {failure.scenario.behavior_id} but did not reach {failure.public_symbol}"
+        )
+        yield _claim_line(failure, detail)
+
+
+def _format_unresolved(behaviors: tuple[Behavior, ...]) -> Iterable[str]:
+    yield "  unresolved behavior symbols:"
+    for behavior in behaviors:
+        yield (
+            f"    - {behavior.behavior_id} — {behavior.summary} — "
+            f"declared {behavior.public_symbol} but no claiming scenario reached it"
+        )
+
+
+def _format_gaps(failures: tuple[AttributionClaimFailure, ...]) -> Iterable[str]:
+    yield "  instrumentation gaps:"
+    for failure in failures:
+        yield _claim_line(failure, " — no per-scenario evidence recorded")
+
+
+def _format_informational(behaviors: tuple[Behavior, ...]) -> Iterable[str]:
+    yield "  informational symbol-less behaviors:"
+    for behavior in behaviors:
+        yield f"    - {behavior.behavior_id} — {behavior.summary}"
+
+
 def format_attribution_failure(result: AttributionResult) -> str:
     lines = ["behavior-attribution: scenario claims do not match runtime evidence"]
     if result.evidence_failure:
         lines.append(f"  evidence failure: {result.evidence_failure}")
     if result.mis_attributed:
-        lines.append("  mis-attributed:")
-        for failure in result.mis_attributed:
-            detail = (
-                f" claimed {failure.scenario.behavior_id} "
-                f"but did not reach {failure.public_symbol}"
-            )
-            lines.append(_claim_line(failure, detail))
+        lines.extend(_format_mis_attributed(result.mis_attributed))
     if result.unresolved_behaviors:
-        lines.append("  unresolved behavior symbols:")
-        for behavior in result.unresolved_behaviors:
-            lines.append(
-                f"    - {behavior.behavior_id} — {behavior.summary} — "
-                f"declared {behavior.public_symbol} but no claiming scenario reached it"
-            )
+        lines.extend(_format_unresolved(result.unresolved_behaviors))
     if result.instrumentation_gaps:
-        lines.append("  instrumentation gaps:")
-        for failure in result.instrumentation_gaps:
-            lines.append(_claim_line(failure, " — no per-scenario evidence recorded"))
+        lines.extend(_format_gaps(result.instrumentation_gaps))
     if result.aggregate_reached_symbols:
         joined = ", ".join(result.aggregate_reached_symbols)
         lines.append(
             f"  aggregate trace fallback: {joined} (diagnostic only; does not satisfy attribution)"
         )
     if result.informational_symbol_less:
-        lines.append("  informational symbol-less behaviors:")
-        for behavior in result.informational_symbol_less:
-            lines.append(f"    - {behavior.behavior_id} — {behavior.summary}")
+        lines.extend(_format_informational(result.informational_symbol_less))
     return "\n".join(lines)
 
 

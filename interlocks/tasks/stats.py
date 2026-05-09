@@ -316,16 +316,11 @@ def _print_truncated(
     formatter: Callable[..., str],
     limit: int = 10,
     indent: str = "    ",
-    empty: str | None = "    (none)",
 ) -> None:
     """Print rows via ``formatter``, capped at ``limit`` unless verbose, with overflow hint.
 
-    ``empty`` is printed when ``rows`` is empty (set ``None`` to suppress).
+    Callers are responsible for the empty-rows path.
     """
-    if not rows:
-        if empty is not None:
-            print(empty)
-        return
     shown = rows if verbose else rows[:limit]
     for row in shown:
         print(formatter(row))
@@ -341,12 +336,18 @@ def _format_suspicious(t: TestInspection) -> str:
 def _render_suspicious(rows: list[TestInspection], *, verbose: bool) -> None:
     ui.section("Suspicious Tests")
     print("  assertion-light, LOC > 5")
+    if not rows:
+        print("    (none)")
+        return
     _print_truncated(rows, verbose=verbose, formatter=_format_suspicious)
 
 
 def _render_hot_files(rows: list[CrapRow], *, crap_max: float, verbose: bool) -> None:
     ui.section("Hot Files")
     print("  CRAP > configured ceiling")
+    if not rows:
+        print("    (none)")
+        return
 
     def _format(r: CrapRow) -> str:
         color = _crap_color(r.crap, crap_max)
@@ -390,7 +391,6 @@ def _render_suspicious_actions(rows: list[TestInspection], *, verbose: bool) -> 
         verbose=verbose,
         limit=3,
         indent="      ",
-        empty=None,
         formatter=lambda r: f"      {r.file}::{r.name}",
     )
 
@@ -402,7 +402,6 @@ def _render_crap_actions(rows: list[CrapRow], *, verbose: bool) -> None:
         verbose=verbose,
         limit=3,
         indent="      ",
-        empty=None,
         formatter=lambda r: f"      {r.path}::{r.name}  cov {r.coverage * 100:.0f}%",
     )
 
