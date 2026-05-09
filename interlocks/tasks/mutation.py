@@ -335,11 +335,11 @@ def cmd_mutation(
     min_cov = float(arg_value("--min-coverage=", str(cfg.mutation_min_coverage)))
     rate = coverage_line_rate()
     if rate is None:
-        warn_skip("mutation: no coverage data — run `interlocks coverage` first")
+        warn_skip("Mutation: no coverage data — run `interlocks coverage` first")
         return
     pct = rate * 100
     if pct < min_cov:
-        warn_skip(f"mutation: suite coverage {pct:.1f}% < {min_cov}%")
+        warn_skip(f"Mutation: suite coverage {pct:.1f}% < {min_cov}%")
         return
 
     timeout = int(arg_value("--max-runtime=", str(cfg.mutation_max_runtime)))
@@ -347,7 +347,7 @@ def cmd_mutation(
     changed_flag = changed_only if changed_only is not None else "--changed-only" in sys.argv
     globs, changed = _resolve_changed_globs(cfg, changed_only=changed_flag)
     if globs == []:
-        warn_skip(f"mutation: no changed src files vs {cfg.mutation_since_ref}")
+        warn_skip(f"Mutation: no changed src files vs {cfg.mutation_since_ref}")
         return
     if globs and not ui.is_quiet():
         print(f"  mutating {len(globs)} module(s) changed vs {cfg.mutation_since_ref}")
@@ -367,7 +367,7 @@ def cmd_mutation(
 
     summary = read_mutation_summary()
     if summary is None:
-        warn_skip("mutation: .mutmut-cache/ missing after run")
+        warn_skip("Mutation: .mutmut-cache/ missing after run")
         return
 
     if _report_mutation(

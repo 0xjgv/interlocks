@@ -50,7 +50,7 @@ Feature: interlocks task commands run against a real tmp project
     Given a tmp project with layout "mutation"
     When I run "interlocks mutation" in that project
     Then the exit code is 0
-    And the output contains "mutation"
+    And the output contains "Mutation"
 
   # req: task-mutation-incremental
   Scenario: incremental mutation skips when no src files changed
