@@ -1,6 +1,6 @@
-<important if="you need to run quality gates, tests, inspect config, or diagnose failures">
+<important if="you are editing Python in this repo">
 
-`interlocks setup` installs local feedback loops: git pre-commit hook, Claude Code Stop hook, agent docs, and the bundled Claude skill. CI still needs explicit project wiring; use `interlocks setup --ci=github` when available, or add CI manually.
+After edits, run `interlocks check`. If a gate fails, fix it and re-run. Do not bypass the pre-commit hook (no `--no-verify`).
 
 | Command | What it does |
 |---|---|
@@ -10,9 +10,9 @@
 | `interlocks ci` | PR/CI stage with blocking verification |
 | `interlocks nightly` | Scheduled long-running coverage/audit/mutation stage |
 | `interlocks warm` | Pre-fetch bundled tool wheels into `~/.cache/uv` for `UV_OFFLINE=1` |
-| `interlocks setup` | Install local hooks, agent docs, and Claude skill |
 | `interlocks setup --check` | Verify local integrations read-only |
 | `interlocks config` | List `[tool.interlocks]` keys, resolved values, and sources |
+| `interlocks baseline show` | Print the current quality floor and last advance metadata |
 | `interlocks help` | List commands and active thresholds |
 
 Blocking gates fail the command; advisory gates print warnings without masking the main result. Change gate policy in `[tool.interlocks]` only after inspecting `interlocks config` and keeping CLI, hooks, CI, and agents aligned.
