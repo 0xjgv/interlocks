@@ -35,6 +35,7 @@ TestInvoker = Literal["python", "uv"]
 AcceptanceRunner = Literal["pytest-bdd", "behave", "off"]
 MutationCIMode = Literal["off", "incremental", "full"]
 AuditSeverityThreshold = Literal["low", "medium", "high", "critical"]
+ArchTemplate = Literal["default", "layered"]
 Preset = Literal["baseline", "strict", "legacy"]
 
 _SOURCE_AUTO = "auto-detected"
@@ -146,6 +147,7 @@ ConfigKeyGroup = Literal[
     "Gates",
     "Mutation",
     "Acceptance",
+    "Architecture",
     "Dependencies",
     "Evidence",
 ]
@@ -344,6 +346,22 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "Dependencies",
     ),
     ConfigKeyDoc(
+        "arch_template",
+        "default|layered",
+        "default",
+        "Bundled import-linter contract used when the project ships none "
+        "(default: src ↛ tests; layered: requires arch_layers)",
+        "Architecture",
+    ),
+    ConfigKeyDoc(
+        "arch_layers",
+        "list[str]",
+        "[]",
+        "Layer modules ordered top → bottom (high-level first); "
+        "set under [tool.interlocks.arch_layers] layers = [...]",
+        "Architecture",
+    ),
+    ConfigKeyDoc(
         "pr_ci_runtime_budget_seconds",
         "int",
         "0",
@@ -375,6 +393,7 @@ CONFIG_KEY_GROUP_ORDER: tuple[ConfigKeyGroup, ...] = (
     "Gates",
     "Mutation",
     "Acceptance",
+    "Architecture",
     "Dependencies",
     "Evidence",
 )
@@ -440,12 +459,33 @@ def _tool_version_overrides(table: dict[str, Any]) -> dict[str, str]:
     return overrides
 
 
+def _arch_layers_override(table: dict[str, Any]) -> tuple[str, ...]:
+    """Parse ``[tool.interlocks.arch_layers] layers = [...]`` into ordered tuple.
+
+    Permissive: non-table values, non-list ``layers``, or non-string entries fall
+    through silently — caller falls back to the empty default. Order is preserved
+    because import-linter ``layers`` contracts read top-to-bottom.
+    """
+    raw = table.get("arch_layers")
+    if not isinstance(raw, dict):
+        return ()
+    layers = raw.get("layers")
+    if not isinstance(layers, list):
+        return ()
+    cleaned: list[str] = []
+    for item in layers:
+        if isinstance(item, str) and item.strip():
+            cleaned.append(item.strip())
+    return tuple(cleaned)
+
+
 _ENUM_OPTIONS: dict[str, tuple[str, ...]] = {
     "test_runner": ("pytest", "unittest"),
     "test_invoker": ("python", "uv"),
     "acceptance_runner": ("pytest-bdd", "behave", "off"),
     "mutation_ci_mode": ("off", "incremental", "full"),
     "audit_severity_threshold": ("low", "medium", "high", "critical"),
+    "arch_template": ("default", "layered"),
 }
 
 
@@ -490,6 +530,8 @@ class InterlockConfig:
     dependency_freshness_command: str = "interlocks deps-freshness"
     dependency_freshness_stage: str = "interlocks nightly"
     audit_severity_threshold: AuditSeverityThreshold | None = None
+    arch_template: ArchTemplate = "default"
+    arch_layers: tuple[str, ...] = ()
     pr_ci_runtime_budget_seconds: int = 0
     pr_ci_evidence_max_age_hours: int = 24
     ci_evidence_path: Path = Path(".interlocks/ci.json")
@@ -636,6 +678,10 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
     runner_override = cast("TestRunner | None", _enum_override(table, "test_runner"))
     invoker_override = cast("TestInvoker | None", _enum_override(table, "test_invoker"))
     acceptance_runner = cast("AcceptanceRunner | None", _enum_override(table, "acceptance_runner"))
+    arch_template = cast("ArchTemplate", _enum_override(table, "arch_template") or "default")
+    arch_layers = _arch_layers_override(project_table)
+    if arch_layers:
+        value_sources["arch_layers"] = _SOURCE_PROJECT
     pytest_args = tuple(str(a) for a in (table.get("pytest_args") or ()))
 
     test_runner = runner_override or detect_test_runner(project_root, pyproject, paths.test_dir)
@@ -689,6 +735,8 @@ def _load_config_cached(project_root: Path) -> InterlockConfig:
         audit_severity_threshold=cast(
             "AuditSeverityThreshold | None", _enum_override(table, "audit_severity_threshold")
         ),
+        arch_template=arch_template,
+        arch_layers=arch_layers,
         ci_evidence_path=ci_evidence_path,
         tool_versions=MappingProxyType(tool_versions),
         value_sources=_complete_value_sources(value_sources, table, overrides=overrides),
@@ -856,6 +904,8 @@ def _complete_value_sources(
         "dependency_freshness_command",
         "dependency_freshness_stage",
         "audit_severity_threshold",
+        "arch_template",
+        "arch_layers",
         "pr_ci_runtime_budget_seconds",
         "pr_ci_evidence_max_age_hours",
         "ci_evidence_path",

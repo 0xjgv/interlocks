@@ -123,7 +123,13 @@ def test_arch_skips_when_tests_not_a_package(non_package_tests: Path) -> None:
 
 
 def _stub_load_config(
-    monkeypatch: pytest.MonkeyPatch, project_root: Path, src_dir: Path, test_dir: Path
+    monkeypatch: pytest.MonkeyPatch,
+    project_root: Path,
+    src_dir: Path,
+    test_dir: Path,
+    *,
+    arch_template: str = "default",
+    arch_layers: tuple[str, ...] = (),
 ) -> None:
     """Point arch's ``load_config`` at a real ``InterlockConfig`` for ``project_root``."""
     from dataclasses import replace
@@ -132,7 +138,13 @@ def _stub_load_config(
     from interlocks.tasks import arch as arch_mod
 
     clear_cache()
-    cfg = replace(load_config(project_root), src_dir=src_dir, test_dir=test_dir)
+    cfg = replace(
+        load_config(project_root),
+        src_dir=src_dir,
+        test_dir=test_dir,
+        arch_template=arch_template,
+        arch_layers=arch_layers,
+    )
     monkeypatch.setattr(arch_mod, "load_config", lambda: cfg)
 
 
@@ -204,3 +216,67 @@ def test_task_arch_returns_none_when_tests_not_a_package(
 
     _stub_load_config(monkeypatch, proj, src, proj / "tests")
     assert arch_mod.task_arch() is None
+
+
+def test_task_arch_layered_template_synthesizes_with_layers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """layered template + arch_layers → INI rendered with `type = layers`."""
+    from interlocks.tasks import arch as arch_mod
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    src = proj / "pkg"
+    src.mkdir()
+    (src / "__init__.py").write_text("", encoding="utf-8")
+    (proj / "tests").mkdir()  # tests dir doesn't matter for layered
+
+    layers = ("pkg.high", "pkg.mid", "pkg.low")
+    _stub_load_config(
+        monkeypatch,
+        proj,
+        src,
+        proj / "tests",
+        arch_template="layered",
+        arch_layers=layers,
+    )
+    task = arch_mod.task_arch()
+    assert task is not None
+    assert task.description == "Architecture (default: layered)"
+    assert "--config" in task.cmd
+    cfg_path = Path(task.cmd[task.cmd.index("--config") + 1])
+    contents = cfg_path.read_text(encoding="utf-8")
+    assert "type = layers" in contents
+    for layer in layers:
+        assert layer in contents
+
+
+def test_task_arch_layered_skips_when_no_layers_defined(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """layered template with empty arch_layers → task_arch None; cmd_arch warn-skips."""
+    from interlocks.tasks import arch as arch_mod
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    src = proj / "pkg"
+    src.mkdir()
+    (src / "__init__.py").write_text("", encoding="utf-8")
+    (proj / "tests").mkdir()
+
+    _stub_load_config(
+        monkeypatch,
+        proj,
+        src,
+        proj / "tests",
+        arch_template="layered",
+        arch_layers=(),
+    )
+    assert arch_mod.task_arch() is None
+
+    arch_mod.cmd_arch()
+    out = capsys.readouterr().out
+    assert "layered template selected" in out
+    assert "arch_layers" in out
