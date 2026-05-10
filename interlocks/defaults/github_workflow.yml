@@ -8,6 +8,8 @@ on:
 jobs:
   interlocks:
     runs-on: ubuntu-latest
+    env:
+      INTERLOCKS_CI_CONTEXT: ${{ github.event_name == 'push' && 'main_push' || 'pr' }}
     steps:
       - uses: actions/checkout@v6
       - uses: 0xjgv/interlocks@v1

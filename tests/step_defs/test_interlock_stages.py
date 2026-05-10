@@ -89,6 +89,28 @@ def _tmp_project_untracked_markdown(tmp_project: Path) -> None:
     (tmp_project / "NOTES.md").write_text("# Notes\n\nNon-Python.\n", encoding="utf-8")
 
 
+@given(
+    "a tmp project on the progressive preset with a recorded baseline floor",
+    target_fixture="tmp_project",
+)
+def _tmp_project_progressive_with_baseline(tmp_path: Path) -> Path:
+    project = make_tmp_project(tmp_path)
+    pyproject = project / "pyproject.toml"
+    body = pyproject.read_text(encoding="utf-8")
+    pyproject.write_text(
+        body.replace("[tool.interlocks]", '[tool.interlocks]\npreset = "progressive"', 1),
+        encoding="utf-8",
+    )
+    (project / ".interlocks").mkdir(exist_ok=True)
+    (project / ".interlocks" / "baseline.json").write_text(
+        '{"schema_version": 1, "updated_at": "2026-05-10T00:00:00Z", '
+        '"advanced_from_sha": "abc1234", '
+        '"floors": {"coverage_min": 70.0}}\n',
+        encoding="utf-8",
+    )
+    return project
+
+
 def _git_init_with_baseline(project: Path) -> None:
     def _git(*args: str) -> None:
         subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)

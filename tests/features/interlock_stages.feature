@@ -40,10 +40,10 @@ Feature: interlocks stage commands on a minimal inline project
     And the stage output contains "Mutation"
 
   # req: stage-check
-  Scenario: `interlocks check` reports attribution advisory without blocking
+  Scenario: `interlocks check` blocks on attribution failure when enforced
     Given a tmp project with behavior-attribution failure
     When I run "interlocks check" in the tmp project
-    Then the stage exits 0
+    Then the stage exits 1
     And the stage output contains "[attribution]"
 
   # req: stage-ci
@@ -101,3 +101,11 @@ Feature: interlocks stage commands on a minimal inline project
     When I run "interlocks check --changed=HEAD" in the tmp project
     Then the stage exits 0
     And the stage output contains "no Python files changed"
+
+  # req: stage-baseline
+  Scenario: `interlocks baseline show` reports the recorded floor as JSON
+    Given a tmp project on the progressive preset with a recorded baseline floor
+    When I run "interlocks baseline show --json" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "coverage_min"
+    And the stage output contains "advanced_from_sha"

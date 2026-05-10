@@ -47,6 +47,8 @@ class AttributionResult:
     informational_symbol_less: tuple[Behavior, ...] = ()
     aggregate_reached_symbols: tuple[str, ...] = ()
     evidence_failure: str | None = None
+    resolved_count: int = 0
+    total_count: int = 0
 
     @property
     def is_complete(self) -> bool:
@@ -55,6 +57,13 @@ class AttributionResult:
     @property
     def has_warnings(self) -> bool:
         return bool(self.instrumentation_gaps or self.evidence_failure)
+
+    @property
+    def coverage_pct(self) -> float:
+        """Fraction of claimed (symbol-bearing) behaviors that resolved (0.0-1.0)."""
+        if self.total_count <= 0:
+            return 0.0
+        return self.resolved_count / self.total_count
 
 
 def evidence_path(cfg: InterlockConfig) -> Path:
@@ -146,6 +155,8 @@ def validate_attribution(
         informational_symbol_less=tuple(sorted(symbol_less)),
         aggregate_reached_symbols=tuple(sorted(set(aggregate_reached_symbols))),
         evidence_failure=evidence.failure if evidence is not None else None,
+        resolved_count=len(attributed_ids),
+        total_count=len(claimed_ids),
     )
 
 

@@ -9,7 +9,7 @@ import threading
 from dataclasses import dataclass
 from typing import IO, TYPE_CHECKING
 
-from interlocks import ui
+from interlocks import run_summary, ui
 from interlocks.config import InterlockConfig, find_project_root, load_config
 from interlocks.git import changed_py_files_vs
 from interlocks.metrics import MutationSummary, coverage_line_rate, read_mutation_summary
@@ -294,6 +294,7 @@ def _report_mutation(
             print(f"  log: {log_path}")
     else:
         ok(f"Mutation: score {summary.score:.1f}% (killed {summary.killed}/{total}){partial}")
+    run_summary.record_mutation(summary.score)
     _print_survivors(summary.survivors, changed)
     return failed
 

@@ -418,9 +418,176 @@ def test_strict_preset_resolves_blocking_gate_defaults(
     assert cfg.enforce_crap is True
     assert cfg.run_mutation_in_ci is True
     assert cfg.enforce_mutation is True
-    assert cfg.mutation_ci_mode == "full"
+    assert cfg.mutation_ci_mode == "incremental"
     assert cfg.run_acceptance_in_check is True
     assert cfg.require_acceptance is True
+
+
+def test_strict_preset_uses_incremental_mutation_ci_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Strict bounds PR latency by mutating only changed files; nightly stays full."""
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "strict-incremental"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        preset = "strict"
+        """,
+    )
+
+    cfg = load_config()
+
+    assert cfg.mutation_ci_mode == "incremental"
+    assert cfg.value_sources["mutation_ci_mode"] == "preset-derived"
+
+
+def test_strict_preset_enforces_behavior_attribution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Strict promotes behavior-attribution from advisory to blocking."""
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "strict-attribution"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        preset = "strict"
+        """,
+    )
+
+    cfg = load_config()
+
+    assert cfg.enforce_behavior_attribution is True
+    assert cfg.value_sources["enforce_behavior_attribution"] == "preset-derived"
+
+
+def test_progressive_preset_resolves_enforcement_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "progressive"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        preset = "progressive"
+        """,
+    )
+
+    cfg = load_config()
+
+    assert cfg.preset == "progressive"
+    assert cfg.enforce_crap is True
+    assert cfg.enforce_behavior_attribution is True
+    assert cfg.enforce_mutation is True
+    assert cfg.run_mutation_in_ci is True
+    assert cfg.run_acceptance_in_check is True
+    assert cfg.require_acceptance is True
+    assert cfg.mutation_ci_mode == "incremental"
+
+
+def test_progressive_preset_with_no_baseline_uses_permissive_thresholds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bare-repo first run on progressive must not block — thresholds stay permissive."""
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "progressive-bare"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        preset = "progressive"
+        """,
+    )
+
+    cfg = load_config()
+
+    assert cfg.coverage_min == 0
+    assert cfg.mutation_min_score == 0.0
+    assert cfg.crap_max == 100.0
+    assert cfg.attribution_min_coverage == 0.0
+
+
+def test_progressive_preset_elevates_thresholds_from_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "progressive-elevate"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        preset = "progressive"
+        """,
+    )
+    baseline_dir = tmp_path / ".interlocks"
+    baseline_dir.mkdir()
+    (baseline_dir / "baseline.json").write_text(
+        '{"schema_version": 1, "floors": {"coverage_min": 67, '
+        '"mutation_min_score": 51.2, "crap_max": 18.0, '
+        '"attribution_min_coverage": 0.92}, "advanced_from_sha": "abc1234"}',
+        encoding="utf-8",
+    )
+
+    cfg = load_config()
+
+    assert cfg.coverage_min == 67
+    assert cfg.mutation_min_score == 51.2
+    assert cfg.crap_max == 18.0
+    assert cfg.attribution_min_coverage == 0.92
+    assert cfg.value_sources["coverage_min"] == "baseline-floor"
+    assert cfg.value_sources["mutation_min_score"] == "baseline-floor"
+    assert cfg.value_sources["crap_max"] == "baseline-floor"
+    assert cfg.value_sources["attribution_min_coverage"] == "baseline-floor"
+
+
+def test_progressive_preset_baseline_does_not_lower_floor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit project value above the baseline floor wins — floor never lowers it."""
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "progressive-explicit"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        preset = "progressive"
+        coverage_min = 80
+        crap_max = 10.0
+        """,
+    )
+    (tmp_path / ".interlocks").mkdir()
+    (tmp_path / ".interlocks" / "baseline.json").write_text(
+        '{"schema_version": 1, "floors": {"coverage_min": 67, "crap_max": 18.0}}',
+        encoding="utf-8",
+    )
+
+    cfg = load_config()
+
+    assert cfg.coverage_min == 80
+    assert cfg.crap_max == 10.0
+    assert cfg.value_sources["coverage_min"] == "project-configured"
+    assert cfg.value_sources["crap_max"] == "project-configured"
 
 
 def test_legacy_preset_resolves_ratcheting_defaults(

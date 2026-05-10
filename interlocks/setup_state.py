@@ -126,6 +126,14 @@ def ci_workflow_present(project_root: Path) -> bool:
     )
 
 
+_ADVANCE_NEEDLE = "interlocks baseline advance"
+
+
+def advance_workflow_present(project_root: Path) -> bool:
+    """True when a workflow body invokes ``interlocks baseline advance``."""
+    return any(_ADVANCE_NEEDLE in body for body in iter_workflow_bodies(project_root))
+
+
 _CHECK_NEEDLES: tuple[str, ...] = ("interlocks check", "il check")
 
 
@@ -159,6 +167,10 @@ def skill_installed(project_root: Path) -> bool:
 
 CI_ARTIFACTS: tuple[SetupArtifact, ...] = (
     SetupArtifact("github ci", ".github/workflows/*.yml", ci_workflow_present),
+)
+
+ADVANCE_ARTIFACT = SetupArtifact(
+    "advance workflow", ".github/workflows/interlocks-advance.yml", advance_workflow_present
 )
 
 SETUP_ARTIFACTS: tuple[SetupArtifact, ...] = (

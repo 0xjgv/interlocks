@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from interlocks import ui
+from interlocks import run_summary, ui
 from interlocks.acceptance_status import (
     AcceptanceStatus,
     acceptance_failure_task,
@@ -53,6 +53,7 @@ def cmd_check() -> None:
     cfg = load_config()
     skip_policy = current_skip_policy()
     reset_results()
+    run_summary.reset()
 
     scope_ref = arg_flag_value("--changed", cfg.changed_ref)
     scoped_files = sorted(changed_py_files_vs(scope_ref)) if scope_ref else None
@@ -79,6 +80,7 @@ def cmd_check() -> None:
         _run_advisory(scope_ref, scoped_files, skip_policy)
     finally:
         print_suppressions_report()
+        run_summary.flush(cfg)
         _print_footer(time.monotonic() - start)
 
 

@@ -48,6 +48,20 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
         min_pct = int(arg_value("--min=", str(cfg.coverage_min)))
     rcfile_args = _coverage_rcfile_args(cfg)
     run_cmd = build_coverage_test_command(cfg, coverage_args=tuple(rcfile_args))
+    # Only the progressive preset's baseline ratchet reads coverage.json; skip
+    # the extra subprocess for everyone else.
+    json_cmd: list[str] | None = None
+    if cfg.preset == "progressive":
+        json_path = cfg.project_root / ".interlocks" / "coverage.json"
+        json_cmd = [
+            *coverage_invoker_prefix(cfg),
+            "coverage",
+            "json",
+            *rcfile_args,
+            "-q",
+            "-o",
+            str(json_path),
+        ]
     report_cmd = [
         *coverage_invoker_prefix(cfg),
         "coverage",
@@ -56,7 +70,9 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
         "--show-missing",
         f"--fail-under={min_pct}",
     ]
-    pre_cmds = tuple(cmd for cmd in (_coverage_import_check_cmd(cfg), run_cmd) if cmd is not None)
+    pre_cmds = tuple(
+        cmd for cmd in (_coverage_import_check_cmd(cfg), run_cmd, json_cmd) if cmd is not None
+    )
     return Task(
         f"Coverage >= {min_pct}%",
         report_cmd,

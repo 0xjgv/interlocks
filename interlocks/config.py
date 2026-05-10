@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from types import MappingProxyType
@@ -36,12 +36,13 @@ AcceptanceRunner = Literal["pytest-bdd", "behave", "off"]
 MutationCIMode = Literal["off", "incremental", "full"]
 AuditSeverityThreshold = Literal["low", "medium", "high", "critical"]
 ArchTemplate = Literal["default", "layered"]
-Preset = Literal["baseline", "strict", "legacy"]
+Preset = Literal["baseline", "strict", "legacy", "progressive"]
 
 _SOURCE_AUTO = "auto-detected"
 _SOURCE_DEFAULT = "bundled-default"
 _SOURCE_PRESET = "preset-derived"
 _SOURCE_PROJECT = "project-configured"
+_SOURCE_BASELINE = "baseline-floor"
 
 SKIP_LABELS: frozenset[str] = frozenset({
     "acceptance",
@@ -60,11 +61,18 @@ SKIP_LABELS: frozenset[str] = frozenset({
     "typecheck",
 })
 
-_SUPPORTED_PRESETS: tuple[Preset, ...] = ("baseline", "strict", "legacy")
+_SUPPORTED_PRESETS: tuple[Preset, ...] = ("baseline", "strict", "legacy", "progressive")
 _PRESET_DESCRIPTIONS: dict[Preset, str] = {
     "baseline": "adoption defaults; advisory CRAP; mutation off in CI; acceptance off in check",
-    "strict": "mature repo defaults; CRAP, mutation, and acceptance blocking; mutation full in CI",
+    "strict": (
+        "mature repo defaults; CRAP, mutation, behavior-attribution, and acceptance blocking; "
+        "mutation incremental on PRs, full nightly"
+    ),
     "legacy": "ratcheting defaults; permissive thresholds; advisory gates",
+    "progressive": (
+        "autopilot ratchet — floors captured in `.interlocks/baseline.json`, "
+        "advanced on green main merges"
+    ),
 }
 _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
     "baseline": {
@@ -93,9 +101,10 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "mutation_max_runtime": 900,
         "mutation_min_score": 85.0,
         "enforce_crap": True,
+        "enforce_behavior_attribution": True,
         "run_mutation_in_ci": True,
         "enforce_mutation": True,
-        "mutation_ci_mode": "full",
+        "mutation_ci_mode": "incremental",
         "run_acceptance_in_check": True,
         "require_acceptance": True,
     },
@@ -114,6 +123,24 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "mutation_ci_mode": "off",
         "run_acceptance_in_check": False,
         "require_acceptance": False,
+    },
+    # Thresholds intentionally permissive — the baseline file ratchets above these.
+    "progressive": {
+        "coverage_min": 0,
+        "crap_max": 100.0,
+        "complexity_max_ccn": 18,
+        "complexity_max_loc": 120,
+        "complexity_max_args": 8,
+        "mutation_min_coverage": 60.0,
+        "mutation_max_runtime": 600,
+        "mutation_min_score": 0.0,
+        "enforce_crap": True,
+        "enforce_behavior_attribution": True,
+        "run_mutation_in_ci": True,
+        "enforce_mutation": True,
+        "mutation_ci_mode": "incremental",
+        "run_acceptance_in_check": True,
+        "require_acceptance": True,
     },
 }
 
@@ -214,9 +241,10 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
     ),
     ConfigKeyDoc(
         "preset",
-        "baseline|strict|legacy",
+        "baseline|strict|legacy|progressive",
         "(none)",
-        "Apply a preset bundle of defaults; explicit keys still win",
+        "Apply a preset bundle of defaults; explicit keys still win. "
+        "`progressive` ratchets thresholds via .interlocks/baseline.json.",
         "Preset",
     ),
     ConfigKeyDoc("coverage_min", "int", "80", "coverage.py fail-under", "Thresholds"),
@@ -236,6 +264,14 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "bool",
         "auto",
         "Behavior-attribution exits 1 on runtime attribution failures; auto-on for interlocks",
+        "Gates",
+    ),
+    ConfigKeyDoc(
+        "attribution_min_coverage",
+        "float",
+        "0.0",
+        "Min fraction of claiming scenarios that must reach their declared symbols "
+        "(0.0-1.0); ratcheted by progressive preset",
         "Gates",
     ),
     ConfigKeyDoc(
@@ -517,6 +553,7 @@ class InterlockConfig:
     enforce_behavior_attribution: bool = False
     run_mutation_in_ci: bool = False
     enforce_mutation: bool = False
+    attribution_min_coverage: float = 0.0
     mutation_ci_mode: MutationCIMode = "off"
     mutation_since_ref: str = "origin/main"
     changed_ref: str = "origin/main"
@@ -670,6 +707,13 @@ def require_pyproject(cfg: InterlockConfig) -> None:
 
 @cache
 def _load_config_cached(project_root: Path) -> InterlockConfig:
+    cfg = _build_config(project_root)
+    if cfg.preset == "progressive":
+        cfg = _elevate_with_baseline(cfg)
+    return cfg
+
+
+def _build_config(project_root: Path) -> InterlockConfig:
     pyproject = _load_pyproject(project_root)
     project_table = _interlock_table(pyproject)
     table, value_sources, preset, unsupported_presets = _resolve_config_table(project_table)
@@ -933,7 +977,12 @@ _INT_THRESHOLDS = (
     "pr_ci_runtime_budget_seconds",
     "pr_ci_evidence_max_age_hours",
 )
-_FLOAT_THRESHOLDS = ("crap_max", "mutation_min_coverage", "mutation_min_score")
+_FLOAT_THRESHOLDS = (
+    "crap_max",
+    "mutation_min_coverage",
+    "mutation_min_score",
+    "attribution_min_coverage",
+)
 _BOOL_THRESHOLDS = (
     "enforce_crap",
     "enforce_behavior_attribution",
@@ -985,6 +1034,36 @@ def _threshold_overrides(table: dict[str, Any]) -> dict[str, Any]:
             if value is not None:
                 overrides[key] = value
     return overrides
+
+
+def _elevate_with_baseline(cfg: InterlockConfig) -> InterlockConfig:
+    """Raise resolved thresholds to the strictest of (configured, baseline floor)."""
+    from interlocks.baseline import (  # noqa: PLC0415  (breaks config↔baseline cycle)
+        METRICS,
+        load_baseline,
+    )
+
+    floor = load_baseline(cfg)
+    if floor.is_empty:
+        return cfg
+
+    casts: dict[str, type] = {"coverage_min": int}  # rest default to float
+    updates: dict[str, object] = {}
+    sources = dict(cfg.value_sources)
+    for metric, higher_better in METRICS:
+        floor_value = getattr(floor, metric)
+        if floor_value is None:
+            continue
+        configured = getattr(cfg, metric)
+        improves = floor_value > configured if higher_better else floor_value < configured
+        if not improves:
+            continue
+        updates[metric] = casts.get(metric, float)(floor_value)
+        sources[metric] = _SOURCE_BASELINE
+
+    if not updates:
+        return cfg
+    return replace(cfg, value_sources=sources, **updates)
 
 
 def clear_cache() -> None:

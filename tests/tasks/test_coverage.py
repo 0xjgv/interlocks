@@ -107,6 +107,10 @@ def _coverage_run_cmd(pre_cmds: tuple[list[str], ...]) -> list[str]:
     return next(cmd for cmd in pre_cmds if "coverage" in cmd and "run" in cmd)
 
 
+def _coverage_json_cmd(pre_cmds: tuple[list[str], ...]) -> list[str]:
+    return next(cmd for cmd in pre_cmds if "coverage" in cmd and "json" in cmd)
+
+
 def test_coverage_injects_bundled_rcfile_in_bare_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -166,8 +170,9 @@ def test_coverage_uv_injects_coverage_without_project_dependency(
     task = task_coverage()
 
     spec = f"coverage=={default_pin('coverage')}"
-    assert task.pre_cmds == (_coverage_run_cmd(task.pre_cmds),)
-    for cmd in (task.cmd, task.pre_cmds[0]):
+    run_cmd = _coverage_run_cmd(task.pre_cmds)
+    assert task.pre_cmds == (run_cmd,)
+    for cmd in (task.cmd, run_cmd):
         assert cmd[:8] == [
             "uv",
             "run",
@@ -195,6 +200,25 @@ def test_coverage_non_uv_preflights_target_coverage_import(
     assert len(task.pre_cmds) == 2
     assert task.pre_cmds[0][:2] == [sys.executable, "-c"]
     assert "Coverage.py is not importable" in task.pre_cmds[0][2]
+
+
+def test_coverage_emits_json_under_progressive_preset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Progressive's baseline ratchet needs coverage.json; other presets skip it."""
+    from interlocks.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(
+        _BARE_PYPROJECT + '\n[tool.interlocks]\npreset = "progressive"\n', encoding="utf-8"
+    )
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+
+    task = task_coverage()
+    json_cmd = _coverage_json_cmd(task.pre_cmds)
+    assert "json" in json_cmd
+    assert str(tmp_path / ".interlocks" / "coverage.json") in json_cmd
 
 
 def test_coverage_default_min_pct_uses_cfg(

@@ -248,6 +248,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.stages.nightly:cmd_nightly",
     ),
     Behavior(
+        "stage-baseline",
+        "stage",
+        "baseline shows the current quality floor",
+        "interlocks.tasks.baseline_cmd:cmd_baseline",
+    ),
+    Behavior(
         "task-audit",
         "task",
         "audit reports dependency vulnerabilities",

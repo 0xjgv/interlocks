@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from interlocks import ui
+from interlocks import run_summary, ui
 from interlocks.config import load_config
 from interlocks.git import changed_py_files_vs_main
 from interlocks.metrics import (
@@ -59,7 +59,10 @@ def cmd_crap() -> None:
         sys.exit(1)
     cov_map = parse_coverage(cov_file)
     fns = lizard_functions(cfg.src_dir_arg)
-    offenders = compute_crap_rows(fns, cov_map, max_crap=max_crap, changed=changed)
+    all_rows = compute_crap_rows(fns, cov_map, changed=changed)
+    if all_rows:
+        run_summary.record_crap_max(max(row.crap for row in all_rows))
+    offenders = [row for row in all_rows if row.crap > max_crap]
 
     if not offenders:
         ui.row("crap", command, "ok", state="ok")
@@ -94,9 +97,10 @@ def cmd_crap_cached_advisory(changed: set[str] | None = None) -> None:
         return
 
     cov_map = parse_coverage(cov_file)
-    offenders = compute_crap_rows(
-        lizard_functions(cfg.src_dir_arg), cov_map, max_crap=cfg.crap_max, changed=changed
-    )
+    all_rows = compute_crap_rows(lizard_functions(cfg.src_dir_arg), cov_map, changed=changed)
+    if all_rows:
+        run_summary.record_crap_max(max(row.crap for row in all_rows))
+    offenders = [row for row in all_rows if row.crap > cfg.crap_max]
     offenders.sort(key=lambda r: r.crap, reverse=True)
     if not offenders:
         ui.row("crap", command, "ok", state="ok")

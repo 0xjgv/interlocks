@@ -32,6 +32,7 @@ from interlocks.tasks.acceptance import cmd_acceptance
 from interlocks.tasks.agents import cmd_agents
 from interlocks.tasks.arch import cmd_arch
 from interlocks.tasks.audit import cmd_audit
+from interlocks.tasks.baseline_cmd import cmd_baseline
 from interlocks.tasks.behavior_attribution import cmd_behavior_attribution
 from interlocks.tasks.config import cmd_config
 from interlocks.tasks.coverage import cmd_coverage
@@ -397,6 +398,11 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 "Install bundled Claude Code SKILL.md (idempotent)",
             ),
             "presets": (cmd_presets, "Show preset options or set one with `presets set <preset>`"),
+            "baseline": (
+                cmd_baseline,
+                "Read/init/advance the progressive-preset quality floor "
+                "(`show|init|advance|check`)",
+            ),
             "version": (cmd_version, "print interlocks version"),
             "warm": (
                 cmd_warm,

@@ -13,14 +13,20 @@ from interlocks.defaults_path import path as defaults_path
 from interlocks.hook_setup import install_hooks
 from interlocks.runner import fail_skip, ok
 from interlocks.setup_state import (
+    ADVANCE_ARTIFACT,
     CI_ARTIFACTS,
     SetupArtifactStatus,
+    advance_workflow_present,
     ci_artifact_statuses,
     ci_workflow_present,
     setup_artifact_statuses,
 )
 from interlocks.tasks.agents import install_agent_docs
 from interlocks.tasks.setup_skill import install_skill
+
+_PROGRESSIVE_RECOMMENDATION = (
+    'recommendation: add preset = "progressive" to [tool.interlocks] for autopilot ratcheting'
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -101,8 +107,12 @@ def _cmd_setup_ci_install(project_root: Path) -> None:
         )
         installed = True
         ok("Installed GitHub Actions workflow at .github/workflows/interlocks.yml")
+    advance_installed = _maybe_install_advance_workflow(project_root)
     ui.section("Status")
-    _render_status([SetupArtifactStatus(CI_ARTIFACTS[0], installed)])
+    statuses = [SetupArtifactStatus(CI_ARTIFACTS[0], installed)]
+    if advance_installed is not None:
+        statuses.append(SetupArtifactStatus(ADVANCE_ARTIFACT, advance_installed))
+    _render_status(statuses)
     ui.section("Next Steps")
     ui.message_list([
         "Run `interlocks setup --ci=github --check` to verify CI wiring.",
@@ -110,12 +120,42 @@ def _cmd_setup_ci_install(project_root: Path) -> None:
     ])
 
 
+def _maybe_install_advance_workflow(project_root: Path) -> bool | None:
+    """Install the auto-PR advance workflow when preset is ``progressive``.
+
+    Returns ``None`` when not applicable (preset is not progressive), ``True``
+    when present after this call, and ``False`` only on a write failure that
+    we surface to the caller for status rendering.
+    """
+    cfg = load_optional_config(project_root)
+    if cfg is None or cfg.preset != "progressive":
+        return None
+    workflow = project_root / ".github" / "workflows" / "interlocks-advance.yml"
+    if advance_workflow_present(project_root):
+        ok("Advance workflow already installed")
+        return True
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(
+        defaults_path("github_workflow_advance.yml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    ok("Installed advance workflow at .github/workflows/interlocks-advance.yml")
+    return True
+
+
 def _cmd_setup_ci_check(project_root: Path) -> None:
+    statuses = ci_artifact_statuses(project_root)
+    cfg = load_optional_config(project_root)
+    if cfg is not None and cfg.preset == "progressive":
+        statuses.append(
+            SetupArtifactStatus(ADVANCE_ARTIFACT, advance_workflow_present(project_root))
+        )
     _render_check(
         "GitHub CI Check",
-        ci_artifact_statuses(project_root),
+        statuses,
         ok_message="GitHub CI invokes interlocks.",
         fix_message="Run `interlocks setup --ci=github` to install a GitHub Actions workflow.",
+        extra_lines=_progressive_recommendation_lines(project_root),
     )
 
 
@@ -125,7 +165,16 @@ def _cmd_setup_check(project_root: Path) -> None:
         setup_artifact_statuses(project_root),
         ok_message="Local integrations are installed and current.",
         fix_message="Run `interlocks setup` to install or refresh local integrations.",
+        extra_lines=_progressive_recommendation_lines(project_root),
     )
+
+
+def _progressive_recommendation_lines(project_root: Path) -> list[str]:
+    """Recommend ``preset = "progressive"`` when no preset (or ``baseline``) is set."""
+    cfg = load_optional_config(project_root)
+    if cfg is not None and cfg.preset not in (None, "baseline"):
+        return []
+    return [_PROGRESSIVE_RECOMMENDATION]
 
 
 def _render_check(
@@ -134,15 +183,16 @@ def _render_check(
     *,
     ok_message: str,
     fix_message: str,
+    extra_lines: list[str] | None = None,
 ) -> None:
     """Render a `--check` section: status table + Next Steps; exit 1 if anything missing."""
     ui.section(title)
     _render_status(statuses)
     ui.section("Next Steps")
     if all(status.installed for status in statuses):
-        ui.message_list([ok_message])
+        ui.message_list([ok_message, *(extra_lines or [])])
         return
-    ui.message_list([fix_message])
+    ui.message_list([fix_message, *(extra_lines or [])])
     sys.exit(1)
 
 

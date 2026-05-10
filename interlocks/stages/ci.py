@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 
-from interlocks import ui
+from interlocks import run_summary, ui
 from interlocks.acceptance_status import (
     AcceptanceStatus,
     acceptance_failure_task,
@@ -39,6 +40,10 @@ def cmd_ci() -> None:
     coverage, CRAP, (optionally) mutation."""
     start = time.monotonic()
     cfg = load_config()
+    run_summary.reset()
+    context = os.environ.get("INTERLOCKS_CI_CONTEXT")
+    if context:
+        run_summary.record_context(context)
     skip_policy = current_skip_policy()
     ui.banner(cfg)
     maybe_print_skip_banner(skip_policy)
@@ -55,7 +60,8 @@ def cmd_ci() -> None:
         raise
     finally:
         elapsed = time.monotonic() - start
-        _write_ci_evidence(cfg, elapsed_seconds=elapsed, passed=exit_code == 0)
+        _write_ci_evidence(cfg, elapsed_seconds=elapsed, passed=exit_code == 0, context=context)
+        run_summary.flush(cfg)
     ui.stage_footer(elapsed)
 
 
@@ -108,14 +114,17 @@ def _write_ci_evidence(
     elapsed_seconds: float,
     passed: bool,
     created_at: float | None = None,
+    context: str | None = None,
 ) -> None:
     path = cfg.ci_evidence_path
-    payload = {
+    payload: dict[str, object] = {
         "command": "interlocks ci",
         "elapsed_seconds": round(elapsed_seconds, 3),
         "created_at": created_at if created_at is not None else time.time(),
         "passed": passed,
         "budget_seconds": cfg.pr_ci_runtime_budget_seconds,
     }
+    if context:
+        payload["context"] = context
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")

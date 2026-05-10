@@ -161,3 +161,69 @@ def test_setup_check_succeeds_after_setup(
     out = capsys.readouterr().out
     assert "missing/stale" not in out
     assert "Local integrations are installed and current." in out
+
+
+def _write_pyproject_with_preset(project: Path, preset: str | None) -> None:
+    body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
+    if preset is not None:
+        body += f'\n[tool.interlocks]\npreset = "{preset}"\n'
+    (project / "pyproject.toml").write_text(body, encoding="utf-8")
+
+
+def test_setup_check_recommends_progressive_when_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_with_preset(tmp_path, None)
+
+    with pytest.raises(SystemExit):
+        _run_setup(monkeypatch, tmp_path, "--check")
+
+    assert 'preset = "progressive"' in capsys.readouterr().out
+
+
+def test_setup_check_recommends_progressive_when_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_with_preset(tmp_path, "baseline")
+
+    with pytest.raises(SystemExit):
+        _run_setup(monkeypatch, tmp_path, "--check")
+
+    assert 'preset = "progressive"' in capsys.readouterr().out
+
+
+def test_setup_check_no_recommendation_when_progressive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_with_preset(tmp_path, "progressive")
+    _run_setup(monkeypatch, tmp_path)
+    capsys.readouterr()
+
+    _run_setup(monkeypatch, tmp_path, "--check")
+
+    out = capsys.readouterr().out
+    assert 'preset = "progressive"' not in out
+
+
+def test_setup_ci_installs_advance_workflow_when_progressive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_pyproject_with_preset(tmp_path, "progressive")
+
+    _run_setup(monkeypatch, tmp_path, "--ci=github")
+
+    advance = tmp_path / ".github" / "workflows" / "interlocks-advance.yml"
+    assert advance.is_file()
+    body = advance.read_text(encoding="utf-8")
+    assert "interlocks baseline advance" in body
+
+
+def test_setup_ci_skips_advance_workflow_when_not_progressive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_pyproject_with_preset(tmp_path, "baseline")
+
+    _run_setup(monkeypatch, tmp_path, "--ci=github")
+
+    advance = tmp_path / ".github" / "workflows" / "interlocks-advance.yml"
+    assert not advance.exists()

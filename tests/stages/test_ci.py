@@ -148,6 +148,18 @@ def test_ci_writes_runtime_evidence(tmp_project: Path) -> None:
     assert data["elapsed_seconds"] > 0
 
 
+def test_ci_evidence_records_context_env(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``INTERLOCKS_CI_CONTEXT`` set in the workflow env lands in ci.json."""
+    monkeypatch.setenv("INTERLOCKS_CI_CONTEXT", "main_push")
+    result = _run_ci(tmp_project)
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    data = json.loads((tmp_project / ".interlocks" / "ci.json").read_text(encoding="utf-8"))
+    assert data["context"] == "main_push"
+
+
 def test_ci_in_process_queues_all_tasks(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
