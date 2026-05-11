@@ -55,3 +55,13 @@ Feature: interlocks CLI crash boundary
     Then the exit code is not 0
     And stderr does not contain "github.com/0xjgv/interlocks/issues/new"
     And no crash file exists in the cache directory
+
+  # req: crash-malformed-config-no-capture
+  Scenario: Malformed pyproject.toml fails as clean user error without crash report
+    Given a project with a malformed pyproject.toml
+    When I run "interlocks lint"
+    Then the exit code is 2
+    And stderr contains "interlocks:"
+    And stderr does not contain "Traceback"
+    And stderr does not contain "github.com/0xjgv/interlocks/issues/new"
+    And no crash file exists in the cache directory

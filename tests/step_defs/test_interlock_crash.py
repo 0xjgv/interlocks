@@ -211,6 +211,13 @@ def _lint_failure_project(crash_session: CrashSession) -> None:
     _scaffold_crash_project(crash_session.project_root, broken_module=True)
 
 
+@given("a project with a malformed pyproject.toml")
+def _malformed_pyproject(crash_session: CrashSession) -> None:
+    (crash_session.project_root / "pyproject.toml").write_text(
+        "[invalid\nnot valid toml\n", encoding="utf-8"
+    )
+
+
 @given("the first run printed a GitHub issue URL")
 def _first_run_printed_url(crash_run: CrashRun, crash_session: CrashSession) -> None:
     assert "github.com/0xjgv/interlocks/issues/new" in crash_run.stderr, (
