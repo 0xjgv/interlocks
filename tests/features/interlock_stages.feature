@@ -109,3 +109,23 @@ Feature: interlocks stage commands on a minimal inline project
     Then the stage exits 0
     And the stage output contains "coverage_min"
     And the stage output contains "advanced_from_sha"
+
+  # req: stage-check
+  Scenario: `interlocks check` does not enforce required acceptance when run_acceptance_in_check is false
+    Given a tmp project with require_acceptance true and run_acceptance_in_check false
+    When I run "interlocks check" in the tmp project
+    Then the stage exits 0
+
+  # req: stage-check
+  Scenario: `interlocks check` fails with remediation when acceptance is required in check and features dir is missing
+    Given a tmp project with require_acceptance true and run_acceptance_in_check true
+    When I run "interlocks check" in the tmp project
+    Then the stage exits 1
+    And the stage output contains "init-acceptance"
+
+  # req: stage-ci
+  Scenario: `interlocks ci` fails with remediation when acceptance is required and features dir is missing
+    Given a tmp project with require_acceptance true
+    When I run "interlocks ci" in the tmp project
+    Then the stage exits 1
+    And the stage output contains "init-acceptance"
