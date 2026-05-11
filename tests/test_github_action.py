@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from interlocks import github_action
+
+_ACTION = (Path(__file__).resolve().parent.parent / "action.yml").read_text(encoding="utf-8")
 
 
 def test_command_from_args_defaults_to_interlock_ci() -> None:
@@ -75,18 +78,54 @@ def test_main_exits_with_command_status(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 def test_action_metadata_delegates_to_interlock_ci() -> None:
-    action = (Path(__file__).resolve().parent.parent / "action.yml").read_text(encoding="utf-8")
-
-    assert "using: composite" in action
+    assert "using: composite" in _ACTION
     # interlocks 0.2 ships through `uv tool install` rather than pip — the
     # action sets up uv, restores the uvx cache, warms it, then runs offline.
-    assert "astral-sh/setup-uv@" in action
-    assert "default: uv tool install interlocks" in action
-    assert "default: interlocks ci" in action
-    assert "actions/cache@v4" in action
-    assert "interlocks warm" in action
-    assert 'UV_OFFLINE: "1"' in action
-    assert 'python -m interlocks.github_action --command "${{ inputs.command }}"' in action
-    assert "ruff" not in action
-    assert "coverage run" not in action
-    assert "pip install interlocks" not in action
+    assert "astral-sh/setup-uv@" in _ACTION
+    assert "default: uv tool install interlocks" in _ACTION
+    assert "default: interlocks ci" in _ACTION
+    assert "actions/cache@v4" in _ACTION
+    assert "interlocks warm" in _ACTION
+    assert 'UV_OFFLINE: "1"' in _ACTION
+    assert 'python -m interlocks.github_action --command "${{ inputs.command }}"' in _ACTION
+    assert "ruff" not in _ACTION
+    assert "coverage run" not in _ACTION
+    assert "pip install interlocks" not in _ACTION
+
+
+def test_action_cache_key_covers_pin_material() -> None:
+    """Cache key must hash both tools.py (pin table) and tools.txt (compiled hashes)."""
+    hash_match = re.search(r"hashFiles\(([^)]+)\)", _ACTION)
+    assert hash_match is not None, "no hashFiles() expression in action.yml cache key"
+    hash_args = hash_match.group(1)
+    assert "'interlocks/defaults/tools.py'" in hash_args
+    assert "'interlocks/defaults/tools.txt'" in hash_args
+
+
+def test_action_restore_keys_provides_fallback() -> None:
+    """restore-keys must allow a partial cache hit when the exact pin set changes."""
+    key_match = re.search(r"key: (uvx-tools-[^\n]+)", _ACTION)
+    restore_match = re.search(r"restore-keys: \|\s+([^\n]+)", _ACTION)
+    assert key_match and restore_match, "Could not find cache key or restore-keys in action.yml"
+    assert key_match.group(1).startswith(restore_match.group(1).strip())
+
+
+def test_action_steps_ordered_cache_install_warm_run() -> None:
+    """Steps must appear in the order: cache-restore → install → warm → offline run."""
+    markers = [
+        "actions/cache@",  # restore uvx cache
+        "${{ inputs.install-command }}",  # install interlocks
+        "interlocks warm",  # populate cache online
+        "python -m interlocks.github_action",  # run with UV_OFFLINE=1
+    ]
+    positions = [_ACTION.index(m) for m in markers]
+    assert positions == sorted(positions), (
+        "action.yml steps are not in the expected order: cache-restore → install → warm → run"
+    )
+
+
+def test_action_uv_offline_only_after_warm_step() -> None:
+    """UV_OFFLINE=1 must come after the warm step — warm runs online to fetch wheels."""
+    warm_pos = _ACTION.index("interlocks warm")
+    offline_pos = _ACTION.index('UV_OFFLINE: "1"')
+    assert offline_pos > warm_pos, "UV_OFFLINE=1 must appear after 'interlocks warm', not before"
