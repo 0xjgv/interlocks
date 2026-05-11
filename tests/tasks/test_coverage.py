@@ -155,6 +155,24 @@ def test_coverage_omits_rcfile_with_coveragerc_sidecar(
     assert _rcfile_flag(_coverage_run_cmd(task.pre_cmds)) is None
 
 
+def test_coverage_still_injects_rcfile_when_only_ruff_section_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.ruff] must NOT suppress coverage --rcfile (cross-tool isolation)."""
+    from interlocks.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(
+        _BARE_PYPROJECT + "\n[tool.ruff]\nline-length = 99\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    task = task_coverage()
+    flag = _rcfile_flag(task.cmd)
+    assert flag is not None, "[tool.ruff] must NOT suppress coverage --rcfile"
+    assert Path(flag.split("=", 1)[1]).name == "coveragerc"
+
+
 def test_coverage_uv_injects_coverage_without_project_dependency(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
