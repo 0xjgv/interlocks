@@ -320,6 +320,7 @@ def test_cmd_presets_all_four_listed_with_descriptions(
         ("baseline", "coverage_min", 70),
         # strict: all blocking gates on, mutation incremental
         ("strict", "enforce_crap", True),
+        ("strict", "enforce_behavior_attribution", True),
         ("strict", "enforce_mutation", True),
         ("strict", "run_mutation_in_ci", True),
         ("strict", "mutation_ci_mode", "incremental"),
@@ -333,6 +334,7 @@ def test_cmd_presets_all_four_listed_with_descriptions(
         ("legacy", "mutation_ci_mode", "off"),
         # progressive: blocking gates on, permissive floors (ratcheted at runtime)
         ("progressive", "enforce_crap", True),
+        ("progressive", "enforce_behavior_attribution", True),
         ("progressive", "enforce_mutation", True),
         ("progressive", "run_mutation_in_ci", True),
         ("progressive", "mutation_ci_mode", "incremental"),
@@ -363,10 +365,16 @@ def test_progressive_preset_enables_blocking_gates_when_configured(
     out = capsys.readouterr().out
     assert re.search(r"^\s*preset\s+progressive\s*$", out, re.MULTILINE), out
     assert re.search(r"^\s*enforce_crap\s+True \(preset-derived\)\s*$", out, re.MULTILINE), out
+    assert re.search(
+        r"^\s*enforce_behavior_attribution\s+True \(preset-derived\)\s*$", out, re.MULTILINE
+    ), out
     assert re.search(r"^\s*enforce_mutation\s+True \(preset-derived\)\s*$", out, re.MULTILINE), out
     assert re.search(r"^\s*run_mutation_in_ci\s+True \(preset-derived\)\s*$", out, re.MULTILINE), (
         out
     )
+    assert re.search(
+        r"^\s*run_acceptance_in_check\s+True \(preset-derived\)\s*$", out, re.MULTILINE
+    ), out
     assert re.search(r"^\s*require_acceptance\s+True \(preset-derived\)\s*$", out, re.MULTILINE), (
         out
     )
