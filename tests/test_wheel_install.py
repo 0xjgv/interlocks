@@ -51,7 +51,8 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     venv_python = venv / "bin" / "python"
     run(["uv", "pip", "install", wheel, "--python", venv_python])
 
-    all_aliases = ("interlocks", "ilocks", "ilock", "ils", "il")
+    pyproject_data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    all_aliases = tuple(pyproject_data["project"]["scripts"].keys())
     for alias in all_aliases:
         bin_path = venv / "bin" / alias
         assert bin_path.exists(), f"entry point missing: {alias} at {bin_path}"
@@ -78,11 +79,9 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     # via interlocks.defaults_path (importlib.resources) — the runtime mechanism
     # used by every tool dispatch that lacks a project-native config.
     bundled_probe = "\n".join([
-        "from interlocks.defaults_path import path",
-        *[
-            f"assert path({n!r}).is_file(), f'bundled default missing: {n}'"
-            for n in ("ruff.toml", "coveragerc", "pyrightconfig.json", "importlinter_template.ini")
-        ],
+        "from interlocks.defaults_path import path, TOOL_CONFIG_SPECS",
+        "for spec in TOOL_CONFIG_SPECS.values():",
+        "    assert path(spec.filename).is_file(), f'bundled default missing: {spec.filename}'",
     ])
     run([venv_python, "-c", bundled_probe])
 
