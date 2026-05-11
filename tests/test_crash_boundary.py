@@ -2,6 +2,10 @@
 
 Focus: classification semantics and invariant I6 — a bug inside the crash
 reporter MUST NOT mask the original exception.
+
+Also probes preflight / user-config error cases:
+- Missing pyproject.toml exits 2 without crash capture (via existing BDD scenario).
+- Malformed pyproject.toml raises InterlockConfigError, handled as user error.
 """
 
 from __future__ import annotations
@@ -10,7 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from interlocks.config import InterlockConfigError, InterlockUserError
+from interlocks.config import (
+    InterlockConfigError,
+    InterlockUserError,
+    clear_cache,
+    load_config,
+)
 from interlocks.crash import boundary as boundary_mod
 from interlocks.crash.boundary import CrashBoundary
 
@@ -155,3 +164,54 @@ def test_safe_load_config_returns_cfg_and_project_root_on_success(
     loaded, root = boundary_mod._safe_load_config()
     assert loaded is cfg
     assert root == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# Preflight / user-config error classification probes
+# ---------------------------------------------------------------------------
+
+
+def test_malformed_toml_is_user_error_not_crash(tmp_path: Path) -> None:
+    """_load_pyproject converts TOMLDecodeError to InterlockConfigError.
+
+    If raw TOMLDecodeError escaped, the boundary would misclassify it as an
+    internal crash (call stack has interlocks frames) and trigger crash capture.
+    InterlockConfigError is an InterlockUserError, so the boundary exits 2 cleanly.
+    pytest.raises(InterlockConfigError) proves no raw TOMLDecodeError escaped.
+    """
+    from interlocks.config import _load_pyproject
+
+    (tmp_path / "pyproject.toml").write_text("[invalid\nnot toml\n", encoding="utf-8")
+    with pytest.raises(InterlockConfigError, match=r"pyproject\.toml is not valid TOML"):
+        _load_pyproject(tmp_path)
+
+
+def test_config_error_from_malformed_toml_exits_2_via_boundary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """InterlockConfigError raised inside the boundary exits 2, no crash capture.
+
+    Simulates a PREFLIGHT_EXEMPT task calling load_config() for a malformed TOML
+    while inside the CrashBoundary — boundary handles it as a user error, not a crash.
+    """
+    captured: list[str] = []
+    monkeypatch.setattr(
+        boundary_mod,
+        "_capture_and_transport",
+        lambda exc, sub: captured.append(sub),
+    )
+
+    (tmp_path / "pyproject.toml").write_text("[bad\n", encoding="utf-8")
+    clear_cache()
+
+    boundary = CrashBoundary(subcommand="lint")
+    with pytest.raises(SystemExit) as excinfo, boundary:
+        load_config(tmp_path)
+
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "interlocks:" in err
+    assert "not valid TOML" in err
+    assert captured == []
