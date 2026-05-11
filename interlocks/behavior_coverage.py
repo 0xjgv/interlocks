@@ -142,6 +142,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.evaluate:cmd_evaluate",
     ),
     Behavior(
+        "cli-presets-parity",
+        "cli",
+        "presets command lists all four presets including progressive",
+        "interlocks.cli:main",
+    ),
+    Behavior(
         "doctor-readiness",
         "doctor",
         "doctor reports setup readiness",
@@ -371,6 +377,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "crash-gate-failure-no-capture",
         "crash",
         "a subprocess gate failure exits via SystemExit without entering capture",
+        "interlocks.crash.boundary:CrashBoundary",
+    ),
+    Behavior(
+        "crash-malformed-config-no-capture",
+        "crash",
+        "malformed pyproject.toml fails as a clean user error without crash capture",
         "interlocks.crash.boundary:CrashBoundary",
     ),
 )
