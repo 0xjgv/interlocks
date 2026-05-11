@@ -469,8 +469,11 @@ def _load_pyproject(project_root: Path) -> dict[str, Any]:
     path = project_root / "pyproject.toml"
     if not path.is_file():
         return {}
-    with path.open("rb") as f:
-        return tomllib.load(f)
+    try:
+        with path.open("rb") as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as exc:
+        raise InterlockConfigError(f"pyproject.toml is not valid TOML: {exc}") from exc
 
 
 def _interlock_table(pyproject: dict[str, Any]) -> dict[str, Any]:
@@ -686,7 +689,7 @@ def load_optional_config(start: Path | None = None) -> InterlockConfig | None:
     """
     try:
         return load_config(start)
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, InterlockConfigError):
         return None
 
 

@@ -10,13 +10,12 @@ from __future__ import annotations
 import shutil
 import sys
 import time
-import tomllib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from interlocks import ui
-from interlocks.config import find_project_root, kv_with_source, load_config
+from interlocks.config import InterlockConfigError, find_project_root, kv_with_source, load_config
 from interlocks.crash.storage import cache_dir as _crash_cache_dir
 from interlocks.detect import expected_target_interpreter
 from interlocks.setup_state import (
@@ -125,7 +124,7 @@ def _safe_load_config(pyproject_path: Path, failures: list[str]) -> InterlockCon
     """Load config, recording a failure when ``pyproject.toml`` is unreadable."""
     try:
         return load_config()
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, InterlockConfigError) as exc:
         failures.append(f"cannot read {pyproject_path}: {exc}")
         return None
 
