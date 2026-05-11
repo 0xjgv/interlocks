@@ -90,3 +90,28 @@ def test_deps_invokes_deptry_with_known_first_party(monkeypatch: pytest.MonkeyPa
     assert "--known-first-party" in cmd
     kfp_idx = cmd.index("--known-first-party")
     assert cmd[kfp_idx + 1] == "interlocks"
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_deps_deptry_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] deptry` override replaces the bundled pin in uvx argv."""
+    from interlocks.tasks.deps import task_deps
+
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.0"
+
+            [tool.interlocks.tools]
+            deptry = "9.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_deps().cmd
+    assert "deptry==9.99.0" in cmd

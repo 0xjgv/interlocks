@@ -118,3 +118,28 @@ def test_lint_omits_config_when_project_has_ruff_sidecar(
     (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     assert "--config" not in task_lint().cmd
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_lint_ruff_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] ruff` override replaces the bundled pin in the uvx argv."""
+    from interlocks.tasks.lint import task_lint
+
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.0"
+
+            [tool.interlocks.tools]
+            ruff = "0.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_lint().cmd
+    assert "ruff==0.99.0" in cmd

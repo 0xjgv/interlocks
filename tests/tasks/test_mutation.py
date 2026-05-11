@@ -593,3 +593,40 @@ def test_pulse_silent_when_verbose(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     out = buf.getvalue()
     assert "\r" not in out
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_mutation_mutmut_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] interlocks-mutmut` override replaces bundled pin in uv run argv."""
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.0"
+
+            [tool.interlocks.tools]
+            interlocks-mutmut = "9.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    captured_argv: list[list[str]] = []
+
+    def _spy_run(argv: list[str], _timeout: int) -> tuple[bool, Path]:
+        captured_argv.append(argv)
+        return True, tmp_path / ".interlocks" / "mutation.log"
+
+    monkeypatch.setattr(mutation_mod, "_run_mutmut", _spy_run)
+    monkeypatch.setattr(mutation_mod, "coverage_line_rate", lambda: 1.0)
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+
+    cmd_mutation()
+
+    assert captured_argv, "_run_mutmut was not called"
+    assert "interlocks-mutmut==9.99.0" in captured_argv[0]

@@ -204,6 +204,32 @@ def test_tool_version_ignores_non_string_override(
     assert load_config().tool_version("ruff") == DEFAULTS["ruff"]
 
 
+def test_coverage_pin_override_flows_into_invoker_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] coverage` override flows into the uv run --with spec."""
+    from interlocks.config import coverage_invoker_prefix
+
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "pin-probe"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        test_invoker = "uv"
+
+        [tool.interlocks.tools]
+        coverage = "9.99.0"
+        """,
+    )
+    cfg = load_config()
+    prefix = coverage_invoker_prefix(cfg)
+    assert "coverage==9.99.0" in prefix
+
+
 def test_skip_project_policy_resolves_labels(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

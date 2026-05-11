@@ -280,3 +280,32 @@ def test_task_arch_layered_skips_when_no_layers_defined(
     out = capsys.readouterr().out
     assert "layered template selected" in out
     assert "arch_layers" in out
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_arch_import_linter_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] import-linter` override replaces bundled pin in uvx argv."""
+    from interlocks.tasks import arch as arch_mod
+
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.0"
+
+            [tool.importlinter]
+            root_package = "pin_probe"
+
+            [tool.interlocks.tools]
+            import-linter = "9.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    task = arch_mod.task_arch()
+    assert task is not None, "expected a Task (user importlinter config present)"
+    assert "import-linter==9.99.0" in task.cmd

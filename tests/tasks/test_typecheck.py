@@ -314,3 +314,29 @@ def test_typecheck_resolves_imports_from_target_venv(
     out = capsys.readouterr().out
     assert "[typecheck]" in out
     assert "ok" in out
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_typecheck_basedpyright_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] basedpyright` override replaces the bundled pin in uvx argv."""
+    from interlocks.tasks.typecheck import task_typecheck
+
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.0"
+            requires-python = ">=3.11"
+
+            [tool.interlocks.tools]
+            basedpyright = "9.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_typecheck().cmd
+    assert "basedpyright==9.99.0" in cmd

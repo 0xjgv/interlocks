@@ -119,3 +119,28 @@ def test_complexity_honors_tool_interlock_overrides(
     assert _flag_value(cmd, "-C") == "20"
     assert _flag_value(cmd, "-a") == "5"
     assert _flag_value(cmd, "-L") == "150"
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_complexity_lizard_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] lizard` override replaces the bundled pin in uvx argv."""
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.0"
+
+            [tool.interlocks.tools]
+            lizard = "9.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    from interlocks.tasks.complexity import task_complexity
+
+    cmd = task_complexity().cmd
+    assert "lizard==9.99.0" in cmd
