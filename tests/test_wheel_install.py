@@ -51,11 +51,14 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     venv_python = venv / "bin" / "python"
     run(["uv", "pip", "install", wheel, "--python", venv_python])
 
+    all_aliases = ("interlocks", "ilocks", "ilock", "ils", "il")
+    for alias in all_aliases:
+        bin_path = venv / "bin" / alias
+        assert bin_path.exists(), f"entry point missing: {alias} at {bin_path}"
+        assert bin_path.stat().st_mode & 0o111, f"entry point not executable: {alias}"
+
     interlocks_bin = venv / "bin" / "interlocks"
     il_bin = venv / "bin" / "il"
-    for bin_path in (interlocks_bin, il_bin):
-        assert bin_path.exists(), f"entry point missing at {bin_path}"
-        assert bin_path.stat().st_mode & 0o111, f"entry point not executable at {bin_path}"
 
     help_out = run([interlocks_bin, "help", "--advanced"]).stdout
     for expected in ("check", "ci", "pre-commit", "nightly"):
@@ -70,6 +73,18 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     ]
     for cmd in version_cmds:
         assert run(cmd).stdout.strip() == version, cmd
+
+    # Verify bundled default configs ship inside the wheel and are resolvable
+    # via interlocks.defaults_path (importlib.resources) — the runtime mechanism
+    # used by every tool dispatch that lacks a project-native config.
+    bundled_probe = "\n".join([
+        "from interlocks.defaults_path import path",
+        *[
+            f"assert path({n!r}).is_file(), f'bundled default missing: {n}'"
+            for n in ("ruff.toml", "coveragerc", "pyrightconfig.json", "importlinter_template.ini")
+        ],
+    ])
+    run([venv_python, "-c", bundled_probe])
 
     setup_project = tmp_path / "setup-project"
     setup_project.mkdir()
