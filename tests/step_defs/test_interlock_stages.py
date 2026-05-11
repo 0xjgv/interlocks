@@ -89,6 +89,42 @@ def _tmp_project_untracked_markdown(tmp_project: Path) -> None:
     (tmp_project / "NOTES.md").write_text("# Notes\n\nNon-Python.\n", encoding="utf-8")
 
 
+def _make_acceptance_project(tmp_path: Path, extra_config: str) -> Path:
+    """Minimal passing project with extra `[tool.interlocks]` config appended."""
+    project = make_tmp_project(tmp_path)
+    pyproject = project / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text(encoding="utf-8") + extra_config, encoding="utf-8")
+    return project
+
+
+@given(
+    "a tmp project with require_acceptance true and run_acceptance_in_check false",
+    target_fixture="tmp_project",
+)
+def _tmp_project_require_acceptance_no_check(tmp_path: Path) -> Path:
+    return _make_acceptance_project(
+        tmp_path, "require_acceptance = true\nrun_acceptance_in_check = false\n"
+    )
+
+
+@given(
+    "a tmp project with require_acceptance true and run_acceptance_in_check true",
+    target_fixture="tmp_project",
+)
+def _tmp_project_require_acceptance_in_check(tmp_path: Path) -> Path:
+    return _make_acceptance_project(
+        tmp_path, "require_acceptance = true\nrun_acceptance_in_check = true\n"
+    )
+
+
+@given(
+    "a tmp project with require_acceptance true",
+    target_fixture="tmp_project",
+)
+def _tmp_project_require_acceptance(tmp_path: Path) -> Path:
+    return _make_acceptance_project(tmp_path, "require_acceptance = true\n")
+
+
 @given(
     "a tmp project on the progressive preset with a recorded baseline floor",
     target_fixture="tmp_project",

@@ -189,6 +189,32 @@ def test_task_acceptance_behave_branch(tmp_project: Path, monkeypatch: pytest.Mo
     assert "behave" in task.cmd
 
 
+def test_cmd_acceptance_disabled_warns_and_exits_zero(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`acceptance_runner = 'off'` → skip nudge, no run(), exit 0."""
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + '\n[tool.interlocks]\nacceptance_runner = "off"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    clear_cache()
+
+    called: list[object] = []
+    monkeypatch.setattr(mod, "run", called.append)
+
+    mod.cmd_acceptance()
+
+    out = capsys.readouterr().out
+    assert "disabled" in out
+    assert called == []
+
+
 def test_cmd_acceptance_optional_missing_warns_and_exits_zero(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,

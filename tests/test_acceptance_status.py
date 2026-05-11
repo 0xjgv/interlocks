@@ -8,6 +8,7 @@ from pathlib import Path
 from interlocks.acceptance_status import (
     AcceptanceStatus,
     classify_acceptance,
+    classify_acceptance_with_details,
     count_scenarios,
     feature_files,
     remediation_message,
@@ -221,3 +222,81 @@ def test_required_acceptance_failure_task_exits_with_remediation(tmp_path: Path)
     assert "no `.feature` files" in payload
     assert "features" in payload
     assert "sys.exit(1)" in payload
+
+
+# ─────────────── AcceptanceClassification.is_required_failure ───────────────
+
+
+def test_is_required_failure_true_for_missing_features_dir(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, features_dir=None, require_acceptance=True)
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.MISSING_FEATURES_DIR
+    assert classification.is_required_failure is True
+
+
+def test_is_required_failure_true_for_missing_feature_files(tmp_path: Path) -> None:
+    features = tmp_path / "tests" / "features"
+    features.mkdir(parents=True)
+    cfg = _cfg(tmp_path, features_dir=features, require_acceptance=True)
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.MISSING_FEATURE_FILES
+    assert classification.is_required_failure is True
+
+
+def test_is_required_failure_true_for_missing_scenarios(tmp_path: Path) -> None:
+    features = tmp_path / "tests" / "features"
+    _write_feature(features / "stub.feature", "Feature: stub\n  # no scenarios\n")
+    cfg = _cfg(tmp_path, features_dir=features, require_acceptance=True)
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.MISSING_SCENARIOS
+    assert classification.is_required_failure is True
+
+
+def test_is_required_failure_false_for_optional_missing(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, features_dir=None, require_acceptance=False)
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.OPTIONAL_MISSING
+    assert classification.is_required_failure is False
+
+
+def test_is_required_failure_false_for_disabled(tmp_path: Path) -> None:
+    cfg = _cfg(tmp_path, acceptance_runner="off", features_dir=None)
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.DISABLED
+    assert classification.is_required_failure is False
+
+
+def test_is_required_failure_false_for_runnable(tmp_path: Path) -> None:
+    features = tmp_path / "tests" / "features"
+    _write_feature(
+        features / "ok.feature",
+        "Feature: ok\n  Scenario: a thing works\n    Given precondition\n",
+    )
+    cfg = _cfg(tmp_path, features_dir=features, require_acceptance=False)
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.RUNNABLE
+    assert classification.is_required_failure is False
+
+
+def test_is_required_failure_true_for_missing_behavior_coverage(tmp_path: Path) -> None:
+    features = tmp_path / "tests" / "features"
+    _write_feature(
+        features / "ok.feature",
+        "Feature: ok\n  Scenario: a thing works\n    Given precondition\n",
+    )
+    # Naming the project "interlocks" activates INTERLOCKS_REGISTRY; a feature
+    # file with no `# req:` markers leaves every behavior uncovered.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "interlocks"\nversion = "0.0.0"\n',
+        encoding="utf-8",
+    )
+    clear_cache()
+    cfg = replace(
+        load_config(tmp_path),
+        project_root=tmp_path,
+        features_dir=features,
+        require_acceptance=True,
+    )
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE
+    assert classification.is_required_failure is True
