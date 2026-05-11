@@ -106,6 +106,7 @@ def test_print_report_empty(
     (tmp_path / SRC_NAME).mkdir()
     (tmp_path / TEST_NAME).mkdir()
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["interlocks", "check", "--verbose"])
 
     print_suppressions_report()
     out = capsys.readouterr().out
@@ -127,6 +128,7 @@ def test_print_report_totals_and_breakdown(
         "q = 4  # type: ignore[arg-type]\n", encoding="utf-8"
     )
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("sys.argv", ["interlocks", "check", "--verbose"])
 
     print_suppressions_report()
     out = capsys.readouterr().out
@@ -136,3 +138,17 @@ def test_print_report_totals_and_breakdown(
     # Most-frequent rule shown first
     assert "E501: 2" in out
     assert "F401: 1" in out
+
+
+def test_print_report_minimal_default_is_silent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_project_scaffold(tmp_path)
+    (tmp_path / SRC_NAME).mkdir()
+    (tmp_path / SRC_NAME / "a.py").write_text("x = 1  # noqa: E501\n", encoding="utf-8")
+    (tmp_path / TEST_NAME).mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
+
+    print_suppressions_report()
+    assert capsys.readouterr().out == ""

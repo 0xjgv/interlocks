@@ -12,6 +12,7 @@ import pytest
 
 from interlocks import config as interlock_config
 from interlocks import skip as interlock_skip
+from interlocks import ui as interlock_ui
 
 _GIT_ENV_LEAKS = (
     "GIT_DIR",
@@ -47,6 +48,11 @@ def _isolate_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Without the GIT_* scrub, tests that shell out to `git` inherit `GIT_DIR`
     from an enclosing `git commit` hook and corrupt the outer repo.
+
+    Also injects ``--verbose`` into ``sys.argv`` so chrome assertions
+    (rows/sections/ok-lines) keep working under the new minimal-default
+    polarity. Tests that need to assert minimal-mode behavior overwrite
+    ``sys.argv`` themselves.
     """
     interlock_config.clear_cache()
     interlock_skip.current_skip_policy.cache_clear()
@@ -54,6 +60,10 @@ def _isolate_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    # Force verbose so existing chrome assertions (rows/sections/ok-lines)
+    # keep working under the new minimal-default polarity. Tests that need
+    # minimal-mode behavior re-patch ``interlocks.ui.is_verbose`` themselves.
+    monkeypatch.setattr(interlock_ui, "is_verbose", lambda: True)
 
 
 def _write_tree(root: Path, files: Mapping[str, str]) -> None:

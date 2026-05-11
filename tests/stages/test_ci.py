@@ -113,12 +113,30 @@ def test_ci_passes_on_clean_project(tmp_project: Path) -> None:
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     out = result.stdout
-    markers = ("interlocks v", "CI Checks", "[format]", "[lint]", "[complexity]", "[typecheck]")
-    for marker in markers:
+    # Minimal-default: only the verdict line; chrome lives behind --verbose.
+    assert out.strip().splitlines()[-1].startswith("ci: ok — ")
+    assert (tmp_project / ".coverage").exists()
+
+
+def test_ci_passes_verbose(tmp_project: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "ci", "--verbose"],
+        cwd=tmp_project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    out = result.stdout
+    import re as _re
+
+    assert _re.search(r"interlocks v\d", out)
+    for marker in ("CI Checks", "[format]", "[lint]", "[complexity]", "[typecheck]"):
         assert marker in out, f"missing marker {marker!r}\n{out}"
     assert "[coverage]" in out
     assert "Completed in" in out
-    assert (tmp_project / ".coverage").exists()
+    assert "ci: ok — " in out
 
 
 @pytest.mark.parametrize(

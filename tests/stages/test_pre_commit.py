@@ -75,7 +75,7 @@ def test_pre_commit_noop_when_nothing_staged(tmp_project: Path) -> None:
     result = _run_pre_commit(tmp_project)
 
     assert result.returncode == 0, result.stderr
-    assert "No staged Python files" in result.stdout
+    assert "pre-commit: skipped — no staged python files" in result.stdout
 
 
 def test_pre_commit_noop_in_process(
@@ -85,7 +85,7 @@ def test_pre_commit_noop_in_process(
 
     monkeypatch.setattr(pre_commit_mod, "staged_py_files", list)
     pre_commit_mod.cmd_pre_commit()
-    assert "No staged Python files" in capsys.readouterr().out
+    assert "pre-commit: skipped — no staged python files" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

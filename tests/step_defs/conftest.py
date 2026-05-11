@@ -143,9 +143,14 @@ def run_interlock_in_cwd(
     Used by every step-def that drives the CLI as a subprocess. Pass ``env``
     to override the inherited environment (e.g. crash-injection scenarios or
     PYTHONPATH augmentation via :func:`interlocks_pythonpath_env`).
+
+    Injects ``--verbose`` so chrome-asserting Gherkin scenarios keep working
+    under the new minimal-default polarity (rows/sections/footers). Scenarios
+    that explicitly need to assert minimal output overwrite ``args`` themselves.
     """
+    extra = ("--verbose",) if "--verbose" not in args and "--quiet" not in args else ()
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *args],
+        [sys.executable, "-m", "interlocks.cli", *args, *extra],
         cwd=cwd,
         capture_output=True,
         text=True,

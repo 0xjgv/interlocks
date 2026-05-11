@@ -281,10 +281,11 @@ def test_truncate_dump_env_escape_disables_cap(monkeypatch: pytest.MonkeyPatch) 
     assert _truncate_dump(text) == text
 
 
-def test_quiet_suppresses_ok_rows_still_records_results(
+def test_minimal_default_suppresses_ok_rows_still_records_results(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr("interlocks.ui.is_quiet", lambda: True)
+    # Override conftest's verbose-on default to exercise minimal-default polarity.
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
     reset_results()
     run_tasks([
         _python_task("Alpha", "print('a')"),
@@ -297,10 +298,10 @@ def test_quiet_suppresses_ok_rows_still_records_results(
     assert set(results_snapshot()) == {("alpha", True), ("bravo", True)}
 
 
-def test_quiet_still_shows_fail_rows(
+def test_minimal_default_still_shows_fail_rows(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr("interlocks.ui.is_quiet", lambda: True)
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
     reset_results()
     tasks = [
         _python_task("Good", "print('ok')"),

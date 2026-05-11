@@ -10,7 +10,7 @@ def test_standalone_behavior_attribution_creates_evidence(tmp_path: Path) -> Non
     _write_tiny_attribution_project(tmp_path)
 
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "behavior-attribution"],
+        [sys.executable, "-m", "interlocks.cli", "behavior-attribution", "--verbose"],
         cwd=tmp_path,
         capture_output=True,
         text=True,

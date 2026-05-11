@@ -81,12 +81,13 @@ def _cmd_setup_install(project_root: Path) -> None:
     ui.section("Status")
     _render_status(setup_artifact_statuses(project_root))
 
-    ui.section("Next Steps")
-    ui.message_list([
-        "Run `interlocks check` after edits.",
-        "Run `interlocks doctor` to diagnose readiness or failures.",
-        "Wire shared CI manually, or run `interlocks setup --ci=github` for GitHub Actions.",
-    ])
+    if ui.is_verbose():
+        ui.section("Next Steps")
+        ui.message_list([
+            "Run `interlocks check` after edits.",
+            "Run `interlocks doctor` to diagnose readiness or failures.",
+            "Wire shared CI manually, or run `interlocks setup --ci=github` for GitHub Actions.",
+        ])
 
 
 def _cmd_setup_ci_install(project_root: Path) -> None:
@@ -113,11 +114,12 @@ def _cmd_setup_ci_install(project_root: Path) -> None:
     if advance_installed is not None:
         statuses.append(SetupArtifactStatus(ADVANCE_ARTIFACT, advance_installed))
     _render_status(statuses)
-    ui.section("Next Steps")
-    ui.message_list([
-        "Run `interlocks setup --ci=github --check` to verify CI wiring.",
-        "Commit the workflow file after reviewing the action pin and install-command policy.",
-    ])
+    if ui.is_verbose():
+        ui.section("Next Steps")
+        ui.message_list([
+            "Run `interlocks setup --ci=github --check` to verify CI wiring.",
+            "Commit the workflow file after reviewing the action pin and install-command policy.",
+        ])
 
 
 def _maybe_install_advance_workflow(project_root: Path) -> bool | None:
@@ -188,11 +190,14 @@ def _render_check(
     """Render a `--check` section: status table + Next Steps; exit 1 if anything missing."""
     ui.section(title)
     _render_status(statuses)
-    ui.section("Next Steps")
     if all(status.installed for status in statuses):
-        ui.message_list([ok_message, *(extra_lines or [])])
+        if ui.is_verbose():
+            ui.section("Next Steps")
+            ui.message_list([ok_message, *(extra_lines or [])])
         return
-    ui.message_list([fix_message, *(extra_lines or [])])
+    if ui.is_verbose():
+        ui.section("Next Steps")
+        ui.message_list([fix_message, *(extra_lines or [])])
     sys.exit(1)
 
 

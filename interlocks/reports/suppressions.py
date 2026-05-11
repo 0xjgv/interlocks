@@ -56,11 +56,15 @@ def _scan_suppressions(roots: Iterable[str] | None = None) -> dict[str, list[lis
 
 
 def print_suppressions_report() -> None:
-    """Print a report-only summary of suppressions found in source."""
+    """Print a report-only summary of suppressions found in source (verbose only).
+
+    Suppression counts are advisory background data, not blocking output. They
+    don't belong on the agent-default surface; pass ``--verbose`` to see them.
+    """
+    if not ui.is_verbose():
+        return
     results = _scan_suppressions()
     total = sum(len(v) for v in results.values())
-    if ui.is_quiet() and total == 0:
-        return
     ui.section("Suppressions")
     print(f"Suppressions: {total} total")
     if total == 0:

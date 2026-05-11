@@ -43,7 +43,7 @@ def current_skip_policy() -> SkipPolicy:
 
 
 def maybe_print_skip_banner(policy: SkipPolicy) -> None:
-    if not policy.labels or ui.is_quiet():
+    if not policy.labels or not ui.is_verbose():
         return
     labels = ", ".join(sorted(policy.labels))
     print(f"  skips active ({policy.source}): {labels}")

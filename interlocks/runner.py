@@ -25,7 +25,7 @@ GREEN = "\033[32m"
 RED = "\033[31m"
 YELLOW = "\033[33m"
 RESET = "\033[0m"
-VERBOSE = "--verbose" in sys.argv
+VERBOSE = ui.is_verbose()
 
 # Failure-dump truncation: keep first 40 + last 20 non-blank lines of each
 # stream. `INTERLOCK_DUMP_LINES=all` bypasses for CI debugging.
@@ -68,6 +68,22 @@ def reset_results() -> None:
 def results_snapshot() -> list[tuple[str, bool]]:
     """Return `(label, passed)` pairs recorded since the last reset."""
     return list(_RESULTS)
+
+
+def print_stage_verdict(stage_name: str, elapsed: float) -> None:
+    """One-line stage verdict — always prints, even in minimal-default mode.
+
+    Green path: ``<stage>: ok — N tasks, X.Ys``.
+    Red path:   ``<stage>: FAILED — <labels> (F of M) — X.Ys``.
+    Reads :func:`results_snapshot`; safe to call from any stage's final block.
+    """
+    results = results_snapshot()
+    fails = [label for label, passed in results if not passed]
+    if not fails:
+        print(f"{stage_name}: ok — {len(results)} tasks, {elapsed:.1f}s")
+        return
+    detail = ", ".join(fails)
+    print(f"{stage_name}: FAILED — {detail} ({len(fails)} of {len(results)}) — {elapsed:.1f}s")
 
 
 def tool(name: str, *args: str) -> list[str]:
@@ -147,7 +163,9 @@ def section(name: str) -> None:
 
 
 def ok(message: str) -> None:
-    """Emit a success line for a free-form message."""
+    """Emit a success line; verbose-only (ok-rows carry the verdict otherwise)."""
+    if not ui.is_verbose():
+        return
     print(f"  {_glyph('✓', GREEN)} {message}")
 
 

@@ -71,7 +71,7 @@ def tmp_project(tmp_path: Path) -> Path:
 
 def _run_cli(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *args],
+        [sys.executable, "-m", "interlocks.cli", *args, "--verbose"],
         cwd=project,
         capture_output=True,
         text=True,

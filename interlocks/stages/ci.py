@@ -13,7 +13,7 @@ from interlocks.acceptance_status import (
     classify_acceptance_with_details,
 )
 from interlocks.config import InterlockConfig, MutationCIMode, load_config
-from interlocks.runner import Task, run_tasks
+from interlocks.runner import Task, print_stage_verdict, reset_results, run_tasks
 from interlocks.skip import (
     SkipPolicy,
     current_skip_policy,
@@ -40,6 +40,7 @@ def cmd_ci() -> None:
     coverage, CRAP, (optionally) mutation."""
     start = time.monotonic()
     cfg = load_config()
+    reset_results()
     run_summary.reset()
     context = os.environ.get("INTERLOCKS_CI_CONTEXT")
     if context:
@@ -62,7 +63,8 @@ def cmd_ci() -> None:
         elapsed = time.monotonic() - start
         _write_ci_evidence(cfg, elapsed_seconds=elapsed, passed=exit_code == 0, context=context)
         run_summary.flush(cfg)
-    ui.stage_footer(elapsed)
+        ui.stage_footer(elapsed)
+        print_stage_verdict("ci", elapsed)
 
 
 def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:

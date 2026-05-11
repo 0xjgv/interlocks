@@ -45,11 +45,10 @@ Feature: interlocks CLI surface area
     And the output contains "~/.cache/interlocks/crashes/"
     And the output contains "interactive terminals prompt before opening a GitHub issue"
 
-  # req: cli-quiet
-  Scenario: interlocks help --quiet skips banner and section headers
+  # req: cli-minimal-default
+  Scenario: interlocks --quiet is rejected with exit 2
     Given I run "interlocks help --quiet"
-    Then the output does not contain "command=help"
-    And the output does not contain "── "
+    Then the output contains "--quiet was removed"
 
   # req: cli-command-help
   Scenario: command-specific help is non-destructive

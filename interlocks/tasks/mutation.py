@@ -191,10 +191,10 @@ def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
     Full mutmut stream is mirrored to ``.interlocks/mutation.log`` so noisy lines
     (spinner ticks, fork ``DeprecationWarning``) can be hidden by default while
     remaining recoverable on failure. ``--verbose`` passes through unfiltered;
-    ``--quiet`` prints nothing here (the ok/fail row carries the verdict).
+    minimal-default mode prints nothing here (the ok/fail row carries the verdict).
     """
     log_path = _ensure_log_path()
-    quiet = ui.is_quiet()
+    quiet = not ui.is_verbose()
     env = {**os.environ, "PYTHONWARNINGS": "ignore::DeprecationWarning"}
 
     last_progress: str | None = None
@@ -253,7 +253,7 @@ def _run_mutmut(mutmut: list[str], timeout: int) -> tuple[bool, Path]:
 
 
 def _print_survivors(survived: list[str], changed: set[str] | None) -> None:
-    if ui.is_quiet():
+    if not ui.is_verbose():
         return
     shown = [s for s in survived if changed is None or _mutant_in_changed(s, changed)][:20]
     if not shown:
@@ -290,7 +290,7 @@ def _report_mutation(
     partial = "" if completed else " (partial — timeout)"
     if failed:
         fail(f"Mutation: score {summary.score:.1f}% below threshold {min_score:.1f}%{partial}")
-        if ui.is_quiet():
+        if not ui.is_verbose():
             print(f"  log: {log_path}")
     else:
         ok(f"Mutation: score {summary.score:.1f}% (killed {summary.killed}/{total}){partial}")
@@ -350,7 +350,7 @@ def cmd_mutation(
     if globs == []:
         warn_skip(f"Mutation: no changed src files vs {cfg.mutation_since_ref}")
         return
-    if globs and not ui.is_quiet():
+    if globs and ui.is_verbose():
         print(f"  mutating {len(globs)} module(s) changed vs {cfg.mutation_since_ref}")
 
     completed, log_path = _run_mutmut(

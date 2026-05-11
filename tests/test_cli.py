@@ -85,8 +85,9 @@ def test_tasks_dict_built_from_groups() -> None:
 def test_cmd_help_prints_usage_and_groups(capsys: pytest.CaptureFixture[str]) -> None:
     cmd_help()
     out = capsys.readouterr().out
-    assert "interlocks v" in out
-    assert "command=help" in out
+    # Help drops the chrome banner; minimal-default emits just usage + groups.
+    assert "command=help" not in out
+    assert not re.search(r"interlocks v\d", out)
     assert "Usage: interlocks <command>" in out
     assert "── Usage" in out
     assert "── More" in out
@@ -133,8 +134,9 @@ def test_cmd_presets_prints_options_and_copyable_config(
 ) -> None:
     cmd_presets()
     out = capsys.readouterr().out
-    assert "interlocks v" in out
-    assert "command=presets" in out
+    # Presets drops the chrome banner.
+    assert not re.search(r"interlocks v\d", out)
+    assert "command=presets" not in out
     assert "── Current" in out
     assert "── Current Values" in out
     assert "coverage_min" in out
@@ -431,7 +433,8 @@ def test_cmd_config_lists_all_keys(
     cmd_config()
 
     out = capsys.readouterr().out
-    assert "command=config" in out
+    # Config drops the chrome banner.
+    assert "command=config" not in out
     assert "── Status" in out
     assert "── Resolved values" in out
     assert "── Config keys" in out
@@ -473,7 +476,7 @@ def test_cmd_config_show_reports_bundled_tool_config(
     cmd_config()
 
     out = capsys.readouterr().out
-    assert "command=config show ruff" in out
+    assert "command=config show ruff" not in out
     assert re.search(r"source\s+bundled", out)
     assert "Bundled config is used only when the project has no native tool config." in out
 

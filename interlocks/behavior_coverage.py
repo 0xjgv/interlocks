@@ -116,7 +116,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     Behavior(
         "cli-version", "cli", "version command prints package version", "interlocks.cli:main"
     ),
-    Behavior("cli-quiet", "cli", "quiet flag suppresses banner chrome", "interlocks.cli:main"),
+    Behavior(
+        "cli-minimal-default",
+        "cli",
+        "minimal-by-default output rejects --quiet",
+        "interlocks.cli:main",
+    ),
     Behavior(
         "cli-command-help",
         "cli",

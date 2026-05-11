@@ -19,7 +19,7 @@ Feature: interlocks stage commands on a minimal inline project
     Given a minimal tmp project
     When I run "interlocks pre-commit" in the tmp project
     Then the stage exits 0
-    And the stage output contains "No staged Python files"
+    And the stage output contains "pre-commit: skipped"
 
   # req: stage-ci
   Scenario: `interlocks ci` runs the full verification pipeline

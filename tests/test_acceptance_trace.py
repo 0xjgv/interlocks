@@ -63,7 +63,7 @@ def test_trace_failure_is_diagnostic_and_preserves_runner_exit_zero(
             json.dumps({
                 "project_root": str(tmp_path),
                 "public_symbols": ["interlocks.cli:main"],
-                "runner_cmd": [sys.executable, "-m", "interlocks.cli", "help", "--quiet"],
+                "runner_cmd": [sys.executable, "-m", "interlocks.cli", "help"],
             }),
         ],
         capture_output=True,

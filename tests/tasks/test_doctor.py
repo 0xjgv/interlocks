@@ -38,12 +38,30 @@ def _run_doctor(cwd: Path) -> subprocess.CompletedProcess[str]:
 def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     result = _run_doctor(tmp_path)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    # Minimal-default doctor emits a single status line + bulletized blockers.
+    assert result.stdout.startswith("doctor: blocked")
+    assert "missing pyproject.toml" in result.stdout
+
+
+def test_doctor_tmpdir_verbose_full_report(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{_INTERLOCK_PARENT}{os.pathsep}{existing}" if existing else _INTERLOCK_PARENT
+    )
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "doctor", "--verbose"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "pyproject.toml" in result.stdout
     assert "(missing)" in result.stdout
     assert "status                 blocked" in result.stdout
     assert "missing pyproject.toml" in result.stdout
-    # Section headers show up so the report is grouped, not a blob.
-    assert "command=doctor" in result.stdout
     assert "── Readiness" in result.stdout
     assert "── Detected Configuration" in result.stdout
     assert "── Blockers" in result.stdout
@@ -74,7 +92,6 @@ def test_doctor_in_process_reports_sections(
         clear_cache()
 
     captured = capsys.readouterr()
-    assert "command=doctor" in captured.out
     assert "── Readiness" in captured.out
     assert "── Detected Configuration" in captured.out
     assert "── Setup Checklist" in captured.out

@@ -64,10 +64,8 @@ def _cmd_show(cfg: InterlockConfig, *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(_floor_to_dict(cfg, floor), sort_keys=True, indent=2))
         return
-    ui.command_banner("baseline show", cfg)
     if floor.is_empty:
-        ui.section("Floor")
-        print("  (no baseline recorded — run `interlocks baseline init`)")
+        print("(no baseline recorded — run `interlocks baseline init`)")
         return
     ui.section("Floor")
     ui.kv_block(_floor_rows(floor))
@@ -91,8 +89,8 @@ def _cmd_init(cfg: InterlockConfig, *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps(_floor_to_dict(cfg, floor), sort_keys=True, indent=2))
         return
-    ui.command_banner("baseline init", cfg)
-    ok(f"wrote {cfg.relpath(target)}")
+    if ui.is_verbose():
+        ok(f"wrote {cfg.relpath(target)}")
     ui.section("Floor")
     ui.kv_block(_floor_rows(floor))
 
@@ -105,19 +103,18 @@ def _cmd_advance(cfg: InterlockConfig, *, json_mode: bool, auto_pr: bool) -> Non
         if json_mode:
             print(json.dumps({"advanced": False}, sort_keys=True))
             return
-        ui.command_banner("baseline advance", cfg)
-        print("  no improvement vs current floor — leaving baseline.json unchanged")
+        print("no improvement vs current floor — leaving baseline.json unchanged")
         return
     target = write_baseline(cfg, new_floor)
     if json_mode:
         payload = {"advanced": True, "auto_pr": auto_pr, **_floor_to_dict(cfg, new_floor)}
         print(json.dumps(payload, sort_keys=True, indent=2))
         return
-    ui.command_banner("baseline advance", cfg)
-    ok(f"updated {cfg.relpath(target)}")
+    if ui.is_verbose():
+        ok(f"updated {cfg.relpath(target)}")
     ui.section("New floor")
     ui.kv_block(_floor_rows(new_floor))
-    if auto_pr:
+    if auto_pr and ui.is_verbose():
         ui.section("Auto-PR")
         print("  (workflow will open the chore(baseline): … PR)")
 
@@ -141,9 +138,9 @@ def _cmd_check(cfg: InterlockConfig, *, json_mode: bool) -> None:
         if regressions:
             sys.exit(1)
         return
-    ui.command_banner("baseline check", cfg)
     if not regressions:
-        ok("measured values meet or beat the recorded floor")
+        if ui.is_verbose():
+            ok("measured values meet or beat the recorded floor")
         return
     for line in regressions:
         print(f"  ✗ {line}")

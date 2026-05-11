@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import shutil
 import sys
-import time
 import tomllib
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -63,7 +62,6 @@ def task_doctor() -> Task | None:
 
 
 def cmd_doctor() -> None:
-    start = time.monotonic()
     project_root = find_project_root()
     pyproject_path = project_root / "pyproject.toml"
 
@@ -79,28 +77,27 @@ def cmd_doctor() -> None:
     is_blocked = bool(blockers or failures or any(r.state == "fail" for r in rows))
     gap_count = sum(1 for r in rows if r.state == "warn")
 
-    ui.command_banner("doctor", cfg)
-    ui.section("Readiness")
-    _print_readiness(is_blocked, gap_count)
-
-    ui.section("Detected Configuration")
-    _print_configuration(project_root, cfg, pyproject_path)
-
-    ui.section("Setup Checklist")
-    _render_setup_checklist(rows)
-
-    ui.section("Blockers")
-    ui.message_list([*failures, *blockers], empty="none")
-
-    ui.section("Warnings")
-    ui.message_list(warnings, empty="none")
-
-    ui.section("Next Steps")
-    ui.message_list(
-        _next_steps(rows, is_blocked),
-        empty="Run `interlocks check` locally.",
-    )
-    ui.command_footer(start)
+    if ui.is_verbose():
+        ui.section("Readiness")
+        _print_readiness(is_blocked, gap_count)
+        ui.section("Detected Configuration")
+        _print_configuration(project_root, cfg, pyproject_path)
+        ui.section("Setup Checklist")
+        _render_setup_checklist(rows)
+        ui.section("Blockers")
+        ui.message_list([*failures, *blockers], empty="none")
+        ui.section("Warnings")
+        ui.message_list(warnings, empty="none")
+        ui.section("Next Steps")
+        ui.message_list(
+            _next_steps(rows, is_blocked),
+            empty="Run `interlocks check` locally.",
+        )
+    else:
+        status, _summary = _readiness(is_blocked, gap_count)
+        print(f"doctor: {status}")
+        for line in (*failures, *blockers):
+            print(f"  - {line}")
 
     if failures:
         sys.exit(1)

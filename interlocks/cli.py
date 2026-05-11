@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import re
 import sys
-import time
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -19,7 +18,7 @@ from interlocks.config import (
     supported_presets,
 )
 from interlocks.crash import CrashBoundary
-from interlocks.runner import fail_skip, ok, preflight
+from interlocks.runner import fail_skip, preflight
 from interlocks.skip import validate_cli_skip
 from interlocks.stages.check import cmd_check
 from interlocks.stages.ci import cmd_ci
@@ -63,9 +62,7 @@ if TYPE_CHECKING:
 
 
 def cmd_help(*, advanced: bool = False) -> None:
-    start = time.monotonic()
     cfg = load_optional_config()
-    ui.command_banner("help", cfg)
     ui.section("Usage")
     print("  Usage: interlocks <command>")
     if advanced:
@@ -87,19 +84,14 @@ def cmd_help(*, advanced: bool = False) -> None:
         ui.section("More")
         print("  Run `interlocks help --advanced` to see the full command catalog.")
     _print_detected_block(cfg)
-    ui.command_footer(start)
 
 
 def cmd_task_help(task_name: str) -> None:
-    start = time.monotonic()
-    cfg = load_optional_config()
     _, description = TASKS[task_name]
-    ui.command_banner("help", cfg)
     ui.section("Usage")
     print(f"  Usage: interlocks {task_name}")
     ui.section("Command")
     _print_command_row(task_name, description, len(task_name) + 2)
-    ui.command_footer(start)
 
 
 def cmd_help_from_argv() -> None:
@@ -136,30 +128,28 @@ _PRESET_REPORTED_KEYS: tuple[str, ...] = (
 
 
 def cmd_presets() -> None:
-    start = time.monotonic()
-    if _maybe_handle_presets_set(start):
+    if _maybe_handle_presets_set():
         return
-    _cmd_presets_list(start)
+    _cmd_presets_list()
 
 
-def _maybe_handle_presets_set(start: float) -> bool:
+def _maybe_handle_presets_set() -> bool:
     raw = [a for a in sys.argv[1:] if not a.startswith("-")]
     # Trailing args only carry preset selection when invoked as `... presets ...`.
     args = raw[1:] if raw and raw[0] == "presets" else []
     if not args:
         return False
     if args[0] == "set":
-        _cmd_presets_set(args[1:], start=start)
+        _cmd_presets_set(args[1:])
     elif len(args) == 1:
-        _cmd_presets_set(args, start=start)
+        _cmd_presets_set(args)
     else:
         fail_skip(_presets_usage())
     return True
 
 
-def _cmd_presets_list(start: float) -> None:
+def _cmd_presets_list() -> None:
     cfg = load_optional_config()
-    ui.command_banner("presets", cfg)
     ui.section("Current")
     ui.kv_block([("preset", cfg.preset if cfg is not None and cfg.preset else "(none)")])
     if cfg is not None:
@@ -176,6 +166,8 @@ def _cmd_presets_list(start: float) -> None:
             + f"mutation score>={defaults['mutation_min_score']}  "
             + f"mutation_ci={defaults['mutation_ci_mode']}"
         )
+    if not ui.is_verbose():
+        return
     ui.section("Next Steps")
     print("  Set a project preset with the CLI:")
     print()
@@ -187,7 +179,6 @@ def _cmd_presets_list(start: float) -> None:
     print()
     print("  Preset thresholds are defaults. You can manually override any threshold")
     print("  in the same [tool.interlocks] table in pyproject.toml.")
-    ui.command_footer(start)
 
 
 def _presets_usage() -> str:
@@ -195,7 +186,7 @@ def _presets_usage() -> str:
     return f"usage: interlocks presets [<{choices}>] or interlocks presets set <{choices}>"
 
 
-def _cmd_presets_set(args: list[str], *, start: float) -> None:
+def _cmd_presets_set(args: list[str]) -> None:
     presets = supported_presets()
     choices = "|".join(presets)
     if len(args) != 1:
@@ -209,12 +200,9 @@ def _cmd_presets_set(args: list[str], *, start: float) -> None:
     if not pyproject.is_file():
         fail_skip("presets set: no pyproject.toml — run `interlocks init` to scaffold")
 
-    ui.command_banner("presets set", cfg)
-    ui.section("Preset")
     _write_project_preset(pyproject, preset)
     clear_cache()
-    ok(f"set [tool.interlocks] preset = {preset!r} in {cfg.relpath(pyproject)}")
-    ui.command_footer(start)
+    print(f"set [tool.interlocks] preset = {preset!r} in {cfg.relpath(pyproject)}")
 
 
 def _write_project_preset(pyproject: Path, preset: str) -> None:
@@ -290,6 +278,8 @@ def _alias_suffix(name: str) -> str:
 
 def _print_detected_block(cfg: InterlockConfig | None) -> None:
     if cfg is None:
+        return
+    if not ui.is_verbose():
         return
     ui.section("Detected")
     detected: list[tuple[str, str]] = [
@@ -425,6 +415,13 @@ TASKS: dict[str, tuple[Callable[..., None], str]] = {
 
 def main() -> None:
     raw_args = sys.argv[1:]
+    if "--quiet" in raw_args:
+        print(
+            "interlocks: --quiet was removed; minimal output is the default. "
+            "Pass --verbose for full output.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     args = [a for a in raw_args if not a.startswith("-")]
 
     if not args:

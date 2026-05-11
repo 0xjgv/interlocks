@@ -16,8 +16,8 @@ from interlocks.reports.suppressions import print_suppressions_report
 from interlocks.runner import (
     Task,
     arg_flag_value,
+    print_stage_verdict,
     reset_results,
-    results_snapshot,
     run,
     run_tasks,
     warn_skip,
@@ -61,10 +61,11 @@ def cmd_check() -> None:
     ui.banner(cfg)
     if scope_ref is not None and not scoped_files:
         ui.section("Quality Checks")
-        print(f"  scope=changed vs {scope_ref} — no Python files changed; nothing to check")
+        if ui.is_verbose():
+            print(f"  scope=changed vs {scope_ref} — no Python files changed; nothing to check")
         _print_footer(time.monotonic() - start)
         return
-    if scoped_files:
+    if scoped_files and ui.is_verbose():
         ui.section("Scope")
         print(f"  changed vs {scope_ref} — {len(scoped_files)} file(s)")
 
@@ -140,14 +141,6 @@ def _skip_under_changed(label: str, reason: str) -> None:
 
 
 def _print_footer(elapsed: float) -> None:
-    """Verdict line when quiet (agent/LLM path); standard stage footer otherwise."""
-    if not ui.is_quiet():
-        ui.stage_footer(elapsed)
-        return
-    results = results_snapshot()
-    fails = [label for label, ok in results if not ok]
-    if not fails:
-        print(f"check: ok — {len(results)} tasks, {elapsed:.1f}s")
-        return
-    detail = ", ".join(fails)
-    print(f"check: FAILED — {detail} ({len(fails)} of {len(results)}) — {elapsed:.1f}s")
+    """Always emit the one-line verdict; verbose adds the chrome footer."""
+    ui.stage_footer(elapsed)
+    print_stage_verdict("check", elapsed)

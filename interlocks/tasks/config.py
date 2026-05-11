@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import sys
-import time
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -31,18 +30,15 @@ if TYPE_CHECKING:
 
 
 def cmd_config() -> None:
-    start = time.monotonic()
     args = _config_args()
     if args and args[0] == "show":
-        _cmd_config_show(args[1:], start=start)
+        _cmd_config_show(args[1:])
         return
     if args:
         fail_skip(_config_usage())
     project_root = find_project_root()
     pyproject = project_root / "pyproject.toml"
     cfg = load_optional_config()
-
-    ui.command_banner("config", cfg)
 
     ui.section("Status")
     _print_status(cfg, pyproject_present=pyproject.is_file())
@@ -52,6 +48,9 @@ def cmd_config() -> None:
 
     ui.section("Config keys")
     _print_keys()
+
+    if not ui.is_verbose():
+        return
 
     ui.section("Precedence")
     for line in _PRECEDENCE_LINES:
@@ -63,8 +62,6 @@ def cmd_config() -> None:
 
     ui.section("Next steps")
     _print_next_steps(cfg, pyproject_present=pyproject.is_file())
-
-    ui.command_footer(start)
 
 
 def _config_args() -> list[str]:
@@ -81,7 +78,7 @@ def _config_usage() -> str:
     return f"usage: interlocks config [show <{tools}> [--bundled-only] [--json]]"
 
 
-def _cmd_config_show(args: list[str], *, start: float) -> None:
+def _cmd_config_show(args: list[str]) -> None:
     json_output = False
     bundled_only = False
     positional: list[str] = []
@@ -103,10 +100,8 @@ def _cmd_config_show(args: list[str], *, start: float) -> None:
         _print_tool_source_json(cfg, source, bundled_only=bundled_only)
         return
 
-    ui.command_banner(f"config show {positional[0]}", cfg)
     ui.section("Tool config")
     _print_tool_source(cfg, source, bundled_only=bundled_only)
-    ui.command_footer(start)
 
 
 def _print_tool_source(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import textwrap
@@ -90,7 +91,26 @@ def test_check_passes_on_clean_project(tmp_project: Path) -> None:
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     out = result.stdout
-    assert "interlocks v" in out
+    # Minimal-default: green check emits a single verdict line, no chrome.
+    assert "Quality Checks" not in out
+    assert "Parallel" not in out
+    assert "Suppressions" not in out
+    assert "Completed in" not in out
+    assert out.strip().splitlines()[-1].startswith("check: ok — ")
+
+
+def test_check_passes_on_clean_project_verbose(tmp_project: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "check", "--verbose"],
+        cwd=tmp_project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    out = result.stdout
+    assert re.search(r"interlocks v\d", out)
     assert "Quality Checks" in out
     assert "Parallel" in out
     assert "Advisory" in out
@@ -100,6 +120,7 @@ def test_check_passes_on_clean_project(tmp_project: Path) -> None:
     assert "[test]" in out
     assert "Suppressions" in out
     assert "Completed in" in out
+    assert "check: ok — " in out
 
 
 def test_check_fixes_trivially_fixable_lint(tmp_project: Path) -> None:
@@ -221,22 +242,12 @@ def test_check_in_process_runs_suppressions_on_failure(
     assert calls == ["fix", "suppressions"]
 
 
-def _run_check_quiet(cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-P", "-m", "interlocks.cli", "check", "--quiet"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
-def test_check_quiet_success_is_one_verdict_line(tmp_project: Path) -> None:
-    result = _run_check_quiet(tmp_project)
+def test_check_success_is_one_verdict_line(tmp_project: Path) -> None:
+    result = _run_check(tmp_project)
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     out = result.stdout
-    assert "interlocks v" not in out
+    assert not re.search(r"interlocks v\d", out)
     assert "Quality Checks" not in out
     assert "Parallel" not in out
     assert "Advisory" not in out
@@ -245,7 +256,7 @@ def test_check_quiet_success_is_one_verdict_line(tmp_project: Path) -> None:
     assert out.strip().splitlines()[-1].startswith("check: ok — ")
 
 
-def test_check_quiet_failure_emits_failed_verdict(tmp_project: Path) -> None:
+def test_check_failure_emits_failed_verdict(tmp_project: Path) -> None:
     failing = textwrap.dedent(
         '''\
         """Failing test."""
@@ -260,13 +271,25 @@ def test_check_quiet_failure_emits_failed_verdict(tmp_project: Path) -> None:
     )
     (tmp_project / "tests" / "test_add.py").write_text(failing, encoding="utf-8")
 
-    result = _run_check_quiet(tmp_project)
+    result = _run_check(tmp_project)
 
     assert result.returncode != 0
     out = result.stdout
     assert "Quality Checks" not in out
     assert "[test]" in out  # failing row preserved
     assert any(line.startswith("check: FAILED — ") for line in out.splitlines()), out
+
+
+def test_check_quiet_argv_is_rejected(tmp_project: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "check", "--quiet"],
+        cwd=tmp_project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "--quiet was removed" in result.stderr
 
 
 # ─────────────── require_acceptance + run_acceptance_in_check ───────────────
@@ -377,5 +400,7 @@ def test_check_fails_when_tests_fail(tmp_project: Path) -> None:
     result = _run_check(tmp_project)
 
     assert result.returncode != 0
-    # Suppressions report runs in `finally`, so it must still appear.
-    assert "Suppressions" in result.stdout
+    # Failure dump runs from `finally` — verdict line plus the failing-row are preserved.
+    out = result.stdout
+    assert "[test]" in out
+    assert "check: FAILED — " in out
