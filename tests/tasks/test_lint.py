@@ -118,3 +118,60 @@ def test_lint_omits_config_when_project_has_ruff_sidecar(
     (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     assert "--config" not in task_lint().cmd
+
+
+def test_lint_omits_config_when_project_has_dot_ruff_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Project with .ruff.toml sidecar: task_lint must NOT pass --config."""
+    from interlocks.tasks.lint import task_lint
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    (tmp_path / ".ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert "--config" not in task_lint().cmd
+
+
+def test_lint_still_injects_config_when_only_basedpyright_section_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.basedpyright] must NOT suppress ruff --config (cross-tool isolation)."""
+    from interlocks.tasks.lint import task_lint
+
+    (tmp_path / "pyproject.toml").write_text(
+        _BARE_PYPROJECT + "\n[tool.basedpyright]\ntypeCheckingMode = 'standard'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_lint().cmd
+    assert "--config" in cmd
+    assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
+
+
+# ─────────────── tool pin propagation ──────────────────────────────
+
+
+def test_lint_task_uses_ruff_pin_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """[tool.interlocks.tools] ruff override must appear in the uvx --from spec."""
+    from interlocks.defaults.tools import default_pin
+    from interlocks.tasks.lint import task_lint
+
+    custom_pin = "0.1.0"
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(f"""\
+            [project]
+            name = "ruffpin"
+            version = "0.0.0"
+
+            [tool.ruff]
+            target-version = "py311"
+
+            [tool.interlocks.tools]
+            ruff = "{custom_pin}"
+            """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_lint().cmd
+    assert f"ruff=={custom_pin}" in cmd
+    assert f"ruff=={default_pin('ruff')}" not in cmd

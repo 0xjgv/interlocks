@@ -123,6 +123,25 @@ def test_typecheck_omits_config_when_project_has_pyrightconfig_sidecar(
     assert "--project" not in task_typecheck().cmd
 
 
+def test_typecheck_still_injects_config_when_only_ruff_section_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.ruff] must NOT suppress basedpyright --project (cross-tool isolation)."""
+    from interlocks.tasks.typecheck import task_typecheck
+
+    (tmp_path / "pyproject.toml").write_text(
+        _BARE_PYPROJECT + "\n[tool.ruff]\nline-length = 99\n",
+        encoding="utf-8",
+    )
+    pkg = tmp_path / "interlocks"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    cmd = task_typecheck().cmd
+    assert "--project" in cmd
+    assert Path(cmd[cmd.index("--project") + 1]).name == "pyrightconfig.json"
+
+
 # ─────────────── target venv pythonpath ─────────────────────
 
 
@@ -261,6 +280,40 @@ def test_typecheck_pyright_sidecar_omits_project_but_keeps_pythonpath(
 
     assert "--project" not in cmd
     assert cmd[cmd.index("--pythonpath") + 1] == str(python)
+
+
+# ─────────────── tool pin propagation ──────────────────────────────
+
+
+def test_typecheck_task_uses_basedpyright_pin_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.interlocks.tools] basedpyright override must appear in the uvx --from spec."""
+    from interlocks.defaults.tools import default_pin
+    from interlocks.tasks.typecheck import task_typecheck
+
+    custom_pin = "1.0.0"
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(f"""\
+            [project]
+            name = "pyrightpin"
+            version = "0.0.0"
+
+            [tool.basedpyright]
+            typeCheckingMode = "standard"
+
+            [tool.interlocks.tools]
+            basedpyright = "{custom_pin}"
+            """),
+        encoding="utf-8",
+    )
+    pkg = tmp_path / "pyrightpin"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    cmd = task_typecheck().cmd
+    assert f"basedpyright=={custom_pin}" in cmd
+    assert f"basedpyright=={default_pin('basedpyright')}" not in cmd
 
 
 @pytest.mark.slow

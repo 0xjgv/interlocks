@@ -74,3 +74,29 @@ def test_format_check_injects_bundled_config_in_bare_project(
     cmd = task_format_check().cmd
     assert "--config" in cmd
     assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
+
+
+def test_format_check_omits_config_when_project_has_tool_ruff(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.ruff] in project pyproject: task_format_check must NOT pass --config."""
+    from interlocks.tasks.format_check import task_format_check
+
+    monkeypatch.chdir(tmp_project)
+    assert "--config" not in task_format_check().cmd
+
+
+def test_format_check_still_injects_config_when_only_coverage_section_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.coverage] must NOT suppress ruff --config for format-check (cross-tool isolation)."""
+    from interlocks.tasks.format_check import task_format_check
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='bare'\nversion='0.0.0'\n\n[tool.coverage.run]\nbranch = true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_format_check().cmd
+    assert "--config" in cmd
+    assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
