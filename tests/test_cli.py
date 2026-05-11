@@ -16,6 +16,7 @@ from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
 from interlocks.config import (
     CONFIG_KEYS,
     InterlockConfig,
+    Preset,
     clear_cache,
     load_config,
     preset_defaults,
@@ -143,6 +144,7 @@ def test_cmd_presets_prints_options_and_copyable_config(
     assert "baseline" in out
     assert "strict" in out
     assert "legacy" in out
+    assert "progressive" in out
     assert "── Next Steps" in out
     assert "Set a project preset with the CLI:" in out
     assert "interlocks presets set baseline" in out
@@ -281,7 +283,93 @@ def test_cmd_presets_rejects_unknown_preset(
     assert exc.value.code == 1
     out = capsys.readouterr().out
     assert "unsupported preset: agent-safe" in out
-    assert "expected baseline|strict|legacy" in out
+    assert "expected baseline|strict|legacy|progressive" in out
+
+
+@pytest.mark.parametrize(
+    ("preset", "expected_fragment"),
+    [
+        ("baseline", "advisory CRAP"),
+        ("strict", "mature repo"),
+        ("legacy", "ratcheting"),
+        ("progressive", "autopilot ratchet"),
+    ],
+)
+def test_cmd_presets_all_four_listed_with_descriptions(
+    capsys: pytest.CaptureFixture[str],
+    preset: str,
+    expected_fragment: str,
+) -> None:
+    """All four presets appear in `interlocks presets` output with their descriptions."""
+    cmd_presets()
+    out = capsys.readouterr().out
+    assert preset in out, f"preset {preset!r} missing from presets output"
+    assert expected_fragment in out, (
+        f"description fragment {expected_fragment!r} missing for preset {preset!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("preset", "key", "expected"),
+    [
+        # baseline: advisory gates, mutation off
+        ("baseline", "enforce_crap", False),
+        ("baseline", "run_mutation_in_ci", False),
+        ("baseline", "mutation_ci_mode", "off"),
+        ("baseline", "run_acceptance_in_check", False),
+        ("baseline", "coverage_min", 70),
+        # strict: all blocking gates on, mutation incremental
+        ("strict", "enforce_crap", True),
+        ("strict", "enforce_mutation", True),
+        ("strict", "run_mutation_in_ci", True),
+        ("strict", "mutation_ci_mode", "incremental"),
+        ("strict", "run_acceptance_in_check", True),
+        ("strict", "require_acceptance", True),
+        ("strict", "coverage_min", 90),
+        # legacy: very permissive, advisory only
+        ("legacy", "enforce_crap", False),
+        ("legacy", "run_mutation_in_ci", False),
+        ("legacy", "coverage_min", 0),
+        ("legacy", "mutation_ci_mode", "off"),
+        # progressive: blocking gates on, permissive floors (ratcheted at runtime)
+        ("progressive", "enforce_crap", True),
+        ("progressive", "enforce_mutation", True),
+        ("progressive", "run_mutation_in_ci", True),
+        ("progressive", "mutation_ci_mode", "incremental"),
+        ("progressive", "run_acceptance_in_check", True),
+        ("progressive", "require_acceptance", True),
+        ("progressive", "coverage_min", 0),  # floor; ratcheted by baseline.json
+    ],
+)
+def test_preset_defaults_key_values(preset: Preset, key: str, expected: object) -> None:
+    """``preset_defaults()`` returns the documented gate values for each preset."""
+    defaults = preset_defaults(preset)
+    assert defaults[key] == expected, (
+        f"preset {preset!r}: expected {key}={expected!r}, got {defaults[key]!r}"
+    )
+
+
+def test_progressive_preset_enables_blocking_gates_when_configured(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    """``preset = progressive`` wires blocking gates (CRAP, mutation, acceptance)."""
+    _setup_project_with_interlocks(tmp_path, monkeypatch, 'preset = "progressive"')
+
+    cmd_presets()
+
+    out = capsys.readouterr().out
+    assert re.search(r"^\s*preset\s+progressive\s*$", out, re.MULTILINE), out
+    assert re.search(r"^\s*enforce_crap\s+True \(preset-derived\)\s*$", out, re.MULTILINE), out
+    assert re.search(r"^\s*enforce_mutation\s+True \(preset-derived\)\s*$", out, re.MULTILINE), out
+    assert re.search(r"^\s*run_mutation_in_ci\s+True \(preset-derived\)\s*$", out, re.MULTILINE), (
+        out
+    )
+    assert re.search(r"^\s*require_acceptance\s+True \(preset-derived\)\s*$", out, re.MULTILINE), (
+        out
+    )
 
 
 def test_cmd_presets_shorthand_rejects_extra_args(

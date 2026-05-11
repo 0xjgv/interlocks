@@ -165,12 +165,13 @@ Presets are optional defaults under `[tool.interlocks]`. Explicit values in the 
 
 ```toml
 [tool.interlocks]
-preset = "baseline"  # "baseline" | "strict" | "legacy"
+preset = "baseline"  # "baseline" | "strict" | "legacy" | "progressive"
 ```
 
 - `baseline` lowers first-adoption friction: advisory CRAP, relaxed thresholds, mutation off in CI, acceptance off in `check`.
 - `strict` is for mature repositories: stronger thresholds, blocking CRAP and mutation, mutation in CI, acceptance in `check`, and required Gherkin coverage.
 - `legacy` is for ratcheting existing repositories: very permissive thresholds, advisory gates, mutation off in CI.
+- `progressive` is an autopilot ratchet: blocking gates like `strict`, but floors are captured in `.interlocks/baseline.json` and advanced on green main merges. Start permissive; the baseline file drives thresholds upward automatically.
 
 `agent-safe` is intentionally unsupported. If configured, `interlocks doctor` reports it as an unsupported preset instead of resolving agent-specific defaults.
 

@@ -70,6 +70,16 @@ Feature: interlocks CLI surface area
     And the output contains "── Examples"
     And the output does not contain "user-global"
 
+  # req: cli-presets-parity
+  Scenario: presets command lists all four presets including progressive
+    Given I run "interlocks presets"
+    Then the output contains "── Available Presets"
+    And the output contains "baseline"
+    And the output contains "strict"
+    And the output contains "legacy"
+    And the output contains "progressive"
+    And the output contains "autopilot ratchet"
+
   # req: cli-evaluate-guidance
   Scenario: Evaluate gap guidance includes closure command
     Given I run "interlocks evaluate" on a project with a traceability gap
