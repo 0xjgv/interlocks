@@ -71,7 +71,7 @@ Feature: interlocks stage commands on a minimal inline project
     And the stage output contains "skipped under --changed"
 
   # req: stage-check
-  Scenario: `interlocks check --changed` skips each graph-wide gate with a named reason
+  Scenario: `interlocks check --changed` skips graph-wide gates and runs file-level gates
     Given a minimal tmp project initialized as a git repo
     And the tmp project has a changed Python file
     When I run "interlocks check --changed=HEAD" in the tmp project
@@ -79,15 +79,10 @@ Feature: interlocks stage commands on a minimal inline project
     And the stage output contains "test: skipped under --changed"
     And the stage output contains "deps: skipped under --changed"
     And the stage output contains "attribution: skipped under --changed"
-
-  # req: stage-check
-  Scenario: `interlocks check --changed` runs file-level gates on changed Python files
-    Given a minimal tmp project initialized as a git repo
-    And the tmp project has a changed Python file
-    When I run "interlocks check --changed=HEAD" in the tmp project
-    Then the stage exits 0
     And the stage output contains "[fix]"
+    And the stage output contains "[format]"
     And the stage output contains "[typecheck]"
+    And the stage output contains "[crap]"
 
   # req: stage-check
   Scenario: `interlocks check --changed` honors changed_ref from pyproject
