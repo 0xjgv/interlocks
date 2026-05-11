@@ -252,6 +252,27 @@ def test_task_arch_layered_template_synthesizes_with_layers(
         assert layer in contents
 
 
+def test_task_arch_uses_importlinter_sidecar_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """.importlinter sidecar in project root suppresses bundled --config."""
+    from interlocks.tasks import arch as arch_mod
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    (proj / ".importlinter").write_text(
+        "[importlinter]\nroot_package = x\n\n[contracts:test]\nname = test\ntype = forbidden\n"
+        "source_modules = x\nforbidden_modules = tests\n",
+        encoding="utf-8",
+    )
+    _stub_load_config(monkeypatch, proj, proj / "src", proj / "tests")
+    task = arch_mod.task_arch()
+    assert task is not None
+    assert task.description == "Architecture (import-linter)"
+    assert "--config" not in task.cmd
+
+
 def test_task_arch_layered_skips_when_no_layers_defined(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -280,3 +301,41 @@ def test_task_arch_layered_skips_when_no_layers_defined(
     out = capsys.readouterr().out
     assert "layered template selected" in out
     assert "arch_layers" in out
+
+
+# ─────────────── tool pin propagation ──────────────────────────────
+
+
+def test_task_arch_uses_import_linter_pin_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """[tool.interlocks.tools] import-linter override must appear in the uvx --from spec.
+
+    Uses a user [tool.importlinter] section to take the simpler user-contracts path
+    (no temp INI needed) and keep setup minimal — only the pin is under test.
+    """
+    from interlocks.defaults.tools import default_pin
+    from interlocks.tasks import arch as arch_mod
+
+    custom_pin = "2.0.0"
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text(
+        textwrap.dedent(f"""\
+            [project]
+            name = "archpin"
+            version = "0.0.0"
+
+            [tool.importlinter]
+            root_package = archpin
+
+            [tool.interlocks.tools]
+            import-linter = "{custom_pin}"
+            """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(proj)
+    task = arch_mod.task_arch()
+    assert task is not None
+    assert f"import-linter=={custom_pin}" in task.cmd
+    assert f"import-linter=={default_pin('import-linter')}" not in task.cmd

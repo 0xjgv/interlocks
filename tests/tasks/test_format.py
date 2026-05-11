@@ -88,3 +88,34 @@ def test_format_injects_bundled_config_in_bare_project(
     cmd = task_format().cmd
     assert "--config" in cmd
     assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
+
+
+def test_format_omits_config_when_project_has_ruff_sidecar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ruff.toml sidecar: task_format must NOT pass --config."""
+    from interlocks.tasks.format import task_format
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='bare'\nversion='0.0.0'\n", encoding="utf-8"
+    )
+    (tmp_path / "ruff.toml").write_text("line-length = 99\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert "--config" not in task_format().cmd
+
+
+def test_format_still_injects_config_when_only_basedpyright_section_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """[tool.basedpyright] must NOT suppress ruff --config for format (cross-tool isolation)."""
+    from interlocks.tasks.format import task_format
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='bare'\nversion='0.0.0'\n\n"
+        "[tool.basedpyright]\ntypeCheckingMode = 'standard'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    cmd = task_format().cmd
+    assert "--config" in cmd
+    assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
