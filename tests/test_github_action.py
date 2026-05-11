@@ -10,6 +10,14 @@ import pytest
 from interlocks import github_action
 
 
+def _repo_file(relative_path: str) -> Path:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / relative_path
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(relative_path)
+
+
 def test_command_from_args_defaults_to_interlock_ci() -> None:
     assert github_action._command_from_args(()) == ["interlocks", "ci"]
 
@@ -90,3 +98,17 @@ def test_action_metadata_delegates_to_interlock_ci() -> None:
     assert "ruff" not in action
     assert "coverage run" not in action
     assert "pip install interlocks" not in action
+
+
+def test_ci_workflow_self_test_prepares_project_before_local_action() -> None:
+    workflow = _repo_file(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    self_test = workflow[workflow.index("  self-test-action:") :]
+
+    checkout = self_test.index("      - uses: actions/checkout@v6")
+    setup_uv = self_test.index("      - uses: astral-sh/setup-uv@v8.1.0")
+    uv_sync = self_test.index("        run: uv sync")
+    local_action = self_test.index("      - uses: ./")
+
+    assert checkout < setup_uv < uv_sync < local_action
+    assert '          install-command: "uv tool install ."' in self_test
+    assert '          command: "interlocks ci"' in self_test
