@@ -164,3 +164,37 @@ def test_warm_treats_empty_tools_txt_as_missing(
     warm_mod.cmd_warm()
 
     assert "tools.txt missing" in capsys.readouterr().out
+
+
+def test_tools_txt_path_resolves_inside_package() -> None:
+    """_tools_txt_path must point to interlocks/defaults/tools.txt inside the package."""
+    p = warm_mod._tools_txt_path()
+    assert p.name == "tools.txt"
+    assert p.parent.name == "defaults"
+    assert p.parent.parent.name == "interlocks"
+
+
+def test_warm_per_tool_uses_pinned_versions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every uvx invocation in per-tool fallback mode must carry the version pin from DEFAULTS."""
+    monkeypatch.chdir(_project_with_pyproject(tmp_path))
+    monkeypatch.setattr(warm_mod.shutil, "which", lambda _name: "/usr/bin/uv")
+    monkeypatch.setattr(warm_mod, "_tools_txt_path", lambda: tmp_path / "missing.txt")
+
+    captured: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_: object) -> _StubProc:
+        captured.append(cmd)
+        return _StubProc(returncode=0)
+
+    monkeypatch.setattr(warm_mod.subprocess, "run", fake_run)
+    warm_mod.cmd_warm()
+
+    joined = [" ".join(cmd) for cmd in captured]
+    for name, version in DEFAULTS.items():
+        spec = f"{name}=={version}"
+        assert any(spec in cmd for cmd in joined), (
+            f"Expected {spec!r} in one of the uvx calls but got: {captured}"
+        )
