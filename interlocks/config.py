@@ -689,7 +689,7 @@ def load_optional_config(start: Path | None = None) -> InterlockConfig | None:
     """
     try:
         return load_config(start)
-    except (OSError, tomllib.TOMLDecodeError, InterlockConfigError):
+    except (OSError, InterlockConfigError):
         return None
 
 

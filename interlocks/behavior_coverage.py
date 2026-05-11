@@ -373,6 +373,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "a subprocess gate failure exits via SystemExit without entering capture",
         "interlocks.crash.boundary:CrashBoundary",
     ),
+    Behavior(
+        "crash-malformed-config-no-capture",
+        "crash",
+        "malformed pyproject.toml raises InterlockConfigError (user error) — no crash capture",
+        "interlocks.config:InterlockConfigError",
+    ),
 )
 
 
