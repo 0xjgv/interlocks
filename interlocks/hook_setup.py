@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from interlocks.runner import ok
-from interlocks.setup_state import is_post_edit_command
+from interlocks.setup_state import _git_hooks_dir, is_post_edit_command
 
 _Container = TypeVar("_Container", dict[str, object], list[object])
 
@@ -54,7 +54,7 @@ def install_hooks(project_root: Path | None = None) -> None:
     root = project_root or Path.cwd()
     python = shlex.quote(sys.executable)
 
-    hook = root / ".git" / "hooks" / "pre-commit"
+    hook = _git_hooks_dir(root) / "pre-commit"
     hook.parent.mkdir(parents=True, exist_ok=True)
     script = f"#!/bin/sh\nexec {python} -m interlocks.cli pre-commit\n"
     hook.write_text(script, encoding="utf-8")

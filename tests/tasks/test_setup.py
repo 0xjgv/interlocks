@@ -163,6 +163,46 @@ def test_setup_check_succeeds_after_setup(
     assert "Local integrations are installed and current." in out
 
 
+def test_setup_state_no_duplicate_artifacts_in_check_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """setup_artifact_statuses returns no duplicate labels after two install runs."""
+    from interlocks.setup_state import setup_artifact_statuses
+
+    _write_pyproject(tmp_path)
+    _run_setup(monkeypatch, tmp_path)
+    _run_setup(monkeypatch, tmp_path)
+    capsys.readouterr()
+
+    statuses = setup_artifact_statuses(tmp_path)
+    labels = [s.label for s in statuses]
+    assert len(labels) == len(set(labels)), f"duplicate artifact labels: {labels}"
+
+
+def test_git_hooks_dir_returns_dot_git_hooks_for_plain_repo(tmp_path: Path) -> None:
+    """_git_hooks_dir returns <root>/.git/hooks for a normal (non-worktree) repo."""
+    from interlocks.setup_state import _git_hooks_dir
+
+    # Plain repo: .git is a directory
+    (tmp_path / ".git").mkdir()
+    assert _git_hooks_dir(tmp_path) == tmp_path / ".git" / "hooks"
+
+
+def test_git_hooks_dir_resolves_linked_worktree(tmp_path: Path) -> None:
+    """_git_hooks_dir follows a gitdir file to the common hooks directory."""
+    from interlocks.setup_state import _git_hooks_dir
+
+    main = tmp_path / "main"
+    (main / ".git" / "worktrees" / "feat").mkdir(parents=True)
+    # Write a .git file as git would in the linked worktree
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    gitdir = main / ".git" / "worktrees" / "feat"
+    (linked / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+
+    assert _git_hooks_dir(linked) == main / ".git" / "hooks"
+
+
 def _write_pyproject_with_preset(project: Path, preset: str | None) -> None:
     body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
     if preset is not None:
