@@ -186,3 +186,27 @@ def test_audit_network_skip_clean_run_prints_ok(
     audit_mod.cmd_audit(allow_network_skip=True)
 
     assert "no known vulnerabilities" in capsys.readouterr().out.lower()
+
+
+# ─────────────── tool pin propagation ───────────────────────────────
+
+
+def test_audit_pip_audit_pin_override_flows_into_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[tool.interlocks.tools] pip-audit` override replaces the bundled pin in uvx argv."""
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [project]
+            name = "pin-probe"
+            version = "0.0.1"
+            dependencies = ["requests"]
+
+            [tool.interlocks.tools]
+            pip-audit = "9.99.0"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    task = audit_mod.task_audit()
+    assert "pip-audit==9.99.0" in task.cmd
