@@ -81,3 +81,14 @@ def test_load_round_trip(tmp_project: Path) -> None:
 def test_load_returns_none_when_file_missing(tmp_project: Path) -> None:
     cfg = load_config()
     assert run_summary.load(cfg) is None
+
+
+def test_record_lint_count_round_trip(tmp_project: Path) -> None:
+    run_summary.record_lint_count(42)
+    cfg = load_config()
+    target = run_summary.flush(cfg)
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    assert payload["lint_violations"] == 42
+    loaded = run_summary.load(cfg)
+    assert loaded is not None
+    assert loaded.lint_violations == 42

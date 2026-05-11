@@ -349,6 +349,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.behavior_attribution:cmd_behavior_attribution",
     ),
     Behavior(
+        "task-lint-progressive-ratchet",
+        "task",
+        "lint counts ruff violations and gates on the progressive baseline cap",
+        "interlocks.tasks.lint:cmd_lint_progressive",
+    ),
+    Behavior(
         "crash-boundary-prints-issue-url",
         "crash",
         "internal crash captures and prints a GitHub issue URL with the original traceback",

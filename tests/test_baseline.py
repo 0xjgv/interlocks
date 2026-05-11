@@ -132,9 +132,28 @@ def test_floor_from_summary_maps_fields() -> None:
         mutation_score=60.0,
         crap_max_observed=12.0,
         attribution_coverage=0.95,
+        lint_violations=47,
     )
     floor = floor_from_summary(summary)
     assert floor.coverage_min == 80.0
     assert floor.mutation_min_score == 60.0
     assert floor.crap_max == 12.0
     assert floor.attribution_min_coverage == 0.95
+    assert floor.lint_violations_max == 47.0
+
+
+def test_baseline_lint_violations_round_trip(progressive_project: Path) -> None:
+    cfg = load_config()
+    write_baseline(cfg, BaselineFloor(lint_violations_max=47.0))
+    loaded = load_baseline(cfg)
+    assert loaded.lint_violations_max == 47.0
+
+
+def test_baseline_lint_violations_ratchets_downward(progressive_project: Path) -> None:
+    cfg = load_config()
+    write_baseline(cfg, BaselineFloor(lint_violations_max=50.0))
+    better = advance_from_summary(cfg, RunSummary(lint_violations=40))
+    assert better is not None
+    assert better.lint_violations_max == 40.0
+    worse = advance_from_summary(cfg, RunSummary(lint_violations=60))
+    assert worse is None

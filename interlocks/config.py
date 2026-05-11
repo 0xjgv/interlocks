@@ -258,6 +258,14 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
     ConfigKeyDoc("complexity_max_ccn", "int", "15", "lizard CCN cap", "Thresholds"),
     ConfigKeyDoc("complexity_max_args", "int", "7", "lizard argument count cap", "Thresholds"),
     ConfigKeyDoc("complexity_max_loc", "int", "100", "lizard LOC cap per function", "Thresholds"),
+    ConfigKeyDoc(
+        "lint_violations_max",
+        "int",
+        "(none)",
+        "Max allowed ruff violations under `progressive` preset; ratcheted via "
+        ".interlocks/baseline.json. None disables count-mode (binary pass/fail).",
+        "Thresholds",
+    ),
     ConfigKeyDoc("enforce_crap", "bool", "true", "CRAP exits 1 on offenders", "Gates"),
     ConfigKeyDoc(
         "enforce_behavior_attribution",
@@ -549,6 +557,7 @@ class InterlockConfig:
     mutation_min_coverage: float = 70.0
     mutation_max_runtime: int = 600
     mutation_min_score: float = 80.0
+    lint_violations_max: int | None = None
     enforce_crap: bool = True
     enforce_behavior_attribution: bool = False
     run_mutation_in_ci: bool = False
@@ -974,6 +983,7 @@ _INT_THRESHOLDS = (
     "complexity_max_loc",
     "complexity_max_args",
     "mutation_max_runtime",
+    "lint_violations_max",
     "pr_ci_runtime_budget_seconds",
     "pr_ci_evidence_max_age_hours",
 )
@@ -992,7 +1002,8 @@ _BOOL_THRESHOLDS = (
 )
 
 
-def _coerce_int(raw: object) -> int | None:
+def coerce_int(raw: object) -> int | None:
+    """Coerce ``raw`` to int when it is a number; return ``None`` for booleans/non-numbers."""
     if raw is None or isinstance(raw, bool):
         return None
     if isinstance(raw, int):
@@ -1025,7 +1036,7 @@ def _threshold_overrides(table: dict[str, Any]) -> dict[str, Any]:
     """
     overrides: dict[str, Any] = {}
     for keys, coerce in (
-        (_INT_THRESHOLDS, _coerce_int),
+        (_INT_THRESHOLDS, coerce_int),
         (_FLOAT_THRESHOLDS, coerce_float),
         (_BOOL_THRESHOLDS, _coerce_bool),
     ):
@@ -1047,7 +1058,7 @@ def _elevate_with_baseline(cfg: InterlockConfig) -> InterlockConfig:
     if floor.is_empty:
         return cfg
 
-    casts: dict[str, type] = {"coverage_min": int}  # rest default to float
+    casts: dict[str, type] = {"coverage_min": int, "lint_violations_max": int}
     updates: dict[str, object] = {}
     sources = dict(cfg.value_sources)
     for metric, higher_better in METRICS:
@@ -1055,7 +1066,9 @@ def _elevate_with_baseline(cfg: InterlockConfig) -> InterlockConfig:
         if floor_value is None:
             continue
         configured = getattr(cfg, metric)
-        improves = floor_value > configured if higher_better else floor_value < configured
+        improves = configured is None or (
+            floor_value > configured if higher_better else floor_value < configured
+        )
         if not improves:
             continue
         updates[metric] = casts.get(metric, float)(floor_value)

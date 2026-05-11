@@ -30,7 +30,7 @@ from interlocks.tasks.coverage import task_coverage
 from interlocks.tasks.crap import cmd_crap
 from interlocks.tasks.deps import task_deps
 from interlocks.tasks.format_check import task_format_check
-from interlocks.tasks.lint import task_lint
+from interlocks.tasks.lint import cmd_lint_progressive, task_lint
 from interlocks.tasks.mutation import cmd_mutation
 from interlocks.tasks.typecheck import task_typecheck
 
@@ -55,6 +55,8 @@ def cmd_ci() -> None:
         run_tasks(_parallel_tasks(cfg))
         # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
         ui.section("Gates")
+        if cfg.preset == "progressive":
+            run_unless_skipped("lint", cmd_lint_progressive, skip_policy)
         _post_coverage_gates(cfg, skip_policy)
     except SystemExit as exc:
         exit_code = int(exc.code) if isinstance(exc.code, int) else 1
@@ -68,15 +70,16 @@ def cmd_ci() -> None:
 
 
 def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:
-    tasks: list[Task] = [
-        task_format_check(),
-        task_lint(),
+    tasks: list[Task] = [task_format_check()]
+    if cfg.preset != "progressive":
+        tasks.append(task_lint())
+    tasks.extend([
         task_complexity(),
         task_audit(),
         task_deps(),
         task_typecheck(),
         task_coverage(),
-    ]
+    ])
     optional = (task_arch(), _acceptance_task(cfg))
     tasks.extend(t for t in optional if t is not None)
     return tasks

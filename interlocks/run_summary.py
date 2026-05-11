@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from interlocks.config import coerce_float
+from interlocks.config import coerce_float, coerce_int
 
 if TYPE_CHECKING:
     from interlocks.config import InterlockConfig
@@ -34,6 +34,7 @@ class RunSummary:
     mutation_score: float | None = None
     crap_max_observed: float | None = None
     attribution_coverage: float | None = None
+    lint_violations: int | None = None
     context: str | None = None
     created_at: float | None = None
 
@@ -65,6 +66,11 @@ def record_crap_max(crap: float) -> None:
 def record_attribution_coverage(coverage: float) -> None:
     global _state  # noqa: PLW0603  (module singleton accumulator)
     _state = replace(_state, attribution_coverage=float(coverage))
+
+
+def record_lint_count(count: int) -> None:
+    global _state  # noqa: PLW0603  (module singleton accumulator)
+    _state = replace(_state, lint_violations=int(count))
 
 
 def record_context(context: str) -> None:
@@ -136,6 +142,7 @@ def load(cfg: InterlockConfig) -> RunSummary | None:
         mutation_score=coerce_float(raw.get("mutation_score")),
         crap_max_observed=coerce_float(raw.get("crap_max_observed")),
         attribution_coverage=coerce_float(raw.get("attribution_coverage")),
+        lint_violations=coerce_int(raw.get("lint_violations")),
         context=raw.get("context") if isinstance(raw.get("context"), str) else None,
         created_at=coerce_float(raw.get("created_at")),
     )

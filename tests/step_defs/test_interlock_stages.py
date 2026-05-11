@@ -94,6 +94,45 @@ def _tmp_project_untracked_markdown(tmp_project: Path) -> None:
     target_fixture="tmp_project",
 )
 def _tmp_project_progressive_with_baseline(tmp_path: Path) -> Path:
+    project = _make_progressive_project(tmp_path)
+    (project / ".interlocks" / "baseline.json").write_text(
+        '{"schema_version": 1, "updated_at": "2026-05-10T00:00:00Z", '
+        '"advanced_from_sha": "abc1234", '
+        '"floors": {"coverage_min": 70.0}}\n',
+        encoding="utf-8",
+    )
+    return project
+
+
+@given(
+    "a tmp project on the progressive preset without a baseline file",
+    target_fixture="tmp_project",
+)
+def _tmp_project_progressive_no_baseline(tmp_path: Path) -> Path:
+    return _make_progressive_project(tmp_path)
+
+
+@given(
+    parsers.parse("a tmp project on the progressive preset with a lint cap of {cap:d}"),
+    target_fixture="tmp_project",
+)
+def _tmp_project_progressive_with_lint_cap(tmp_path: Path, cap: int) -> Path:
+    project = _make_progressive_project(tmp_path)
+    (project / ".interlocks" / "baseline.json").write_text(
+        '{"schema_version": 1, "updated_at": "2026-05-10T00:00:00Z", '
+        '"advanced_from_sha": null, '
+        f'"floors": {{"lint_violations_max": {cap}}}}}\n',
+        encoding="utf-8",
+    )
+    return project
+
+
+@given("the tmp project has a ruff-violating source file")
+def _tmp_project_dirty_source(tmp_project: Path) -> None:
+    (tmp_project / "src" / "tmp" / "dirty.py").write_text("import os\n", encoding="utf-8")
+
+
+def _make_progressive_project(tmp_path: Path) -> Path:
     project = make_tmp_project(tmp_path)
     pyproject = project / "pyproject.toml"
     body = pyproject.read_text(encoding="utf-8")
@@ -102,12 +141,6 @@ def _tmp_project_progressive_with_baseline(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (project / ".interlocks").mkdir(exist_ok=True)
-    (project / ".interlocks" / "baseline.json").write_text(
-        '{"schema_version": 1, "updated_at": "2026-05-10T00:00:00Z", '
-        '"advanced_from_sha": "abc1234", '
-        '"floors": {"coverage_min": 70.0}}\n',
-        encoding="utf-8",
-    )
     return project
 
 

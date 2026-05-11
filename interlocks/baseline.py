@@ -28,6 +28,7 @@ METRICS: tuple[tuple[str, bool], ...] = (
     ("mutation_min_score", True),
     ("attribution_min_coverage", True),
     ("crap_max", False),
+    ("lint_violations_max", False),
 )
 
 
@@ -37,6 +38,7 @@ class BaselineFloor:
     mutation_min_score: float | None = None
     crap_max: float | None = None
     attribution_min_coverage: float | None = None
+    lint_violations_max: float | None = None
     updated_at: str | None = None
     advanced_from_sha: str | None = None
 
@@ -47,6 +49,7 @@ class BaselineFloor:
             and self.mutation_min_score is None
             and self.crap_max is None
             and self.attribution_min_coverage is None
+            and self.lint_violations_max is None
         )
 
 
@@ -76,6 +79,7 @@ def load_baseline(cfg: InterlockConfig) -> BaselineFloor:
         mutation_min_score=coerce_float(floors.get("mutation_min_score")),
         crap_max=coerce_float(floors.get("crap_max")),
         attribution_min_coverage=coerce_float(floors.get("attribution_min_coverage")),
+        lint_violations_max=coerce_float(floors.get("lint_violations_max")),
         updated_at=updated_raw if isinstance(updated_raw, str) else None,
         advanced_from_sha=sha_raw if isinstance(sha_raw, str) else None,
     )
@@ -92,6 +96,7 @@ def write_baseline(cfg: InterlockConfig, floor: BaselineFloor) -> Path:
             "mutation_min_score": floor.mutation_min_score,
             "crap_max": floor.crap_max,
             "attribution_min_coverage": floor.attribution_min_coverage,
+            "lint_violations_max": floor.lint_violations_max,
         },
     }
     target = baseline_path(cfg)
@@ -118,6 +123,7 @@ def floor_from_summary(summary: RunSummary) -> BaselineFloor:
         mutation_min_score=summary.mutation_score,
         crap_max=summary.crap_max_observed,
         attribution_min_coverage=summary.attribution_coverage,
+        lint_violations_max=summary.lint_violations,
     )
 
 

@@ -109,3 +109,19 @@ Feature: interlocks stage commands on a minimal inline project
     Then the stage exits 0
     And the stage output contains "coverage_min"
     And the stage output contains "advanced_from_sha"
+
+  # req: task-lint-progressive-ratchet
+  Scenario: `interlocks lint` records count and passes with no baseline cap under progressive
+    Given a tmp project on the progressive preset without a baseline file
+    And the tmp project has a ruff-violating source file
+    When I run "interlocks lint" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "no cap"
+
+  # req: task-lint-progressive-ratchet
+  Scenario: `interlocks lint` blocks when violations exceed the baseline cap
+    Given a tmp project on the progressive preset with a lint cap of 0
+    And the tmp project has a ruff-violating source file
+    When I run "interlocks lint" in the tmp project
+    Then the stage exits 1
+    And the stage output contains "> 0 violations"
