@@ -327,7 +327,7 @@ def test_task_arch_uses_import_linter_pin_override(
             version = "0.0.0"
 
             [tool.importlinter]
-            root_package = archpin
+            root_package = "archpin"
 
             [tool.interlocks.tools]
             import-linter = "{custom_pin}"
