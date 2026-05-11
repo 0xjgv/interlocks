@@ -94,7 +94,7 @@ def _git_hooks_dir(project_root: Path) -> Path:
         gitdir = (project_root / gitdir).resolve()
     if gitdir.parent.name == "worktrees":
         return gitdir.parent.parent / "hooks"
-    return git_path / "hooks"
+    return gitdir / "hooks"
 
 
 def pre_commit_hook_installed(project_root: Path) -> bool:
