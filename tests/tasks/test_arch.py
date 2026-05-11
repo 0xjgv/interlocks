@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -122,11 +123,16 @@ def test_arch_skips_when_tests_not_a_package(non_package_tests: Path) -> None:
     assert "default needs" in result.stdout
 
 
+@dataclass(frozen=True)
+class _ArchProject:
+    root: Path
+    src: Path
+    tests: Path
+
+
 def _stub_load_config(
     monkeypatch: pytest.MonkeyPatch,
-    project_root: Path,
-    src_dir: Path,
-    test_dir: Path,
+    project: _ArchProject,
     *,
     arch_template: str = "default",
     arch_layers: tuple[str, ...] = (),
@@ -139,9 +145,9 @@ def _stub_load_config(
 
     clear_cache()
     cfg = replace(
-        load_config(project_root),
-        src_dir=src_dir,
-        test_dir=test_dir,
+        load_config(project.root),
+        src_dir=project.src,
+        test_dir=project.tests,
         arch_template=arch_template,
         arch_layers=arch_layers,
     )
@@ -167,7 +173,7 @@ def test_task_arch_uses_user_contracts_when_declared(
         ),
         encoding="utf-8",
     )
-    _stub_load_config(monkeypatch, proj, proj / "src", proj / "tests")
+    _stub_load_config(monkeypatch, _ArchProject(proj, proj / "src", proj / "tests"))
     task = arch_mod.task_arch()
     assert task is not None
     assert task.description == "Architecture (import-linter)"
@@ -190,7 +196,7 @@ def test_task_arch_synthesizes_default_when_no_contracts(
     tests.mkdir()
     (tests / "__init__.py").write_text("", encoding="utf-8")
 
-    _stub_load_config(monkeypatch, proj, src, tests)
+    _stub_load_config(monkeypatch, _ArchProject(proj, src, tests))
     task = arch_mod.task_arch()
     assert task is not None
     assert task.description == "Architecture (default: src ↛ tests)"
@@ -214,7 +220,7 @@ def test_task_arch_returns_none_when_tests_not_a_package(
     (src / "__init__.py").write_text("", encoding="utf-8")
     (proj / "tests").mkdir()  # no __init__.py
 
-    _stub_load_config(monkeypatch, proj, src, proj / "tests")
+    _stub_load_config(monkeypatch, _ArchProject(proj, src, proj / "tests"))
     assert arch_mod.task_arch() is None
 
 
@@ -235,9 +241,7 @@ def test_task_arch_layered_template_synthesizes_with_layers(
     layers = ("pkg.high", "pkg.mid", "pkg.low")
     _stub_load_config(
         monkeypatch,
-        proj,
-        src,
-        proj / "tests",
+        _ArchProject(proj, src, proj / "tests"),
         arch_template="layered",
         arch_layers=layers,
     )
@@ -268,9 +272,7 @@ def test_task_arch_layered_skips_when_no_layers_defined(
 
     _stub_load_config(
         monkeypatch,
-        proj,
-        src,
-        proj / "tests",
+        _ArchProject(proj, src, proj / "tests"),
         arch_template="layered",
         arch_layers=(),
     )

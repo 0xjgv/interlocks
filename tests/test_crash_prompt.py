@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import StringIO
+from pathlib import Path
 
 from interlocks.crash.prompt import prompt_for_report
 
@@ -10,6 +11,11 @@ from interlocks.crash.prompt import prompt_for_report
 class _TtyStringIO(StringIO):
     def isatty(self) -> bool:
         return True
+
+
+class _BrokenTtyStringIO(_TtyStringIO):
+    def readline(self, *_args: object, **_kwargs: object) -> str:
+        raise OSError("stdin closed")
 
 
 def test_enter_reports_by_default() -> None:
@@ -49,3 +55,21 @@ def test_non_interactive_stdin_is_unavailable() -> None:
 
 def test_non_interactive_stderr_is_unavailable() -> None:
     assert prompt_for_report(stdin=_TtyStringIO("\n"), stderr=StringIO()) == "unavailable"
+
+
+def test_prompt_prints_local_path(tmp_path: Path) -> None:
+    stderr = _TtyStringIO()
+    local_path = tmp_path / "crash.json"
+
+    decision = prompt_for_report(stdin=_TtyStringIO("n\n"), stderr=stderr, local_path=local_path)
+
+    assert decision == "skip"
+    assert f"Local crash file: {local_path}" in stderr.getvalue()
+
+
+def test_read_error_is_unavailable() -> None:
+    assert prompt_for_report(stdin=_BrokenTtyStringIO(), stderr=_TtyStringIO()) == "unavailable"
+
+
+def test_eof_is_unavailable() -> None:
+    assert prompt_for_report(stdin=_TtyStringIO(""), stderr=_TtyStringIO()) == "unavailable"

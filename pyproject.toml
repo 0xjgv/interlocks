@@ -228,6 +228,7 @@ tests_dir = ["tests/"]
 # before the test can assert. These paths are exercised under regular pytest.
 pytest_add_cli_args = [
     "--deselect=tests/tasks/test_doctor.py::test_doctor_tmpdir_flags_missing_pyproject",
+    "--deselect=tests/tasks/test_doctor.py::test_doctor_tmpdir_verbose_full_report",
     "--deselect=tests/test_preflight.py::test_cli_check_exits_two_without_pyproject",
     "--deselect=tests/test_preflight.py::test_cli_help_works_without_pyproject",
     "--deselect=tests/test_github_action.py::test_action_metadata_delegates_to_interlock_ci",

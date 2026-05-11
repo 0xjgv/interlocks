@@ -79,21 +79,8 @@ def cmd_crap_cached_advisory(changed: set[str] | None = None) -> None:
     """Print fast advisory CRAP output from fresh cached coverage, or a skip hint."""
     cfg = load_config()
     command = f"CRAP --max={cfg.crap_max}"
-
-    def _skip(detail: str) -> None:
-        ui.row("crap", command, "skipped", detail=detail, state="warn")
-
-    cov_cache = Path(".coverage")
-    if not cov_cache.exists():
-        _skip("no coverage cache")
-        return
-    if _coverage_cache_is_stale(cov_cache, cfg):
-        _skip("coverage cache is stale")
-        return
-
-    cov_file = generate_coverage_xml()
-    if not cov_file.exists():
-        _skip("coverage.xml missing")
+    cov_file = _fresh_coverage_xml(cfg, command)
+    if cov_file is None:
         return
 
     cov_map = parse_coverage(cov_file)
@@ -116,6 +103,25 @@ def cmd_crap_cached_advisory(changed: set[str] | None = None) -> None:
         _print_offender(row)
     if len(offenders) > _CRAP_ADVISORY_LIMIT:
         print(f"    … {len(offenders) - _CRAP_ADVISORY_LIMIT} more")
+
+
+def _fresh_coverage_xml(cfg: InterlockConfig, command: str) -> Path | None:
+    cov_cache = Path(".coverage")
+    if not cov_cache.exists():
+        _skip_crap_advisory(command, "no coverage cache")
+        return None
+    if _coverage_cache_is_stale(cov_cache, cfg):
+        _skip_crap_advisory(command, "coverage cache is stale")
+        return None
+    cov_file = generate_coverage_xml()
+    if not cov_file.exists():
+        _skip_crap_advisory(command, "coverage.xml missing")
+        return None
+    return cov_file
+
+
+def _skip_crap_advisory(command: str, detail: str) -> None:
+    ui.row("crap", command, "skipped", detail=detail, state="warn")
 
 
 def _coverage_cache_is_stale(cov_cache: Path, cfg: InterlockConfig) -> bool:
