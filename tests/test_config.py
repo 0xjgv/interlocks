@@ -830,7 +830,7 @@ def test_invoker_prefix_uv_ignores_target_venv(tmp_path: Path) -> None:
 def test_ci_evidence_path_default_resolves_under_project_root(tmp_project: Path) -> None:
     """Default ci_evidence_path is .interlocks/ci.json relative to project root."""
     cfg = load_config()
-    assert cfg.ci_evidence_path == (tmp_project / ".interlocks" / "ci.json").resolve()
+    assert cfg.ci_evidence_path == (tmp_project / InterlockConfig.ci_evidence_path).resolve()
 
 
 def test_ci_evidence_path_override_resolves_from_project_root(

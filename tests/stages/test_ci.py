@@ -531,7 +531,7 @@ def test_ci_evidence_payload_is_bounded(
     cfg = load_config()
     _write_ci_evidence(cfg, elapsed_seconds=2.5, passed=True, context=None)
 
-    data = json.loads((tmp_path / ".interlocks" / "ci.json").read_text(encoding="utf-8"))
+    data = json.loads(cfg.ci_evidence_path.read_text(encoding="utf-8"))
     assert set(data.keys()) == {
         "command",
         "elapsed_seconds",
@@ -555,7 +555,7 @@ def test_ci_evidence_context_key_present_only_when_provided(
     monkeypatch.chdir(tmp_path)
 
     cfg = load_config()
-    evidence = tmp_path / ".interlocks" / "ci.json"
+    evidence = cfg.ci_evidence_path
 
     _write_ci_evidence(cfg, elapsed_seconds=1.0, passed=True, context="pr_push")
     data = json.loads(evidence.read_text(encoding="utf-8"))
