@@ -95,16 +95,19 @@ def test_action_metadata_delegates_to_interlock_ci() -> None:
 
 def test_action_cache_key_covers_pin_material() -> None:
     """Cache key must hash both tools.py (pin table) and tools.txt (compiled hashes)."""
-    hash_match = re.search(r"hashFiles\([^)]+\)", _ACTION)
+    hash_match = re.search(r"hashFiles\(([^)]+)\)", _ACTION)
     assert hash_match is not None, "no hashFiles() expression in action.yml cache key"
-    hash_expr = hash_match.group()
-    assert "tools.py" in hash_expr, "tools.py not in hashFiles expression"
-    assert "tools.txt" in hash_expr, "tools.txt not in hashFiles expression"
+    hash_args = hash_match.group(1)
+    assert "'interlocks/defaults/tools.py'" in hash_args
+    assert "'interlocks/defaults/tools.txt'" in hash_args
 
 
 def test_action_restore_keys_provides_fallback() -> None:
     """restore-keys must allow a partial cache hit when the exact pin set changes."""
-    assert "restore-keys:" in _ACTION
+    key_match = re.search(r"key: (uvx-tools-[^\n]+)", _ACTION)
+    restore_match = re.search(r"restore-keys: \|\s+([^\n]+)", _ACTION)
+    assert key_match and restore_match, "Could not find cache key or restore-keys in action.yml"
+    assert key_match.group(1).startswith(restore_match.group(1).strip())
 
 
 def test_action_steps_ordered_cache_install_warm_run() -> None:
