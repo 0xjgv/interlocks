@@ -276,3 +276,27 @@ def test_is_required_failure_false_for_runnable(tmp_path: Path) -> None:
     classification = classify_acceptance_with_details(cfg)
     assert classification.status is AcceptanceStatus.RUNNABLE
     assert classification.is_required_failure is False
+
+
+def test_is_required_failure_true_for_missing_behavior_coverage(tmp_path: Path) -> None:
+    features = tmp_path / "tests" / "features"
+    _write_feature(
+        features / "ok.feature",
+        "Feature: ok\n  Scenario: a thing works\n    Given precondition\n",
+    )
+    # Naming the project "interlocks" activates INTERLOCKS_REGISTRY; a feature
+    # file with no `# req:` markers leaves every behavior uncovered.
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "interlocks"\nversion = "0.0.0"\n',
+        encoding="utf-8",
+    )
+    clear_cache()
+    cfg = replace(
+        load_config(tmp_path),
+        project_root=tmp_path,
+        features_dir=features,
+        require_acceptance=True,
+    )
+    classification = classify_acceptance_with_details(cfg)
+    assert classification.status is AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE
+    assert classification.is_required_failure is True
