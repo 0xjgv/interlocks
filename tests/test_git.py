@@ -176,3 +176,36 @@ def test_src_test_prefixes_empty_src_with_tests_matches_all(
     """Empty src with a configured test dir still matches everything (no narrowing)."""
     _stub_cfg(monkeypatch, "", "tests")
     assert git_mod._src_test_prefixes() == ("",)
+
+
+def test_changed_py_files_vs_works_in_linked_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """changed_py_files_vs works when invoked from a linked git worktree.
+
+    In a linked worktree git commands operate on the checked-out branch normally;
+    ``changed_py_files_vs`` must return files relative to the worktree root.
+    """
+    main = tmp_path / "main"
+    main.mkdir()
+    _init_repo(main)
+    (main / "pyproject.toml").write_text(
+        '[tool.interlocks]\nsrc_dir = "interlocks"\ntest_dir = "tests"\n',
+        encoding="utf-8",
+    )
+    (main / "interlocks").mkdir()
+    (main / "interlocks" / "base.py").write_text("x = 1\n", encoding="utf-8")
+    _commit_all(main, "base")
+
+    linked = tmp_path / "linked"
+    _git("worktree", "add", "-b", "feature", str(linked), "HEAD", cwd=main)
+
+    # .git in a linked worktree is a file, not a directory
+    assert (linked / ".git").is_file()
+
+    # Write an untracked .py file in the linked worktree
+    (linked / "interlocks" / "new_feature.py").write_text("y = 2\n", encoding="utf-8")
+
+    monkeypatch.chdir(linked)
+    result = changed_py_files_vs("HEAD")
+    assert result == {"interlocks/new_feature.py"}
