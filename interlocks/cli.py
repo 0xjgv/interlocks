@@ -41,6 +41,7 @@ from interlocks.tasks.deps_freshness import cmd_deps_freshness
 from interlocks.tasks.doctor import cmd_doctor
 from interlocks.tasks.evaluate import cmd_evaluate
 from interlocks.tasks.fix import cmd_fix
+from interlocks.tasks.fix_plan import cmd_fix_plan
 from interlocks.tasks.fix_rule import cmd_fix_rule
 from interlocks.tasks.format import cmd_format
 from interlocks.tasks.init import cmd_init
@@ -317,6 +318,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             "fix-rule": (
                 cmd_fix_rule,
                 "Rule-scoped fix: plan or apply a single ruff rule (e.g. --rule=I001)",
+            ),
+            "fix-plan": (
+                cmd_fix_plan,
+                "Non-mutating fix plan over all fixable ruff rules; writes .lintfix/plan.json",
             ),
             "format": (cmd_format, "Format code with ruff"),
             "lint": (cmd_lint, "Lint code with ruff (read-only)"),

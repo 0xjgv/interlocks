@@ -8,9 +8,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def lintfix_dir(project_root: Path) -> Path:
+    """Return ``.lintfix/`` rooted at ``project_root`` (not created)."""
+    return project_root / ".lintfix"
+
+
 def escrow_dir(project_root: Path) -> Path:
     """Return ``.lintfix/escrow/`` rooted at ``project_root`` (not created)."""
-    return project_root / ".lintfix" / "escrow"
+    return lintfix_dir(project_root) / "escrow"
 
 
 def write_patch(project_root: Path, rule: str, patch_text: str) -> Path:
@@ -20,7 +25,7 @@ def write_patch(project_root: Path, rule: str, patch_text: str) -> Path:
 
 def write_failed_patch(project_root: Path, patch_text: str) -> Path:
     """Write a failed-verification patch to ``.lintfix/failed.patch``."""
-    return _write(project_root / ".lintfix" / "failed.patch", patch_text)
+    return _write(lintfix_dir(project_root) / "failed.patch", patch_text)
 
 
 def _write(target: Path, text: str) -> Path:

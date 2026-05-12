@@ -43,6 +43,11 @@ def resolve_base(base: str) -> str:
     return capture(["git", "merge-base", base, "HEAD"]).stdout.strip()
 
 
+def head_sha() -> str:
+    """Return the current HEAD commit SHA, or empty string when unavailable."""
+    return capture(["git", "rev-parse", "HEAD"]).stdout.strip()
+
+
 def changed_files(base: str) -> tuple[str, ...]:
     """Return .py files differing from ``base`` (tracked + untracked), sorted."""
     if not base:

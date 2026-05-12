@@ -1,6 +1,6 @@
 # SPEC: Rule-Scoped Fix Harness and Budgeted Fix Optimizer
 
-Status: Draft 0.1  
+Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phases 3–5 pending.  
 Audience: backend engineers, infra/tooling owners, reviewers  
 Context: legacy Django backend, Python 3.12, Ruff-based custom lint harness  
 Primary goal: unblock engineers without letting quality regress
@@ -714,55 +714,55 @@ required manual support
 
 ## 12. Implementation Phases
 
-### Phase 0: harden the current unblock pattern
+### Phase 0: harden the current unblock pattern ✅ Shipped (commit `c1d2282`)
 
 Deliverables:
 
-- Replace ad hoc `uvx ruff` usage with repo-pinned `uv run ruff` or another repo-pinned command.
-- Add an idempotent EOF newline helper instead of repeated `printf '\n' >> file`.
-- Add a documented `I001` support runbook.
-- Ensure support commands always run `make ci` at the end.
+- [x] Replace ad hoc `uvx ruff` usage with repo-pinned `uv run ruff` or another repo-pinned command. *(uses `uvx --from ruff==<version>` via `runner.uvx_tool` + `cfg.tool_version("ruff")`)*
+- [x] Add an idempotent EOF newline helper instead of repeated `printf '\n' >> file`. *(`lintfix/eof_newline.py::ensure_trailing_newline`)*
+- [x] Add a documented `I001` support runbook. *(README "Support Flow: Rule-Scoped Unblock")*
+- [x] Ensure support commands always run `make ci` at the end. *(default `--verify-cmd` is `interlocks ci`)*
 
 Acceptance criteria:
 
-- A support engineer can run a documented `I001` fix without using broad `make renovate`.
-- The command does not apply unsafe fixes.
-- The command preserves unrelated legacy findings outside the diff.
+- [x] A support engineer can run a documented `I001` fix without using broad `make renovate`.
+- [x] The command does not apply unsafe fixes. *(`check_budget` blocks `unsafe=True`; ruff invoked without `--unsafe-fixes`)*
+- [x] The command preserves unrelated legacy findings outside the diff. *(`--select=<RULE>` scopes mutation to the single rule)*
 
-### Phase 1: rule-scoped support harness
+### Phase 1: rule-scoped support harness ✅ Shipped (commit `c1d2282`)
 
 Deliverables:
 
-- Implement `make check --fix-rule RULE=<code>`.
-- Implement scratch worktree simulation.
-- Implement patch classification for:
-  - `I001`
-  - `W292`
-  - `F401`
-  - selected `UP*`
-- Implement patch escrow output.
+- [x] Implement `make check --fix-rule RULE=<code>`. *(shipped as `interlocks fix-rule --rule=<code>`)*
+- [x] Implement scratch worktree simulation. *(via ruff `--diff` — same non-mutating invariant; `lintfix/simulate.py`)*
+- [x] Implement patch classification for:
+  - [x] `I001`
+  - [x] `W292`
+  - [x] `F401`
+  - [x] selected `UP*` *(`UP007`, `UP045` in catalog; `UP*` prefix fallback for the rest)*
+- [x] Implement patch escrow output. *(`lintfix/escrow.py` → `.lintfix/escrow/<rule>.patch`)*
 
 Acceptance criteria:
 
-- `make check --fix-rule RULE=I001 APPLY=0` produces a patch preview and does not mutate the working tree.
-- `make check --fix-rule RULE=I001 APPLY=1` applies only if budgets pass and `make ci` passes.
-- `F401` defaults to escrow, not auto-apply.
+- [x] `make check --fix-rule RULE=I001 APPLY=0` produces a patch preview and does not mutate the working tree. *(`test_plan_mode_does_not_mutate_tree`)*
+- [x] `make check --fix-rule RULE=I001 APPLY=1` applies only if budgets pass and `make ci` passes. *(`test_apply_mode_mutates_on_clean_verify` + `test_apply_mode_restores_tree_on_verify_failure`)*
+- [x] `F401` defaults to escrow, not auto-apply. *(`test_f401_defaults_to_escrow_and_writes_patch`)*
 
-### Phase 2: exhaustive fix simulation
+### Phase 2: exhaustive fix simulation ✅ Shipped
 
 Deliverables:
 
-- Implement `make check --fix-plan`.
-- Discover fixable diagnostics from Ruff JSON output.
-- Simulate each candidate rule independently.
-- Produce `.lintfix/plan.json`.
-- Print human-readable classification.
+- [x] Implement `make check --fix-plan`. *(shipped as `interlocks fix-plan`)*
+- [x] Discover fixable diagnostics from Ruff JSON output. *(`lintfix/discover.py::discover_fixable_rules` parses `ruff check --output-format=json`)*
+- [x] Simulate each candidate rule independently. *(reuses `lintfix/simulate.py::simulate_rule` per rule; non-mutating `--diff`)*
+- [x] Produce `.lintfix/plan.json`. *(`lintfix/plan.py::write_plan_json`; schema matches section 13)*
+- [x] Print human-readable classification. *(grouped `AUTO-APPLY ELIGIBLE` / `PATCH ESCROW` / `ADVISORY` / `SKIPPED` blocks)*
 
 Acceptance criteria:
 
-- The planner can run all candidate rules in simulation without mutating the developer tree.
-- Every candidate reports files touched, changed lines, outside-diff lines, and risk.
-- Unsupported or unsafe candidates are clearly skipped.
+- [x] The planner can run all candidate rules in simulation without mutating the developer tree. *(`test_fix_plan_does_not_mutate_tree`)*
+- [x] Every candidate reports files touched, changed lines, outside-diff lines, and risk. *(`test_fix_plan_writes_json_with_spec_schema` checks the full per-candidate key set)*
+- [x] Unsupported or unsafe candidates are clearly skipped. *(`_unsafe_skip_classification` short-circuits unsafe-only rules to `mode=skip` with `reason="unsafe fix not allowed in default mode"`; `test_build_plan_marks_unsafe_only_rule_as_skip`)*
 
 ### Phase 3: offline replay and Pareto frontier
 

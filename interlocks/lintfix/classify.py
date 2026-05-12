@@ -98,9 +98,18 @@ def classify(
     )
 
 
+_POLICY_DECISIONS: dict[str, tuple[str, str]] = {
+    "escrow": ("escrow", "escrow by policy"),
+    "advisory": ("advisory", "advisory by policy"),
+    "skip": ("skip", "skip by policy"),
+}
+
+
 def _decide(
     base_mode: Mode, metrics: CandidateMetrics, cost: CandidateCost, budget: Budget
 ) -> tuple[Mode, str | None]:
+    if cost.unsafe and not budget.allow_unsafe_fixes:
+        return ("skip", "unsafe fix not allowed in default mode")
     if metrics.changed_lines_total == 0:
         return ("skip", "patch is empty")
     if base_mode == "auto":
@@ -108,11 +117,7 @@ def _decide(
         if fail is None:
             return ("auto", None)
         return ("escrow", f"auto downgraded to escrow: {fail}")
-    if base_mode == "escrow":
-        return ("escrow", "escrow by policy")
-    if base_mode == "advisory":
-        return ("advisory", "advisory by policy")
-    return ("skip", "skip by policy")
+    return _POLICY_DECISIONS.get(base_mode, ("skip", "skip by policy"))  # type: ignore[return-value]
 
 
 def _measure(patch_text: str, hunks: dict[str, FileHunks]) -> CandidateMetrics:
