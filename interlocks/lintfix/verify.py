@@ -3,6 +3,8 @@
 ``apply_with_verify`` snapshots target files, applies the rule, runs the
 verifier, and restores the snapshot if verification fails — preserving the
 ``--apply`` invariant that the tree only mutates on a clean verify.
+``apply_many_with_verify`` extends the same invariant to multi-rule batches
+selected by the optimizer.
 """
 
 from __future__ import annotations
@@ -27,6 +29,25 @@ class VerifyResult:
     restored: bool
 
 
+@dataclass(frozen=True)
+class BatchVerifyResult:
+    """Outcome of a multi-rule apply + verify.
+
+    ``applied_rules`` is the prefix that mutated the tree before a failure
+    triggered the restore (or the full set, on success). ``failed_rule`` is
+    set when ruff itself crashed on one of the rules and the batch aborted
+    before reaching the verifier.
+    """
+
+    applied: bool
+    returncode: int
+    stdout: str
+    stderr: str
+    restored: bool
+    applied_rules: tuple[str, ...]
+    failed_rule: str | None = None
+
+
 def apply_with_verify(
     *, rule: str, files: tuple[str, ...], verify_cmd: Sequence[str]
 ) -> VerifyResult:
@@ -49,6 +70,56 @@ def apply_with_verify(
         return VerifyResult(True, 0, result.stdout, result.stderr, restored=False)
     _restore(snapshot)
     return VerifyResult(False, result.returncode, result.stdout, result.stderr, restored=True)
+
+
+def apply_many_with_verify(
+    *,
+    rules_and_files: Sequence[tuple[str, tuple[str, ...]]],
+    verify_cmd: Sequence[str],
+) -> BatchVerifyResult:
+    """Apply each ``(rule, files)`` in order; verify once; restore on any failure.
+
+    The snapshot covers the union of all touched files so a partial-apply
+    failure rolls back the entire batch — never just the most recent rule.
+    """
+    if not rules_and_files:
+        return BatchVerifyResult(True, 0, "", "", restored=False, applied_rules=())
+    all_files = tuple({f for _, files in rules_and_files for f in files})
+    snapshot = _snapshot(all_files)
+    applied: list[str] = []
+    for rule, files in rules_and_files:
+        apply_result = apply_rule(rule, files)
+        if apply_result.returncode >= 2:
+            _restore(snapshot)
+            return BatchVerifyResult(
+                applied=False,
+                returncode=apply_result.returncode,
+                stdout=apply_result.stdout,
+                stderr=apply_result.stderr,
+                restored=True,
+                applied_rules=tuple(applied),
+                failed_rule=rule,
+            )
+        applied.append(rule)
+    result = capture(list(verify_cmd))
+    if result.returncode == 0:
+        return BatchVerifyResult(
+            applied=True,
+            returncode=0,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            restored=False,
+            applied_rules=tuple(applied),
+        )
+    _restore(snapshot)
+    return BatchVerifyResult(
+        applied=False,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        restored=True,
+        applied_rules=tuple(applied),
+    )
 
 
 def _snapshot(files: tuple[str, ...]) -> dict[str, bytes]:

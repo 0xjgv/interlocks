@@ -1,6 +1,6 @@
 # SPEC: Rule-Scoped Fix Harness and Budgeted Fix Optimizer
 
-Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phase 3 shipped; Phases 4–5 pending.  
+Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phase 3 shipped; Phase 4 shipped; Phase 5 pending.  
 Audience: backend engineers, infra/tooling owners, reviewers  
 Context: legacy Django backend, Python 3.12, Ruff-based custom lint harness  
 Primary goal: unblock engineers without letting quality regress
@@ -784,23 +784,23 @@ Acceptance criteria:
 - [x] The team can justify why a rule is auto, escrow, advisory, or renovation-only using measured history. *(`.lintfix/replay.json` carries per-rule `recommended_mode` + `rationale` plus the full sample list per commit; `test_cmd_fix_replay_serializes_recommendation_payload`)*
 - [x] Broad style families cannot enter auto mode without evidence. *(prefix-fallback rules require `_MIN_OBS_PREFIX=10` observations AND frontier membership AND an explicit catalog entry before any auto-promotion fires; `test_aggregate_refuses_to_promote_prefix_fallback_rule`)*
 
-### Phase 4: dynamic-programming optimizer
+### Phase 4: dynamic-programming optimizer ✅ Shipped
 
 Deliverables:
 
-- Implement `make check --fix-optimize`.
-- Use candidate metrics from Phase 2 and value estimates from Phase 3.
-- Implement multi-dimensional DP with Pareto pruning.
-- Support at least two budget profiles:
-  - `unblock`
-  - `renovation`
-- Explain every selected and rejected candidate.
+- [x] Implement `make check --fix-optimize`. *(shipped as `interlocks fix-optimize`; `tasks/fix_optimize.py::cmd_fix_optimize` reuses `plan.build_plan` then runs `optimize.optimize`)*
+- [x] Use candidate metrics from Phase 2 and value estimates from Phase 3. *(`optimize.candidates_from_plan` reads `PlannedCandidate` cost dims; `--stats=.lintfix/replay.json` hydrates `RuleStats` for the support-pattern component of `value_for`)*
+- [x] Implement multi-dimensional DP with Pareto pruning. *(`optimize._search` iterates candidates, branching include/exclude on each; `_prune_dominated` discards plans dominated in all four cost dims by a plan of ≥ equal value)*
+- [x] Support at least two budget profiles: *(both already exist in `budgets._PROFILES`; the optimizer reads the active profile via `budgets.profile(name)`)*
+  - [x] `unblock`
+  - [x] `renovation`
+- [x] Explain every selected and rejected candidate. *(`_rejection_reason` maps each unselected candidate to one of `unsafe fix not allowed`, `policy mode is <X>`, `conflicts with selected rule <Y>`, `would exceed <dim> budget`, or `displaced by higher-value selection`; emitted in both the printed plan and `.lintfix/optimize.json`)*
 
 Acceptance criteria:
 
-- Given a synthetic candidate set, the optimizer selects the maximum-value subset under budget.
-- Given real candidate patches, the optimizer never selects unsafe fixes in `unblock` mode.
-- The final selected patch is re-applied in a fresh worktree and verified with `make ci`.
+- [x] Given a synthetic candidate set, the optimizer selects the maximum-value subset under budget. *(`test_optimize_picks_max_value_subset_under_budget`: anti-greedy knapsack where greedy-by-value picks A alone but DP picks B+C)*
+- [x] Given real candidate patches, the optimizer never selects unsafe fixes in `unblock` mode. *(`Budget.allow_unsafe_fixes=False` propagates via `classify.classify(unsafe=True) → mode="skip"`; `candidates_from_plan` then marks the candidate `selectable=False`; `test_fix_optimize_never_selects_unsafe_in_unblock` covers it end-to-end)*
+- [x] The final selected patch is re-applied in a fresh worktree and verified with `make ci`. *(`verify.apply_many_with_verify` snapshots the union of touched files, applies each selected rule sequentially, runs the verifier, and restores the snapshot on any failure; `test_fix_optimize_apply_mutates_on_clean_verify` + `test_fix_optimize_apply_restores_tree_on_verify_failure`)*
 
 ### Phase 5: CI integration and adoption
 
