@@ -19,6 +19,7 @@ from interlocks.skip import (
     SkipPolicy,
     current_skip_policy,
     maybe_print_skip_banner,
+    run_unless_skipped,
     warn_skipped,
 )
 from interlocks.tasks.acceptance import task_acceptance_with_attribution
@@ -117,15 +118,15 @@ def _run_post_coverage_gate(
     run: Callable[[], None],
     skip_policy: SkipPolicy,
 ) -> None:
-    if skip_policy.enabled(label):
-        warn_skipped(label)
-        return
-    try:
-        run()
-    except SystemExit:
-        record_result(label, False)
-        raise
-    record_result(label, True)
+    def record_gate_result() -> None:
+        try:
+            run()
+        except SystemExit:
+            record_result(label, False)
+            raise
+        record_result(label, True)
+
+    run_unless_skipped(label, record_gate_result, skip_policy)
 
 
 def _should_run_mutation(mode: MutationCIMode, *, run_in_ci: bool) -> bool:
