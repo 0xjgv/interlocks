@@ -1,6 +1,6 @@
 # SPEC: Rule-Scoped Fix Harness and Budgeted Fix Optimizer
 
-Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phases 3–5 pending.  
+Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phase 3 shipped; Phases 4–5 pending.  
 Audience: backend engineers, infra/tooling owners, reviewers  
 Context: legacy Django backend, Python 3.12, Ruff-based custom lint harness  
 Primary goal: unblock engineers without letting quality regress
@@ -764,25 +764,25 @@ Acceptance criteria:
 - [x] Every candidate reports files touched, changed lines, outside-diff lines, and risk. *(`test_fix_plan_writes_json_with_spec_schema` checks the full per-candidate key set)*
 - [x] Unsupported or unsafe candidates are clearly skipped. *(`_unsafe_skip_classification` short-circuits unsafe-only rules to `mode=skip` with `reason="unsafe fix not allowed in default mode"`; `test_build_plan_marks_unsafe_only_rule_as_skip`)*
 
-### Phase 3: offline replay and Pareto frontier
+### Phase 3: offline replay and Pareto frontier ✅ Shipped
 
 Deliverables:
 
-- Replay the planner against the last N merged PRs.
-- Produce rule-level statistics:
-  - PRs helped;
-  - median changed lines;
-  - p95 changed lines;
-  - median outside-diff lines;
-  - p95 outside-diff lines;
-  - CI failures;
-  - patch rejection/revert signals if available.
-- Produce a Pareto frontier of rules by quality gain vs churn/risk.
+- [x] Replay the planner against the last N merged PRs. *(shipped as `interlocks fix-replay`; `lintfix/replay.py::replay_history` walks first-parent commits in temporary git worktrees)*
+- [x] Produce rule-level statistics:
+  - [x] PRs helped; *(`stats.RuleStats.prs_helped` = observations whose classification ≠ `skip`)*
+  - [x] median changed lines; *(`stats.RuleStats.median_changed_lines` via linear-interpolation `quantile`)*
+  - [x] p95 changed lines; *(`stats.RuleStats.p95_changed_lines`)*
+  - [x] median outside-diff lines; *(`stats.RuleStats.median_outside_diff_lines`)*
+  - [x] p95 outside-diff lines; *(`stats.RuleStats.p95_outside_diff_lines`)*
+  - [ ] CI failures; *(deferred — Phase 5 will record CI verdicts in plan history; replay does not re-run CI per commit)*
+  - [x] patch rejection/revert signals if available. *(`stats.RuleStats.revert_signal`; `replay._find_revert` scans `<commit>..<base>` for the canonical `This reverts commit <sha>` body)*
+- [x] Produce a Pareto frontier of rules by quality gain vs churn/risk. *(`stats._pareto_frontier`: maximize `prs_helped`, minimize `p95_outside_diff_lines`; unsafe rules can't dominate safe rules)*
 
 Acceptance criteria:
 
-- The team can justify why a rule is auto, escrow, advisory, or renovation-only using measured history.
-- Broad style families cannot enter auto mode without evidence.
+- [x] The team can justify why a rule is auto, escrow, advisory, or renovation-only using measured history. *(`.lintfix/replay.json` carries per-rule `recommended_mode` + `rationale` plus the full sample list per commit; `test_cmd_fix_replay_serializes_recommendation_payload`)*
+- [x] Broad style families cannot enter auto mode without evidence. *(prefix-fallback rules require `_MIN_OBS_PREFIX=10` observations AND frontier membership AND an explicit catalog entry before any auto-promotion fires; `test_aggregate_refuses_to_promote_prefix_fallback_rule`)*
 
 ### Phase 4: dynamic-programming optimizer
 
