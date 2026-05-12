@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 import textwrap
 import time
 from pathlib import Path
@@ -25,6 +26,21 @@ _ACTIVE_PYPROJECT = textwrap.dedent(
     enforce_behavior_attribution = true
     """
 )
+
+
+def test_module_entrypoint_validates_without_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    from interlocks.tasks import behavior_attribution as behavior_mod
+
+    calls: list[bool] = []
+
+    def fake_cmd_behavior_attribution(*, refresh: bool = True) -> None:
+        calls.append(refresh)
+
+    monkeypatch.setattr(behavior_mod, "cmd_behavior_attribution", fake_cmd_behavior_attribution)
+
+    runpy.run_module("interlocks.behavior_attribution_validate", run_name="__main__")
+
+    assert calls == [False]
 
 
 def test_cmd_behavior_attribution_warn_skips_empty_registry(

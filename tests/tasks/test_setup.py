@@ -101,6 +101,46 @@ def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8") == first_claude
 
 
+@pytest.mark.parametrize(
+    ("arg", "message"),
+    [
+        ("--ci=gitlab", "unsupported CI setup target: gitlab"),
+        ("--bogus", "usage: interlocks setup"),
+    ],
+)
+def test_setup_rejects_unknown_arguments(
+    arg: str,
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_pyproject(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, arg)
+
+    assert exc.value.code == 1
+    assert message in capsys.readouterr().out
+
+
+def test_setup_ci_install_rejects_existing_custom_workflow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_pyproject(tmp_path)
+    workflow = tmp_path / ".github" / "workflows" / "interlocks.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("name: custom\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--ci=github")
+
+    assert exc.value.code == 1
+    assert "already exists but does not invoke interlocks" in capsys.readouterr().out
+
+
 def test_setup_ci_check_reports_missing_when_no_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

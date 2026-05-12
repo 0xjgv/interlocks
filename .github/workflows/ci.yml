@@ -64,6 +64,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Install project
+        run: uv sync
+
       - uses: ./
         with:
           install-command: "uv tool install ."

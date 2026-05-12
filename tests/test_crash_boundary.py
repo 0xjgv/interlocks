@@ -7,6 +7,7 @@ reporter MUST NOT mask the original exception.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -18,6 +19,14 @@ from interlocks.crash.boundary import CrashBoundary
 def _trigger_interlocks_frame() -> None:
     """Raise from inside the interlocks package so ``_is_interlocks_exception`` matches."""
     raise RuntimeError("synthetic interlocks bug")
+
+
+def _captured_runtime_error() -> RuntimeError:
+    try:
+        raise RuntimeError("synthetic interlocks bug")
+    except RuntimeError as exc:
+        return exc
+    raise AssertionError("unreachable")
 
 
 def test_systemexit_passes_through_unchanged() -> None:
@@ -155,3 +164,126 @@ def test_safe_load_config_returns_cfg_and_project_root_on_success(
     loaded, root = boundary_mod._safe_load_config()
     assert loaded is cfg
     assert root == tmp_path
+
+
+def test_capture_and_transport_submits_report_when_user_accepts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload: dict[str, Any] = {"fingerprint": "abc123", "exception_type": "RuntimeError"}
+    local_path = tmp_path / "abc123.json"
+    build_args: list[tuple[str, str, Path | None]] = []
+    submitted: list[tuple[dict[str, Any], str, Path | None]] = []
+    seen: list[tuple[str, float]] = []
+
+    def fake_build_payload(
+        exc: BaseException,
+        *,
+        subcommand: str,
+        project_root: Path | None,
+    ) -> dict[str, Any]:
+        build_args.append((str(exc), subcommand, project_root))
+        return payload
+
+    monkeypatch.setattr(boundary_mod, "_safe_load_config", lambda: (None, tmp_path))
+    monkeypatch.setattr(boundary_mod, "build_payload", fake_build_payload)
+    monkeypatch.setattr(boundary_mod, "write_crash", lambda saved: local_path)
+    monkeypatch.setattr(boundary_mod.time, "time", lambda: 12.5)
+    monkeypatch.setattr(boundary_mod, "should_suppress_transport", lambda _fp, *, now: False)
+    monkeypatch.setattr(boundary_mod, "prompt_for_report", lambda *, local_path: "report")
+    monkeypatch.setattr(
+        boundary_mod.BrowserTransport,
+        "submit",
+        lambda saved, *, repo, local_path: submitted.append((saved, repo, local_path)) or "url",
+    )
+    monkeypatch.setattr(
+        boundary_mod,
+        "record_seen",
+        lambda fingerprint, *, now: seen.append((fingerprint, now)),
+    )
+
+    boundary_mod._capture_and_transport(_captured_runtime_error(), "check")
+
+    assert build_args == [("synthetic interlocks bug", "check", tmp_path)]
+    assert submitted == [(payload, "0xjgv/interlocks", local_path)]
+    assert seen == [("abc123", 12.5)]
+
+
+def test_capture_and_transport_records_skip_without_submit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    submitted: list[dict[str, Any]] = []
+    seen: list[str] = []
+
+    monkeypatch.setattr(boundary_mod, "_safe_load_config", lambda: (None, tmp_path))
+    monkeypatch.setattr(
+        boundary_mod,
+        "build_payload",
+        lambda _exc, *, subcommand, project_root: {"fingerprint": "skip-me"},
+    )
+    monkeypatch.setattr(boundary_mod, "write_crash", lambda _payload: tmp_path / "skip-me.json")
+    monkeypatch.setattr(boundary_mod.time, "time", lambda: 99.0)
+    monkeypatch.setattr(boundary_mod, "should_suppress_transport", lambda _fp, *, now: False)
+    monkeypatch.setattr(boundary_mod, "prompt_for_report", lambda *, local_path: "skip")
+    monkeypatch.setattr(
+        boundary_mod.BrowserTransport,
+        "submit",
+        lambda saved, *, repo, local_path: submitted.append(saved) or "url",
+    )
+
+    def fake_record_seen(fingerprint: str, *, now: float) -> None:
+        assert now >= 0
+        seen.append(fingerprint)
+
+    monkeypatch.setattr(boundary_mod, "record_seen", fake_record_seen)
+
+    boundary_mod._capture_and_transport(_captured_runtime_error(), "check")
+
+    assert submitted == []
+    assert seen == ["skip-me"]
+
+
+def test_capture_and_transport_suppressed_before_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompted: list[Path | None] = []
+    submitted: list[dict[str, Any]] = []
+    seen: list[str] = []
+
+    monkeypatch.setattr(boundary_mod, "_safe_load_config", lambda: (None, tmp_path))
+    monkeypatch.setattr(
+        boundary_mod,
+        "build_payload",
+        lambda _exc, *, subcommand, project_root: {"fingerprint": "seen-before"},
+    )
+    monkeypatch.setattr(
+        boundary_mod,
+        "write_crash",
+        lambda _payload: tmp_path / "seen-before.json",
+    )
+    monkeypatch.setattr(boundary_mod.time, "time", lambda: 1.0)
+    monkeypatch.setattr(boundary_mod, "should_suppress_transport", lambda _fp, *, now: True)
+    monkeypatch.setattr(
+        boundary_mod,
+        "prompt_for_report",
+        lambda *, local_path: prompted.append(local_path) or "report",
+    )
+    monkeypatch.setattr(
+        boundary_mod.BrowserTransport,
+        "submit",
+        lambda saved, *, repo, local_path: submitted.append(saved) or "url",
+    )
+
+    def fake_record_seen(fingerprint: str, *, now: float) -> None:
+        assert now >= 0
+        seen.append(fingerprint)
+
+    monkeypatch.setattr(boundary_mod, "record_seen", fake_record_seen)
+
+    boundary_mod._capture_and_transport(_captured_runtime_error(), "check")
+
+    assert prompted == []
+    assert submitted == []
+    assert seen == []

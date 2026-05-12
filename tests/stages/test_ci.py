@@ -293,6 +293,64 @@ def test_ci_writes_failing_runtime_evidence(
     assert data["passed"] is False
 
 
+@pytest.mark.parametrize(
+    ("failing_gate", "interlocks_config"),
+    [
+        ("crap", ""),
+        ("attribution", ""),
+        ("mutation", 'mutation_ci_mode = "full"\n'),
+    ],
+    ids=["crap", "attribution", "mutation"],
+)
+def test_ci_reports_sequential_gate_failure_in_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    failing_gate: str,
+    interlocks_config: str,
+) -> None:
+    (tmp_path / "tests").mkdir()
+    tool_table = f"\n[tool.interlocks]\n{interlocks_config}" if interlocks_config else ""
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            f"""\
+            [project]
+            name = "ci-post-gate"
+            version = "0.0.0"
+            {tool_table}
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+
+    from interlocks.stages import ci as ci_mod
+
+    def fail_if_gate(label: str) -> None:
+        if label == failing_gate:
+            raise SystemExit(1)
+
+    monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: fail_if_gate("crap"))
+    monkeypatch.setattr(
+        ci_mod,
+        "cmd_behavior_attribution",
+        lambda refresh=False: fail_if_gate("attribution"),
+    )
+    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: fail_if_gate("mutation"))
+
+    with pytest.raises(SystemExit) as exc:
+        ci_mod.cmd_ci()
+
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert f"ci: FAILED — {failing_gate}" in out
+    assert "ci: ok —" not in out
+    data = json.loads((tmp_path / ".interlocks" / "ci.json").read_text(encoding="utf-8"))
+    assert data["passed"] is False
+
+
 def test_ci_in_process_includes_mutation_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

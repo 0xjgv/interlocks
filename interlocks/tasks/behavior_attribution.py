@@ -86,21 +86,7 @@ def cmd_behavior_attribution(*, refresh: bool = True) -> None:
     if result is None:
         _skip("no public symbols declared")
         return
-    _record_coverage(result)
-    if result.is_complete and not result.has_warnings:
-        if _below_min_coverage(cfg, result):
-            _fail_below_floor(cfg, result)
-        ui.row(_LABEL, _COMMAND, "ok", state="ok")
-        return
-
-    state = "fail" if cfg.enforce_behavior_attribution and not result.is_complete else "warn"
-    status = "failed" if state == "fail" else "warn"
-    ui.row(_LABEL, _COMMAND, status, state=state)
-    print(format_attribution_failure(result))
-    if state == "fail":
-        sys.exit(1)
-    if _below_min_coverage(cfg, result):
-        _fail_below_floor(cfg, result)
+    _handle_attribution_result(cfg, result, warning_detail=None)
 
 
 def cmd_behavior_attribution_cached_advisory() -> None:
@@ -113,15 +99,25 @@ def cmd_behavior_attribution_cached_advisory() -> None:
     if result is None:
         _skip("no public symbols declared")
         return
+    _handle_attribution_result(cfg, result, warning_detail="cached advisory")
+
+
+def _handle_attribution_result(
+    cfg: InterlockConfig,
+    result: AttributionResult,
+    *,
+    warning_detail: str | None,
+) -> None:
     _record_coverage(result)
     if result.is_complete and not result.has_warnings:
         if _below_min_coverage(cfg, result):
             _fail_below_floor(cfg, result)
         ui.row(_LABEL, _COMMAND, "ok", state="ok")
         return
+
     state = "fail" if cfg.enforce_behavior_attribution and not result.is_complete else "warn"
     status = "failed" if state == "fail" else "warn"
-    detail = None if state == "fail" else "cached advisory"
+    detail = None if state == "fail" else warning_detail
     ui.row(_LABEL, _COMMAND, status, detail=detail, state=state)
     print(format_attribution_failure(result))
     if state == "fail":

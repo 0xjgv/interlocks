@@ -69,14 +69,19 @@ def _cmd_show(cfg: InterlockConfig, *, json_mode: bool) -> None:
         return
     ui.section("Floor")
     ui.kv_block(_floor_rows(floor))
-    if floor.updated_at or floor.advanced_from_sha:
+    meta = _last_advance_rows(floor)
+    if meta:
         ui.section("Last advance")
-        meta: list[tuple[str, str]] = []
-        if floor.updated_at:
-            meta.append(("updated_at", floor.updated_at))
-        if floor.advanced_from_sha:
-            meta.append(("advanced_from_sha", floor.advanced_from_sha))
         ui.kv_block(meta)
+
+
+def _last_advance_rows(floor: BaselineFloor) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    if floor.updated_at:
+        rows.append(("updated_at", floor.updated_at))
+    if floor.advanced_from_sha:
+        rows.append(("advanced_from_sha", floor.advanced_from_sha))
+    return rows
 
 
 def _cmd_init(cfg: InterlockConfig, *, json_mode: bool) -> None:
@@ -123,16 +128,7 @@ def _cmd_check(cfg: InterlockConfig, *, json_mode: bool) -> None:
     floor = load_baseline(cfg)
     summary = _require_summary(cfg)
     candidate = floor_from_summary(summary)
-    regressions: list[str] = []
-    for field, higher_better in METRICS:
-        measured = getattr(candidate, field)
-        current_floor = getattr(floor, field)
-        if measured is None or current_floor is None:
-            continue
-        if higher_better and measured < current_floor:
-            regressions.append(f"{field}: {measured} below floor {current_floor}")
-        if not higher_better and measured > current_floor:
-            regressions.append(f"{field}: {measured} above floor {current_floor}")
+    regressions = _baseline_regressions(floor, candidate)
     if json_mode:
         print(json.dumps({"ok": not regressions, "regressions": regressions}, sort_keys=True))
         if regressions:
@@ -145,6 +141,38 @@ def _cmd_check(cfg: InterlockConfig, *, json_mode: bool) -> None:
     for line in regressions:
         print(f"  ✗ {line}")
     sys.exit(1)
+
+
+def _baseline_regressions(floor: BaselineFloor, candidate: BaselineFloor) -> list[str]:
+    regressions: list[str] = []
+    for field, higher_better in METRICS:
+        regression = _metric_regression(
+            field,
+            measured=getattr(candidate, field),
+            current_floor=getattr(floor, field),
+            higher_better=higher_better,
+        )
+        if regression is not None:
+            regressions.append(regression)
+    return regressions
+
+
+def _metric_regression(
+    field: str,
+    *,
+    measured: float | None,
+    current_floor: float | None,
+    higher_better: bool,
+) -> str | None:
+    if measured is None or current_floor is None:
+        return None
+    if higher_better:
+        if measured >= current_floor:
+            return None
+        return f"{field}: {measured} below floor {current_floor}"
+    if measured <= current_floor:
+        return None
+    return f"{field}: {measured} above floor {current_floor}"
 
 
 def _require_summary(cfg: InterlockConfig) -> RunSummary:

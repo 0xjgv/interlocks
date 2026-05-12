@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from interlocks.config import load_config
-from interlocks.runner import capture, generate_coverage_xml, python_m, uvx_tool
+from interlocks.runner import capture, generate_coverage_xml, uv_run_with, uvx_tool
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -213,7 +213,18 @@ def read_mutation_summary() -> MutationSummary | None:
     """
     if not any(Path(p).is_dir() for p in ("mutants", ".mutmut-cache")):
         return None
-    res = capture([*python_m("mutmut"), "results", "--all=true"])
+    cfg = load_config()
+    res = capture(
+        uv_run_with(
+            "interlocks-mutmut",
+            "python",
+            "-m",
+            "mutmut",
+            "results",
+            "--all=true",
+            version=cfg.tool_version("interlocks-mutmut"),
+        )
+    )
     by_status = _parse_results(res.stdout)
     killed = len(by_status.get("killed", []))
     survived = by_status.get("survived", [])

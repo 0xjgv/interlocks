@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -180,6 +181,39 @@ def test_coverage_line_rate_reads_explicit_path(tmp_path: Path) -> None:
 
 
 # ─────────────── _parse_results ─────────────────────
+
+
+def test_read_mutation_summary_uses_pinned_interlocks_mutmut(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Cfg:
+        def tool_version(self, name: str) -> str:
+            assert name == "interlocks-mutmut"
+            return "9.9.9"
+
+    commands: list[list[str]] = []
+
+    def fake_capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        commands.append(cmd)
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            "interlocks.a.x__mutmut_1: killed\ninterlocks.a.x__mutmut_2: survived\n",
+            "",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "mutants").mkdir()
+    monkeypatch.setattr(metrics_mod, "load_config", _Cfg)
+    monkeypatch.setattr(metrics_mod, "capture", fake_capture)
+
+    summary = metrics_mod.read_mutation_summary()
+
+    assert summary is not None
+    assert summary.score == 50.0
+    assert "interlocks-mutmut==9.9.9" in commands[0]
+    assert commands[0][-3:] == ["mutmut", "results", "--all=true"]
 
 
 def test_parse_results_groups_by_status() -> None:

@@ -26,6 +26,7 @@ import interlocks
 from interlocks.crash import payload as payload_mod
 from interlocks.crash import scrubber as scrubber_mod
 from interlocks.crash.payload import build_payload
+from interlocks.crash.scrubber import ExternalFrames
 
 ALLOWLIST_KEYS = {
     "schema_version",
@@ -246,3 +247,35 @@ def test_ci_false_when_unset(
 def test_schema_version_constant_exposed() -> None:
     """Schema version is a module constant so storage/transport can reference it."""
     assert payload_mod.SCHEMA_VERSION == 2
+
+
+def test_binary_version_returns_none_when_binary_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(payload_mod.shutil, "which", lambda _name: None)
+
+    assert payload_mod._binary_version("uv") is None
+
+
+def test_binary_version_returns_none_when_subprocess_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def broken_run(*_args: object, **_kwargs: object) -> None:
+        raise OSError("cannot exec")
+
+    monkeypatch.setattr(payload_mod.shutil, "which", lambda _name: "/bin/uv")
+    monkeypatch.setattr(payload_mod.subprocess, "run", broken_run)
+
+    assert payload_mod._binary_version("uv") is None
+
+
+def test_payload_serializes_external_frame_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    exc = _capture_keyerror()
+    monkeypatch.setattr(
+        payload_mod,
+        "normalize_traceback",
+        lambda _tb, _project_root: (ExternalFrames(count=4),),
+    )
+    monkeypatch.setattr(payload_mod, "_binary_version", lambda _name: None)
+
+    payload = build_payload(exc, subcommand="lint", project_root=Path.cwd())
+
+    assert payload["frames"] == [{"kind": "external", "count": 4}]

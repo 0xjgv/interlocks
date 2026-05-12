@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import IO, NoReturn
 
 from interlocks import ui
-from interlocks.config import InterlockUserError, load_config, require_pyproject
+from interlocks.config import (
+    InterlockUserError,
+    coverage_invoker_prefix,
+    load_config,
+    require_pyproject,
+)
 from interlocks.defaults.tools import UV_INDEX_FLAG
 from interlocks.skip import filter_tasks
 
@@ -63,6 +68,11 @@ _RESULTS: list[tuple[str, bool]] = []
 def reset_results() -> None:
     """Clear the stage-level task-result accumulator."""
     _RESULTS.clear()
+
+
+def record_result(label: str, passed: bool) -> None:
+    """Record one stage-level verdict result."""
+    _RESULTS.append((label, passed))
 
 
 def results_snapshot() -> list[tuple[str, bool]]:
@@ -153,7 +163,8 @@ def capture(
 
 def generate_coverage_xml() -> Path:
     """Regenerate coverage.xml from .coverage. Returns the path whether or not it exists."""
-    capture(python_m("coverage", "xml", "-o", "coverage.xml", "-q"))
+    cfg = load_config()
+    capture([*coverage_invoker_prefix(cfg), "coverage", "xml", "-o", "coverage.xml", "-q"])
     return Path("coverage.xml")
 
 
@@ -391,7 +402,7 @@ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     label = task.label or _default_label(task.description)
     command = task.display or _default_display(task.cmd)
     status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
-    _RESULTS.append((label, state == "ok"))
+    record_result(label, state == "ok")
     with _PRINT_LOCK:
         ui.row(label, command, status, detail=detail, state=state)
 
