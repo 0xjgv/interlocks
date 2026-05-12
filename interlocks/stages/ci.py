@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from typing import TYPE_CHECKING
 
 from interlocks import run_summary, ui
 from interlocks.acceptance_status import (
@@ -13,12 +14,11 @@ from interlocks.acceptance_status import (
     classify_acceptance_with_details,
 )
 from interlocks.config import InterlockConfig, MutationCIMode, load_config
-from interlocks.runner import Task, print_stage_verdict, reset_results, run_tasks
+from interlocks.runner import Task, print_stage_verdict, record_result, reset_results, run_tasks
 from interlocks.skip import (
     SkipPolicy,
     current_skip_policy,
     maybe_print_skip_banner,
-    run_unless_skipped,
     warn_skipped,
 )
 from interlocks.tasks.acceptance import task_acceptance_with_attribution
@@ -33,6 +33,9 @@ from interlocks.tasks.format_check import task_format_check
 from interlocks.tasks.lint import task_lint
 from interlocks.tasks.mutation import cmd_mutation
 from interlocks.tasks.typecheck import task_typecheck
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def cmd_ci() -> None:
@@ -95,14 +98,34 @@ def _post_coverage_gates(cfg: InterlockConfig, skip_policy: SkipPolicy) -> None:
     if skip_policy.enabled("coverage"):
         warn_skipped("crap", "coverage was skipped")
     else:
-        run_unless_skipped("crap", cmd_crap, skip_policy)
-    run_unless_skipped("attribution", lambda: cmd_behavior_attribution(refresh=False), skip_policy)
+        _run_post_coverage_gate("crap", cmd_crap, skip_policy)
+    _run_post_coverage_gate(
+        "attribution",
+        lambda: cmd_behavior_attribution(refresh=False),
+        skip_policy,
+    )
     if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
-        run_unless_skipped(
+        _run_post_coverage_gate(
             "mutation",
             lambda: cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental"),
             skip_policy,
         )
+
+
+def _run_post_coverage_gate(
+    label: str,
+    run: Callable[[], None],
+    skip_policy: SkipPolicy,
+) -> None:
+    if skip_policy.enabled(label):
+        warn_skipped(label)
+        return
+    try:
+        run()
+    except SystemExit:
+        record_result(label, False)
+        raise
+    record_result(label, True)
 
 
 def _should_run_mutation(mode: MutationCIMode, *, run_in_ci: bool) -> bool:

@@ -65,6 +65,11 @@ def reset_results() -> None:
     _RESULTS.clear()
 
 
+def record_result(label: str, passed: bool) -> None:
+    """Record one stage-level verdict result."""
+    _RESULTS.append((label, passed))
+
+
 def results_snapshot() -> list[tuple[str, bool]]:
     """Return `(label, passed)` pairs recorded since the last reset."""
     return list(_RESULTS)
@@ -391,7 +396,7 @@ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     label = task.label or _default_label(task.description)
     command = task.display or _default_display(task.cmd)
     status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
-    _RESULTS.append((label, state == "ok"))
+    record_result(label, state == "ok")
     with _PRINT_LOCK:
         ui.row(label, command, status, detail=detail, state=state)
 
