@@ -148,6 +148,44 @@ class TestSetupHooks(unittest.TestCase):
             ],
         )
 
+    def test_keep_existing_hook_preserves_non_command_hook(self) -> None:
+        """Matcher and other non-command hook objects are always kept."""
+        from interlocks.hook_setup import _keep_existing_hook
+
+        matcher = {"type": "matcher", "pattern": ".*error.*"}
+        assert _keep_existing_hook(matcher, "python -m interlocks.cli post-edit") is True
+
+    def test_keep_existing_hook_preserves_non_dict_hook(self) -> None:
+        """Non-dict hook values are treated as unknown and kept unchanged."""
+        from interlocks.hook_setup import _keep_existing_hook
+
+        result = _keep_existing_hook("run-some-script.sh", "python -m interlocks.cli post-edit")
+        assert result is True
+
+    def test_ensure_stop_hook_three_calls_produces_single_entry(self) -> None:
+        """Calling _ensure_stop_hook three times results in exactly one managed entry."""
+        command = "python -m interlocks.cli post-edit"
+        settings: dict[str, object] = {}
+        _ensure_stop_hook(settings, command)
+        _ensure_stop_hook(settings, command)
+        _ensure_stop_hook(settings, command)
+
+        hooks = settings["hooks"]["Stop"][0]["hooks"]  # pyright: ignore[reportIndexIssue]
+        managed = [h for h in hooks if isinstance(h, dict) and h.get("command") == command]
+        assert len(managed) == 1
+
+    def test_ensure_stop_hook_preserves_unmanaged_command_alongside_managed(self) -> None:
+        """An unrecognised command hook coexists with the managed post-edit entry."""
+        settings: dict[str, object] = {
+            "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "my-linter --fix"}]}]}
+        }
+        _ensure_stop_hook(settings, "python -m interlocks.cli post-edit")
+
+        hooks = settings["hooks"]["Stop"][0]["hooks"]  # pyright: ignore[reportIndexIssue]
+        commands = [h["command"] for h in hooks if isinstance(h, dict)]
+        assert "my-linter --fix" in commands
+        assert "python -m interlocks.cli post-edit" in commands
+
     def test_cmd_hooks_writes_hook_file_and_settings(self) -> None:
         from interlocks.stages.setup_hooks import cmd_hooks
 

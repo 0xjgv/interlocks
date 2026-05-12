@@ -75,9 +75,31 @@ def is_post_edit_command(command: object) -> bool:
     )
 
 
+def _git_hooks_dir(project_root: Path) -> Path:
+    """Return the git hooks directory for *project_root*.
+
+    In a linked worktree ``.git`` is a file with content
+    ``gitdir: <path>/.git/worktrees/<name>``.  The actual hooks directory
+    lives two levels up in the common git dir, not inside the per-worktree
+    pseudo-repo.
+    """
+    git_path = project_root / ".git"
+    if not git_path.is_file():
+        return git_path / "hooks"
+    text = git_path.read_text(encoding="utf-8").strip()
+    if not text.startswith("gitdir:"):
+        return git_path / "hooks"
+    gitdir = Path(text.split(":", 1)[1].strip())
+    if not gitdir.is_absolute():
+        gitdir = (project_root / gitdir).resolve()
+    if gitdir.parent.name == "worktrees":
+        return gitdir.parent.parent / "hooks"
+    return gitdir / "hooks"
+
+
 def pre_commit_hook_installed(project_root: Path) -> bool:
     """True when ``.git/hooks/pre-commit`` exists and invokes ``interlocks pre-commit``."""
-    hook = project_root / ".git" / "hooks" / "pre-commit"
+    hook = _git_hooks_dir(project_root) / "pre-commit"
     try:
         body = hook.read_text(encoding="utf-8")
     except OSError:
