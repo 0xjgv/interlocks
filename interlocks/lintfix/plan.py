@@ -175,6 +175,7 @@ def _serialize_candidate(c: PlannedCandidate, paths: dict[str, str]) -> dict[str
         "classification": cls.mode,
         "mutation_class": c.mutation_class,
         "files_touched": len(m.files_touched),
+        "files": list(m.files_touched),
         "changed_lines_total": m.changed_lines_total,
         "changed_lines_inside_diff": m.changed_lines_inside_diff,
         "changed_lines_outside_diff": m.changed_lines_outside_diff,

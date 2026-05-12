@@ -13,3 +13,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: 0xjgv/interlocks@v1
+
+      # Advisory fix plan + PR annotations. Each step is non-failing by design:
+      # `fix-plan` exits 0 even with no candidates, and `fix-annotate` only emits
+      # `::notice::` / `::warning::` lines so CI is never broken by suggestions.
+      - name: Fix plan (advisory)
+        if: always()
+        run: interlocks fix-plan --base=origin/${{ github.event.pull_request.base.ref || 'main' }}
+
+      - name: PR annotations
+        if: always()
+        run: interlocks fix-annotate
+
+      - name: Aggregate fix metrics
+        if: always()
+        run: interlocks fix-metrics
+
+      - name: Upload .lintfix artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lintfix-${{ github.run_id }}
+          path: .lintfix/
+          if-no-files-found: ignore
+          retention-days: 14

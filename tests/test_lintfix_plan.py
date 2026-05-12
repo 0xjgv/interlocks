@@ -168,6 +168,7 @@ def test_serialize_matches_spec_schema(monkeypatch: pytest.MonkeyPatch) -> None:
         "classification",
         "mutation_class",
         "files_touched",
+        "files",
         "changed_lines_total",
         "changed_lines_inside_diff",
         "changed_lines_outside_diff",
@@ -178,6 +179,7 @@ def test_serialize_matches_spec_schema(monkeypatch: pytest.MonkeyPatch) -> None:
         "reason",
     }
     assert set(c) == expected_keys
+    assert isinstance(c["files"], list)
     assert c["rule"] == "I001"
     assert c["mode"] == "auto"
     assert c["mutation_class"] == "import_sort"

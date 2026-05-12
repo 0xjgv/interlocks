@@ -41,6 +41,8 @@ from interlocks.tasks.deps_freshness import cmd_deps_freshness
 from interlocks.tasks.doctor import cmd_doctor
 from interlocks.tasks.evaluate import cmd_evaluate
 from interlocks.tasks.fix import cmd_fix
+from interlocks.tasks.fix_annotate import cmd_fix_annotate
+from interlocks.tasks.fix_metrics import cmd_fix_metrics
 from interlocks.tasks.fix_optimize import cmd_fix_optimize
 from interlocks.tasks.fix_plan import cmd_fix_plan
 from interlocks.tasks.fix_replay import cmd_fix_replay
@@ -333,6 +335,15 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 cmd_fix_optimize,
                 "Pick the highest-value rule subset under budget; "
                 "writes .lintfix/optimize.json (use --apply to mutate)",
+            ),
+            "fix-annotate": (
+                cmd_fix_annotate,
+                "Emit GitHub Actions annotations from .lintfix/plan.json "
+                "(advisory; never fails CI)",
+            ),
+            "fix-metrics": (
+                cmd_fix_metrics,
+                "Aggregate .lintfix/{plan,optimize,replay}.json into .lintfix/metrics.json",
             ),
             "format": (cmd_format, "Format code with ruff"),
             "lint": (cmd_lint, "Lint code with ruff (read-only)"),

@@ -1,6 +1,6 @@
 # SPEC: Rule-Scoped Fix Harness and Budgeted Fix Optimizer
 
-Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phase 3 shipped; Phase 4 shipped; Phase 5 pending.  
+Status: Draft 0.1 — Phases 0 + 1 shipped (commit `c1d2282`); Phase 2 shipped; Phase 3 shipped; Phase 4 shipped; Phase 5 shipped.  
 Audience: backend engineers, infra/tooling owners, reviewers  
 Context: legacy Django backend, Python 3.12, Ruff-based custom lint harness  
 Primary goal: unblock engineers without letting quality regress
@@ -802,25 +802,25 @@ Acceptance criteria:
 - [x] Given real candidate patches, the optimizer never selects unsafe fixes in `unblock` mode. *(`Budget.allow_unsafe_fixes=False` propagates via `classify.classify(unsafe=True) → mode="skip"`; `candidates_from_plan` then marks the candidate `selectable=False`; `test_fix_optimize_never_selects_unsafe_in_unblock` covers it end-to-end)*
 - [x] The final selected patch is re-applied in a fresh worktree and verified with `make ci`. *(`verify.apply_many_with_verify` snapshots the union of touched files, applies each selected rule sequentially, runs the verifier, and restores the snapshot on any failure; `test_fix_optimize_apply_mutates_on_clean_verify` + `test_fix_optimize_apply_restores_tree_on_verify_failure`)*
 
-### Phase 5: CI integration and adoption
+### Phase 5: CI integration and adoption ✅ Shipped
 
 Deliverables:
 
-- Add CI artifact for `.lintfix/plan.json`.
-- Add optional PR annotation summarizing suggested fixes.
-- Add aggregate metrics:
-  - planner runs;
-  - auto fixes applied;
-  - escrow patches generated;
-  - CI failures after fixes;
-  - average outside-diff churn;
-  - common skipped rules.
+- [x] Add CI artifact for `.lintfix/plan.json`. *(bundled `interlocks/defaults/github_workflow.yml` now adds an `actions/upload-artifact@v4` step uploading the entire `.lintfix/` directory — plan, optimize, replay, metrics, and escrow patches — under `lintfix-${{ github.run_id }}`, with `if-no-files-found: ignore` so runs without candidates stay green)*
+- [x] Add optional PR annotation summarizing suggested fixes. *(shipped as `interlocks fix-annotate`; `tasks/fix_annotate.py` reads `.lintfix/plan.json` (or `.lintfix/optimize.json` with `--source=optimize`) and emits one workflow command per `(rule, file)`: `::notice file=<file>,line=1::[<rule>] auto|escrow: ...` for auto/escrow, `::warning file=<file>,line=1::` for advisory, skipped candidates emit nothing)*
+- [x] Add aggregate metrics: *(shipped as `interlocks fix-metrics`; `tasks/fix_metrics.py` rolls up the per-run JSON files into `.lintfix/metrics.json` with `generated_at`, a `sources` truthtable, and per-section summaries)*
+  - [x] planner runs; *(each CI run uploads its own `metrics.json` artifact; cross-run aggregation is by external collection of artifacts, keeping interlocks stateless and per-author-blind)*
+  - [x] auto fixes applied; *(`plan.by_classification.auto` plus `optimize.selected` count)*
+  - [x] escrow patches generated; *(`plan.escrow_rules` list and `plan.by_classification.escrow` count)*
+  - [ ] CI failures after fixes; *(deferred — would require a persistent counter store across runs; for now consumers can fold artifact-level pass/fail into the external aggregation)*
+  - [x] average outside-diff churn; *(`plan.avg_outside_diff_lines` + `plan.p95_outside_diff_lines` via linear-interpolation quantile matching `stats.quantile`)*
+  - [x] common skipped rules. *(`plan.skipped_rules` sorted list, plus `optimize.rejection_reasons` Counter for "policy mode is escrow", "would exceed <dim> budget", "displaced by higher-value selection", etc.)*
 
 Acceptance criteria:
 
-- CI does not fail because of advisory fix suggestions.
-- Metrics are aggregate and used to tune policy, not to police individuals.
-- Developers can still land focused fixes without broad cleanup.
+- [x] CI does not fail because of advisory fix suggestions. *(every Phase 5 step in the bundled workflow runs with `if: always()`; `fix-annotate` emits only `::notice::` / `::warning::` lines — never `::error::` — and exits 0 even when `.lintfix/plan.json` is missing; `test_missing_plan_file_exits_zero_with_no_annotations`)*
+- [x] Metrics are aggregate and used to tune policy, not to police individuals. *(no author or commit-author fields anywhere in the `metrics.json` schema; `fix-metrics` reads only `.lintfix/*.json` outputs which are themselves per-rule, not per-engineer; `test_summarize_plan_groups_classifications` and friends pin the rollup keys)*
+- [x] Developers can still land focused fixes without broad cleanup. *(the Phase 5 steps are pure advisory — no mutation, no gate; the existing `fix-rule --apply` / `fix-optimize --apply` paths remain the only way the harness ever mutates the tree, and both keep the rule-scoped, budgeted, verify-or-restore invariants from earlier phases)*
 
 ---
 
