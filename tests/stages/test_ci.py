@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from interlocks.config import load_config
+from interlocks.stages.ci import _write_ci_evidence
 from tests.conftest import TmpProjectFactory
 
 _PYPROJECT = textwrap.dedent(
@@ -576,3 +578,93 @@ def test_ci_skips_acceptance_when_optional_missing(
 
     assert "Acceptance (required)" not in descriptions
     assert "Acceptance (pytest-bdd)" not in descriptions
+
+
+# ─────────────── CI evidence invariants ─────────────────────────────
+
+
+def _make_minimal_project(
+    tmp_path: Path,
+    *,
+    name: str = "ci-evidence-probe",
+    tool_interlocks: str = "",
+) -> None:
+    (tmp_path / "tests").mkdir()
+    body = f"[project]\nname = {name!r}\nversion = '0.0.0'\n"
+    if tool_interlocks:
+        body += f"\n[tool.interlocks]\n{tool_interlocks}\n"
+    (tmp_path / "pyproject.toml").write_text(body, encoding="utf-8")
+
+
+def test_ci_evidence_payload_is_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Evidence file contains exactly the bounded, non-sensitive key set; no extra fields."""
+    _make_minimal_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+    _write_ci_evidence(cfg, elapsed_seconds=2.5, passed=True, context=None)
+
+    data = json.loads(cfg.ci_evidence_path.read_text(encoding="utf-8"))
+    assert set(data.keys()) == {
+        "command",
+        "elapsed_seconds",
+        "created_at",
+        "passed",
+        "budget_seconds",
+    }
+    assert data["command"] == "interlocks ci"
+    assert isinstance(data["elapsed_seconds"], float)
+    assert isinstance(data["created_at"], float)
+    assert data["passed"] is True
+    assert isinstance(data["budget_seconds"], int)
+
+
+def test_ci_evidence_context_key_present_only_when_provided(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """context key appears iff context arg is passed; absent when arg is None."""
+    _make_minimal_project(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    cfg = load_config()
+    evidence = cfg.ci_evidence_path
+
+    _write_ci_evidence(cfg, elapsed_seconds=1.0, passed=True, context="pr_push")
+    data = json.loads(evidence.read_text(encoding="utf-8"))
+    assert data["context"] == "pr_push"
+
+    _write_ci_evidence(cfg, elapsed_seconds=1.0, passed=False, context=None)
+    data = json.loads(evidence.read_text(encoding="utf-8"))
+    assert "context" not in data
+
+
+def test_ci_evidence_uses_custom_ci_evidence_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """ci_evidence_path from [tool.interlocks] is used when cmd_ci runs in-process."""
+    _make_minimal_project(
+        tmp_path,
+        name="ci-custom-path",
+        tool_interlocks='ci_evidence_path = "reports/timing.json"',
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+
+    from interlocks.stages import ci as ci_mod
+
+    monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: None)
+    monkeypatch.setattr(ci_mod, "cmd_behavior_attribution", lambda refresh=False: None)
+    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: None)
+
+    ci_mod.cmd_ci()
+
+    custom_path = tmp_path / "reports" / "timing.json"
+    assert custom_path.exists(), f"evidence not written to custom path {custom_path}"
+    data = json.loads(custom_path.read_text(encoding="utf-8"))
+    assert data["command"] == "interlocks ci"

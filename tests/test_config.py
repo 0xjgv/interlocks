@@ -822,3 +822,32 @@ def test_invoker_prefix_uv_ignores_target_venv(tmp_path: Path) -> None:
     _make_stub_venv_python(tmp_path)
     cfg = _cfg(project_root=tmp_path, test_invoker="uv")
     assert invoker_prefix(cfg) == ["uv", "run", "python", "-m"]
+
+
+# ─────────────── ci_evidence_path ───────────────────────────────────
+
+
+def test_ci_evidence_path_default_resolves_under_project_root(tmp_project: Path) -> None:
+    """Default ci_evidence_path is .interlocks/ci.json relative to project root."""
+    cfg = load_config()
+    assert cfg.ci_evidence_path == (tmp_project / InterlockConfig.ci_evidence_path).resolve()
+
+
+def test_ci_evidence_path_override_resolves_from_project_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ci_evidence_path in [tool.interlocks] resolves relative to project root."""
+    _setup_pyproject(
+        tmp_path,
+        monkeypatch,
+        """
+        [project]
+        name = "custom-evidence"
+        version = "0.0.0"
+
+        [tool.interlocks]
+        ci_evidence_path = "reports/timing.json"
+        """,
+    )
+    cfg = load_config()
+    assert cfg.ci_evidence_path == (tmp_path / "reports" / "timing.json").resolve()
