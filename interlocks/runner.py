@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import IO, NoReturn
 
 from interlocks import ui
-from interlocks.config import InterlockUserError, load_config, require_pyproject
+from interlocks.config import (
+    InterlockUserError,
+    coverage_invoker_prefix,
+    load_config,
+    require_pyproject,
+)
 from interlocks.defaults.tools import UV_INDEX_FLAG
 from interlocks.skip import filter_tasks
 
@@ -158,7 +163,8 @@ def capture(
 
 def generate_coverage_xml() -> Path:
     """Regenerate coverage.xml from .coverage. Returns the path whether or not it exists."""
-    capture(python_m("coverage", "xml", "-o", "coverage.xml", "-q"))
+    cfg = load_config()
+    capture([*coverage_invoker_prefix(cfg), "coverage", "xml", "-o", "coverage.xml", "-q"])
     return Path("coverage.xml")
 
 

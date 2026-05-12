@@ -12,6 +12,7 @@ import pytest
 from interlocks.runner import (
     Task,
     _truncate_dump,
+    generate_coverage_xml,
     reset_results,
     results_snapshot,
     run_tasks,
@@ -327,6 +328,37 @@ def test_dump_failure_caps_long_stderr_in_run_tasks(
     assert "err-199" in out
     assert "err-100" not in out
     assert "lines omitted" in out
+
+
+def test_generate_coverage_xml_uses_configured_coverage_invoker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from interlocks import runner as runner_mod
+
+    cfg = object()
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(runner_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(
+        runner_mod,
+        "coverage_invoker_prefix",
+        lambda seen: ["target-python", "-m"] if seen is cfg else [],
+    )
+    monkeypatch.setattr(
+        runner_mod,
+        "capture",
+        lambda cmd, env=(): captured.setdefault("cmd", cmd),
+    )
+
+    assert generate_coverage_xml() == Path("coverage.xml")
+    assert captured["cmd"] == [
+        "target-python",
+        "-m",
+        "coverage",
+        "xml",
+        "-o",
+        "coverage.xml",
+        "-q",
+    ]
 
 
 # ─────────────── uvx / uv run dispatch helpers ─────────────────────────
