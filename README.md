@@ -299,6 +299,7 @@ Nightly always runs the full suite + score gate, so PRs trade some signal for sp
 Correctness:
 
 - `fix` / `format`: ruff lint-fix and format, mutating files.
+- `fix-rule --rule=<CODE> [--apply]`: rule-scoped support fix (e.g. `I001` import sort, `F401` unused import). Plans by default; with `--apply` mutates the tree only when the rule's mode is `auto`, budgets pass, and the verifier (`interlocks ci` by default) succeeds. Escrow-mode rules (e.g. `F401`) always write `.lintfix/escrow/<rule>.patch` for review instead of mutating.
 - `lint` / `format-check`: read-only equivalents for CI.
 - `typecheck`: basedpyright.
 - `test`: pytest or unittest, auto-detected.
@@ -420,6 +421,42 @@ To share a crash manually, attach the payload JSON to your issue or paste releva
 ## Inspiration
 
 Inspired by [Uncle Bob Martin](https://x.com/unclebobmartin/status/2047661738456121506?s=20). Since *Clean Code*, we tend to forget the fundamentals — clean code, deterministic gates, fast feedback. These fundamentals are back stronger than ever, especially as agents write more of the code.
+
+## Support Flow: Rule-Scoped Unblock
+
+When a PR is blocked by a single lint family (import sort, EOF newline, etc.) and you want to unblock the engineer without rewriting unrelated legacy code, use `fix-rule` instead of broad `fix`:
+
+```bash
+# Plan only — no mutation. Shows files touched, churn, inside/outside-diff lines, risk.
+interlocks fix-rule --rule=I001
+
+# Apply iff: rule mode is `auto` + budget passes + final verifier passes.
+# Verifier defaults to `interlocks ci`; override with `--verify-cmd="<command>"`.
+interlocks fix-rule --rule=I001 --apply
+
+# Escrow-mode rules (F401, UP*, ...) always write `.lintfix/escrow/<rule>.patch`
+# for review — never mutate the working tree.
+interlocks fix-rule --rule=F401 --apply
+```
+
+Defaults:
+
+- Non-mutating. `--apply` is required to change files, and even then escrow-mode rules stay in escrow.
+- Base ref `origin/main` (override with `--base=<ref>`).
+- Budget profile `unblock` (5 files, 80 changed lines, 10 outside-diff lines, risk ≤ 8). Override with `--budget=renovation` for planned cleanup PRs.
+- On verifier failure the original tree is restored and the patch is preserved at `.lintfix/failed.patch` for review.
+
+Rule modes (initial):
+
+| Rule | Mode | Notes |
+|---|---|---|
+| `I001` | auto | Import sort — low churn, no semantic change. |
+| `W292` | auto | EOF newline. |
+| `F401` | escrow | Unused import — may have side effects or re-export intent. |
+| `UP*` | escrow | Type-annotation / syntax modernization. |
+| `SIM*`, `C4*` | advisory | Control-flow / collection rewrites — review noise. |
+
+The full design is in `lint_fix_harness_SPEC.md`. Phase 0 + 1 ship today; planner/optimizer phases are tracked in the spec.
 
 ## Troubleshooting: Integration Escape Hatches
 

@@ -41,6 +41,7 @@ from interlocks.tasks.deps_freshness import cmd_deps_freshness
 from interlocks.tasks.doctor import cmd_doctor
 from interlocks.tasks.evaluate import cmd_evaluate
 from interlocks.tasks.fix import cmd_fix
+from interlocks.tasks.fix_rule import cmd_fix_rule
 from interlocks.tasks.format import cmd_format
 from interlocks.tasks.init import cmd_init
 from interlocks.tasks.init_acceptance import cmd_init_acceptance
@@ -313,6 +314,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
         "Tasks",
         {
             "fix": (cmd_fix, "Fix lint errors with ruff"),
+            "fix-rule": (
+                cmd_fix_rule,
+                "Rule-scoped fix: plan or apply a single ruff rule (e.g. --rule=I001)",
+            ),
             "format": (cmd_format, "Format code with ruff"),
             "lint": (cmd_lint, "Lint code with ruff (read-only)"),
             "typecheck": (cmd_typecheck, "Type-check with basedpyright"),

@@ -15,6 +15,7 @@ mutmut-junit.xml
 .mutmut-cache/
 .pytest_cache/
 .interlocks/
+.lintfix/
 .ruff_cache/
 coverage.xml
 .coverage
