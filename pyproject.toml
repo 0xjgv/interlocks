@@ -92,6 +92,8 @@ markers = [
     "cli: CLI surface acceptance scenarios",
     "crash: crash boundary acceptance scenarios",
     "doctor: doctor diagnostic acceptance scenarios",
+    "fix: lint-fix harness per-command acceptance scenarios",
+    "greenfield: legacy unblock acceptance (lint-fix harness on a synthetic legacy project)",
     "init: greenfield scaffolding acceptance scenarios",
     "meta: meta-command (acceptance/init-acceptance/setup-hooks) scenarios",
     "stages: stage (check/pre-commit/ci/nightly) scenarios",

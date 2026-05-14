@@ -384,6 +384,102 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "a subprocess gate failure exits via SystemExit without entering capture",
         "interlocks.crash.boundary:CrashBoundary",
     ),
+    Behavior(
+        "greenfield-check-blocks",
+        "stage",
+        "check exits non-zero on a seeded legacy project with ruff lint failures",
+        "interlocks.stages.check:cmd_check",
+    ),
+    Behavior(
+        "greenfield-fix-plan-non-mutating",
+        "task",
+        "fix-plan writes .lintfix/plan.json and groups candidates without mutating the tree",
+        "interlocks.tasks.fix_plan:cmd_fix_plan",
+    ),
+    Behavior(
+        "greenfield-fix-rule-preview",
+        "task",
+        "fix-rule with default APPLY=0 previews a candidate without mutating the tree",
+        "interlocks.tasks.fix_rule:cmd_fix_rule",
+    ),
+    Behavior(
+        "greenfield-fix-optimize-non-mutating",
+        "task",
+        "fix-optimize selects a subset and writes optimize.json without mutating",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "greenfield-fix-annotate",
+        "task",
+        "fix-annotate emits workflow-command lines after a fix-plan run",
+        "interlocks.tasks.fix_annotate:cmd_fix_annotate",
+    ),
+    Behavior(
+        "greenfield-fix-metrics",
+        "task",
+        "fix-metrics rolls up per-run JSON into a single metrics.json",
+        "interlocks.tasks.fix_metrics:cmd_fix_metrics",
+    ),
+    Behavior(
+        "greenfield-setup-check",
+        "task",
+        "setup --check exits non-zero on an unadopted project and names missing artifacts",
+        "interlocks.tasks.setup:cmd_setup",
+    ),
+    Behavior(
+        "greenfield-doctor",
+        "doctor",
+        "doctor flags missing adoption steps on an unadopted project",
+        "interlocks.tasks.doctor:cmd_doctor",
+    ),
+    Behavior(
+        "fix-plan-classifies-i001-auto",
+        "task",
+        "fix-plan classifies I001 import-sort as auto on the changed file set",
+        "interlocks.tasks.fix_plan:cmd_fix_plan",
+    ),
+    Behavior(
+        "fix-plan-classifies-f401-escrow",
+        "task",
+        "fix-plan classifies F401 unused-import as escrow regardless of budget",
+        "interlocks.tasks.fix_plan:cmd_fix_plan",
+    ),
+    Behavior(
+        "fix-plan-skips-unsafe-only",
+        "task",
+        "fix-plan classifies unsafe-only diagnostics as skip with an 'unsafe' reason",
+        "interlocks.tasks.fix_plan:cmd_fix_plan",
+    ),
+    Behavior(
+        "fix-replay-writes-per-rule-stats",
+        "task",
+        "fix-replay writes per-rule statistics across a few-commit history",
+        "interlocks.tasks.fix_replay:cmd_fix_replay",
+    ),
+    Behavior(
+        "fix-optimize-empty-plan",
+        "task",
+        "fix-optimize selects no candidates when the plan is empty",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "fix-optimize-no-unsafe-in-unblock",
+        "task",
+        "fix-optimize never selects unsafe candidates under the unblock budget",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "fix-annotate-missing-plan",
+        "task",
+        "fix-annotate exits 0 with no output when .lintfix/plan.json is missing",
+        "interlocks.tasks.fix_annotate:cmd_fix_annotate",
+    ),
+    Behavior(
+        "fix-metrics-missing-inputs",
+        "task",
+        "fix-metrics writes a metrics.json with an all-false sources truthtable when no inputs",
+        "interlocks.tasks.fix_metrics:cmd_fix_metrics",
+    ),
 )
 
 

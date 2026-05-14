@@ -109,6 +109,119 @@ def make_flat_tmp_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
+_LEGACY_PYPROJECT = textwrap.dedent(
+    """\
+    [project]
+    name = "legacy"
+    version = "0"
+    requires-python = ">=3.11"
+
+    [tool.ruff]
+    target-version = "py311"
+    line-length = 99
+
+    [tool.ruff.lint]
+    select = ["E", "F", "I", "W", "UP"]
+
+    [tool.coverage.run]
+    source = ["src/legacy"]
+    branch = true
+
+    [tool.coverage.report]
+    fail_under = 0
+
+    [tool.interlocks]
+    src_dir = "src/legacy"
+    test_dir = "tests"
+    coverage_min = 0
+    crap_max = 1000.0
+    enforce_crap = false
+    skip = ["audit", "deps"]
+    """
+)
+
+_LEGACY_CLEAN_VIEWS = '"""Views."""\n'
+_LEGACY_CLEAN_ADMIN = '"""Admin."""\n'
+# Combined I001 (unsorted) + F401 (unused json) + UP007 (Optional) + W292
+# (no trailing newline). Exercises the mixed-violation pattern from spec §1.
+_LEGACY_DIRTY_VIEWS = (
+    "import sys\n"
+    "import os\n"
+    "import json\n"
+    "from typing import Optional\n"
+    "\n"
+    "def fetch(x: Optional[int]) -> int:\n"
+    "    print(sys.version, os.name)\n"
+    "    return x or 0"
+)
+# I001 in the admin-path risk zone (spec §10.2, +4 risk).
+_LEGACY_DIRTY_ADMIN = (
+    "import sys\nimport os\n\ndef register() -> None:\n    print(sys.version, os.name)\n"
+)
+
+
+def make_legacy_greenfield_project(tmp_path: Path, *, dirty: bool = True) -> Path:
+    """Materialize a legacy greenfield project (spec §1 reproduction).
+
+    Seeds an unadopted-codebase layout: minimal ``[tool.interlocks]`` (no
+    preset, no thresholds tightened), a source module with mixed violations
+    (I001 + F401 + UP007 + W292), an ``admin.py`` in the path-risk zone
+    (spec §10.2, +4), a trivial smoke test, and a git repo with a clean
+    baseline commit followed by an uncommitted "dirty" overwrite — so
+    ``--base=HEAD`` resolves and the harness sees the violations as the
+    candidate diff for ``fix-plan`` / ``fix-rule`` / ``fix-optimize``.
+
+    ``audit`` and ``deps`` are skipped via ``[tool.interlocks].skip`` so
+    ``interlocks check`` stays deterministic without network access.
+
+    Pass ``dirty=False`` to leave the working tree matching HEAD — the
+    "no candidates" baseline used by ``fix-optimize`` empty-plan tests.
+    """
+    project = tmp_path
+    (project / "pyproject.toml").write_text(_LEGACY_PYPROJECT, encoding="utf-8")
+    src = project / "src" / "legacy"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text('"""Legacy package."""\n', encoding="utf-8")
+    (src / "views.py").write_text(_LEGACY_CLEAN_VIEWS, encoding="utf-8")
+    (src / "admin.py").write_text(_LEGACY_CLEAN_ADMIN, encoding="utf-8")
+    tests = project / "tests"
+    tests.mkdir()
+    (tests / "test_smoke.py").write_text(
+        '"""Smoke."""\n\n\ndef test_ok() -> None:\n    assert True\n',
+        encoding="utf-8",
+    )
+
+    def _git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)
+
+    _git("init", "-q", "-b", "main")
+    _git("config", "user.email", "test@example.com")
+    _git("config", "user.name", "Test")
+    _git("config", "commit.gpgsign", "false")
+    _git("config", "core.hooksPath", "/dev/null")
+    _git("add", "-A")
+    _git("commit", "-q", "-m", "baseline")
+
+    if dirty:
+        (src / "views.py").write_text(_LEGACY_DIRTY_VIEWS, encoding="utf-8")
+        (src / "admin.py").write_text(_LEGACY_DIRTY_ADMIN, encoding="utf-8")
+    return project
+
+
+def commit_legacy_dirty_state(project: Path, message: str = "introduce violations") -> None:
+    """Stage and commit the current dirty state — used by fix-replay scenarios.
+
+    Mirrors the per-commit "PR introduces a violation" pattern from
+    ``test_lintfix_fix_replay.py::repo_with_history``. After this call
+    ``git rev-list --first-parent -n1 main`` resolves to the new commit
+    and the new commit's parent carries the clean baseline.
+    """
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", message], cwd=project, check=True, capture_output=True
+    )
+
+
 def make_tmp_project(tmp_path: Path) -> Path:
     """Materialize a minimal clean project under ``tmp_path``.
 
