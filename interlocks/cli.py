@@ -8,6 +8,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from interlocks import ui
+from interlocks.command_docs import ALIASES, alias_suffix
 from interlocks.config import (
     clear_cache,
     kv_with_source,
@@ -40,6 +41,7 @@ from interlocks.tasks.deps import cmd_deps
 from interlocks.tasks.deps_freshness import cmd_deps_freshness
 from interlocks.tasks.doctor import cmd_doctor
 from interlocks.tasks.evaluate import cmd_evaluate
+from interlocks.tasks.explain import cmd_explain
 from interlocks.tasks.fix import cmd_fix
 from interlocks.tasks.fix_annotate import cmd_fix_annotate
 from interlocks.tasks.fix_metrics import cmd_fix_metrics
@@ -236,15 +238,13 @@ def _write_project_preset(pyproject: Path, preset: str) -> None:
     pyproject.write_text(text[:body_start] + updated_body + text[body_end:], encoding="utf-8")
 
 
-ALIASES: dict[str, str] = {"attribution": "behavior-attribution"}
-
-
 _HELP_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Start here", ("doctor", "check", "ci", "setup")),
     (
         "Common gates",
         (
             "fix",
+            "fix-optimize",
             "format",
             "lint",
             "typecheck",
@@ -271,15 +271,7 @@ def _help_group_command_names() -> tuple[str, ...]:
 
 def _print_command_row(name: str, description: str, width: int) -> None:
     tag = f"[{name}]"
-    print(f"  {tag:<{width}}  {description}{_alias_suffix(name)}")
-
-
-def _alias_suffix(name: str) -> str:
-    aliases = sorted(alias for alias, canonical in ALIASES.items() if canonical == name)
-    if not aliases:
-        return ""
-    label = "alias" if len(aliases) == 1 else "aliases"
-    return f" ({label}: {', '.join(aliases)})"
+    print(f"  {tag:<{width}}  {description}{alias_suffix(name)}")
 
 
 def _print_detected_block(cfg: InterlockConfig | None) -> None:
@@ -333,8 +325,8 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             ),
             "fix-optimize": (
                 cmd_fix_optimize,
-                "Pick the highest-value rule subset under budget; "
-                "writes .lintfix/optimize.json (use --apply to mutate)",
+                "Pick the highest-value rule subset under budget; writes the full "
+                ".lintfix/ set (--annotate / --metrics for CI; --apply to mutate)",
             ),
             "fix-annotate": (
                 cmd_fix_annotate,
@@ -399,6 +391,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 cmd_evaluate,
                 "Score automatable quality checklist items",
             ),
+            "explain": (cmd_explain, "Explain what each command does, in prose"),
         },
     ),
     (

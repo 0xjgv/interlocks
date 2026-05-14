@@ -152,6 +152,34 @@ def test_plan_only_produces_plan_section(project: Path) -> None:
     assert payload["plan"]["candidates_total"] == 1
 
 
+@pytest.mark.parametrize("entry", ["cmd", "aggregate"])
+def test_aggregate_metrics_and_cmd_wrapper_share_behavior(project: Path, entry: str) -> None:
+    """`aggregate_metrics` is the single core; `cmd_fix_metrics` is a thin wrapper."""
+    plan = {
+        "base": "main",
+        "head": "abc",
+        "candidates": [
+            {
+                "rule": "I001",
+                "classification": "auto",
+                "changed_lines_total": 5,
+                "changed_lines_outside_diff": 1,
+            }
+        ],
+    }
+    (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+    if entry == "cmd":
+        fix_metrics.cmd_fix_metrics()
+    else:
+        out_path = fix_metrics.aggregate_metrics(project)
+        assert out_path == project / ".lintfix" / "metrics.json"
+
+    payload = json.loads((project / ".lintfix" / "metrics.json").read_text(encoding="utf-8"))
+    assert payload["sources"]["plan"] is True
+    assert payload["plan"]["candidates_total"] == 1
+
+
 def test_cli_entrypoint_writes_metrics(project: Path) -> None:
     (project / ".lintfix" / "plan.json").write_text(
         json.dumps({"base": "main", "head": "abc", "candidates": []}),

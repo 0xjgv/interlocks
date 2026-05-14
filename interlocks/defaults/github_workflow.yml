@@ -14,20 +14,16 @@ jobs:
       - uses: actions/checkout@v6
       - uses: 0xjgv/interlocks@v1
 
-      # Advisory fix plan + PR annotations. Each step is non-failing by design:
-      # `fix-plan` exits 0 even with no candidates, and `fix-annotate` only emits
-      # `::notice::` / `::warning::` lines so CI is never broken by suggestions.
-      - name: Fix plan (advisory)
+      # Advisory unblock pass: one self-sufficient command writes the full
+      # `.lintfix/` set (plan + optimize + metrics) and emits PR annotations.
+      # Non-failing by design — it exits 0 with no candidates and only emits
+      # `::notice::` / `::warning::` lines, so CI is never broken by suggestions.
+      - name: Unblock pass (advisory)
         if: always()
-        run: interlocks fix-plan --base=origin/${{ github.event.pull_request.base.ref || 'main' }}
-
-      - name: PR annotations
-        if: always()
-        run: interlocks fix-annotate
-
-      - name: Aggregate fix metrics
-        if: always()
-        run: interlocks fix-metrics
+        run: >-
+          interlocks fix-optimize
+          --base=origin/${{ github.event.pull_request.base.ref || 'main' }}
+          --annotate --metrics
 
       - name: Upload .lintfix artifact
         if: always()

@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from interlocks import ui
-from interlocks.config import load_config
+from interlocks.config import load_config, relpath
 from interlocks.lintfix import escrow
 from interlocks.lintfix.stats import quantile
 
@@ -30,8 +30,18 @@ if TYPE_CHECKING:
 
 def cmd_fix_metrics() -> None:
     """Aggregate `.lintfix/*.json` into one metrics report."""
-    cfg = load_config()
-    lintfix_dir = escrow.lintfix_dir(cfg.project_root)
+    aggregate_metrics(load_config().project_root)
+
+
+def aggregate_metrics(project_root: Path) -> Path:
+    """Roll up `.lintfix/{plan,optimize,replay}.json` into `metrics.json`.
+
+    The single implementation behind both ``fix-metrics`` and the inline
+    ``fix-optimize --metrics`` path: it reads whatever is on disk, so callers
+    only need to ensure the source artifacts are written first. Returns the
+    written ``metrics.json`` path.
+    """
+    lintfix_dir = escrow.lintfix_dir(project_root)
     plan = _read_json(lintfix_dir / "plan.json")
     optimize = _read_json(lintfix_dir / "optimize.json")
     replay = _read_json(lintfix_dir / "replay.json")
@@ -51,8 +61,9 @@ def cmd_fix_metrics() -> None:
     if replay is not None:
         payload["replay"] = _summarize_replay(replay)
 
-    out_path = _write_metrics(cfg.project_root, payload)
-    _print_summary(payload, cfg.relpath(out_path))
+    out_path = _write_metrics(project_root, payload)
+    _print_summary(payload, relpath(project_root, out_path))
+    return out_path
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:

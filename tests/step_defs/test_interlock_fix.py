@@ -161,6 +161,22 @@ def _metrics_sources_all_false(greenfield_project: Path) -> None:
     assert sources == {"plan": False, "optimize": False, "replay": False}, sources
 
 
+@then("the greenfield output has annotation lines")
+def _has_annotation_lines(greenfield_result: subprocess.CompletedProcess[str]) -> None:
+    combined = greenfield_result.stdout + greenfield_result.stderr
+    assert "::notice file=" in combined or "::warning file=" in combined, combined
+
+
+@then("the metrics sources include plan and optimize")
+def _metrics_sources_include_plan_optimize(greenfield_project: Path) -> None:
+    payload = json.loads(
+        (greenfield_project / ".lintfix" / "metrics.json").read_text(encoding="utf-8")
+    )
+    sources = payload["sources"]
+    assert sources["plan"] is True, sources
+    assert sources["optimize"] is True, sources
+
+
 @then(parsers.parse('the optimize rejects rule "{rule}" with reason mentioning "{needle}"'))
 def _optimize_rejects_rule(greenfield_project: Path, rule: str, needle: str) -> None:
     payload = json.loads(

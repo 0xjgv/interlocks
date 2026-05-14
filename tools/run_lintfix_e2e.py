@@ -17,10 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lintfix_playground_lib import (
     DIRTY_FILES,
     PLAYGROUNDS_ROOT,
+    REPLAY_REORDERED_IMPORTS,
     REPO_ROOT,
     create_optimizer_repo,
     create_replay_repo,
     git,
+    write_text,
 )
 
 
@@ -292,6 +294,73 @@ def scenario_empty_plan(context: ScenarioContext) -> None:
     _show_if_verbose(context, plan_result, optimize_result)
 
 
+def scenario_fix_optimize_self_sufficient(context: ScenarioContext) -> None:
+    """One `fix-optimize` run writes the full `.lintfix/` artifact set."""
+    repo = _repo(context, "fix-optimize-self-sufficient")
+    result = run_cli(repo, "fix-optimize", "--base=HEAD", "--metrics", repo_root=context.repo_root)
+    _expect_success(result)
+    plan = _read_json(repo / ".lintfix" / "plan.json")
+    _expect({"I001", "F401"}.issubset({c["rule"] for c in plan["candidates"]}), "plan.json sparse")
+    _expect((repo / ".lintfix" / "optimize.json").is_file(), "optimize.json missing")
+    metrics = _read_json(repo / ".lintfix" / "metrics.json")
+    _expect(metrics["sources"]["plan"] is True, "metrics missing plan source")
+    _expect(metrics["sources"]["optimize"] is True, "metrics missing optimize source")
+    _show_if_verbose(context, result)
+
+
+def scenario_fix_optimize_annotate(context: ScenarioContext) -> None:
+    repo = _repo(context, "fix-optimize-annotate")
+    result = run_cli(
+        repo, "fix-optimize", "--base=HEAD", "--annotate", repo_root=context.repo_root
+    )
+    _expect_success(result)
+    _expect_output(result, "::notice file=", "[I001]")
+    _show_if_verbose(context, result)
+
+
+def scenario_fix_optimize_auto_stats(context: ScenarioContext) -> None:
+    """`.lintfix/replay.json` is auto-discovered; `--no-stats` opts out."""
+    repo = _replay_repo(context, "fix-optimize-auto-stats")
+    _expect_success(
+        run_cli(repo, "fix-replay", "--base=main", "--n=2", repo_root=context.repo_root)
+    )
+    _expect((repo / ".lintfix" / "replay.json").is_file(), "fix-replay wrote no replay.json")
+
+    # A fresh dirty file gives fix-optimize candidates to weigh against the stats.
+    write_text(repo / "c.py", REPLAY_REORDERED_IMPORTS)
+    discovered = run_cli(
+        repo, "fix-optimize", "--base=HEAD", "--verbose", repo_root=context.repo_root
+    )
+    _expect_success(discovered)
+    _expect_output(discovered, ".lintfix/replay.json")
+
+    skipped = run_cli(
+        repo,
+        "fix-optimize",
+        "--base=HEAD",
+        "--no-stats",
+        "--verbose",
+        repo_root=context.repo_root,
+    )
+    _expect_success(skipped)
+    _expect(
+        ".lintfix/replay.json" not in skipped.combined_output,
+        "--no-stats did not skip replay discovery",
+    )
+    _show_if_verbose(context, discovered, skipped)
+
+
+def scenario_unblock_alias(context: ScenarioContext) -> None:
+    """`unblock` is an alias for `fix-optimize` — identical artifact set."""
+    repo = _repo(context, "unblock-alias")
+    result = run_cli(repo, "unblock", "--base=HEAD", repo_root=context.repo_root)
+    _expect_success(result)
+    _expect((repo / ".lintfix" / "optimize.json").is_file(), "optimize.json missing")
+    _expect((repo / ".lintfix" / "plan.json").is_file(), "plan.json missing under unblock alias")
+    _expect_unchanged_dirty_files(repo)
+    _show_if_verbose(context, result)
+
+
 def scenario_fix_replay(context: ScenarioContext) -> None:
     repo = _replay_repo(context, "fix-replay")
     result = run_cli(repo, "fix-replay", "--base=main", "--n=2", repo_root=context.repo_root)
@@ -312,6 +381,10 @@ SCENARIOS: dict[str, Scenario] = {
     "fix-optimize-budget": scenario_fix_optimize_budget,
     "fix-annotate": scenario_fix_annotate,
     "fix-metrics": scenario_fix_metrics,
+    "fix-optimize-self-sufficient": scenario_fix_optimize_self_sufficient,
+    "fix-optimize-annotate": scenario_fix_optimize_annotate,
+    "fix-optimize-auto-stats": scenario_fix_optimize_auto_stats,
+    "unblock-alias": scenario_unblock_alias,
     "apply-success": scenario_apply_success,
     "apply-rollback": scenario_apply_rollback,
     "empty-plan": scenario_empty_plan,

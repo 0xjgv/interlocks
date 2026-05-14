@@ -299,6 +299,7 @@ Nightly always runs the full suite + score gate, so PRs trade some signal for sp
 Correctness:
 
 - `fix` / `format`: ruff lint-fix and format, mutating files.
+- `fix-optimize` (alias `unblock`) `[--apply]`: the self-sufficient unblock command. Discovers every fixable ruff rule on the changed file set, picks the highest-value subset under a budget, and writes the full `.lintfix/` artifact set (`plan.json` + `optimize.json`; `metrics.json` with `--metrics`). Non-mutating by default; `--apply` applies the selected rules, verifies, and restores on failure. `--annotate` emits GitHub Actions PR annotations. `.lintfix/replay.json` is auto-discovered when present (`--no-stats` to skip).
 - `fix-rule --rule=<CODE> [--apply]`: rule-scoped support fix (e.g. `I001` import sort, `F401` unused import). Plans by default; with `--apply` mutates the tree only when the rule's mode is `auto`, budgets pass, and the verifier (`interlocks ci` by default) succeeds. Escrow-mode rules (e.g. `F401`) always write `.lintfix/escrow/<rule>.patch` for review instead of mutating.
 - `lint` / `format-check`: read-only equivalents for CI.
 - `typecheck`: basedpyright.
@@ -457,6 +458,37 @@ Rule modes (initial):
 | `SIM*`, `C4*` | advisory | Control-flow / collection rewrites — review noise. |
 
 The full design is in `lint_fix_harness_SPEC.md`. Phase 0 + 1 ship today; planner/optimizer phases are tracked in the spec.
+
+## Support Flow: Multi-Rule Unblock
+
+When a PR is blocked by several lint families at once, `fix-optimize` (alias `unblock`) is the one command that just works — it discovers every fixable rule on the changed file set, picks the highest-value subset that fits the budget, and writes the complete `.lintfix/` artifact set in a single run:
+
+```bash
+# Preview — no mutation. Writes .lintfix/plan.json + .lintfix/optimize.json.
+interlocks unblock
+
+# Apply the selected subset, verify, restore the tree on any failure.
+interlocks unblock --apply
+```
+
+Defaults:
+
+- Non-mutating. `--apply` is required to change files; escrow-mode rules stay in escrow regardless.
+- Base ref `origin/main` (override with `--base=<ref>`), budget profile `unblock` (`--budget=renovation` for planned cleanup).
+- `.lintfix/replay.json` is auto-discovered when present to weight rule values from replay history; pass `--no-stats` to ignore it, or `--stats=<path>` to point elsewhere.
+- On verifier failure the original tree is restored and the patch is preserved at `.lintfix/failed.patch`.
+
+In CI, a single advisory step covers planning, PR annotations, and metrics:
+
+```yaml
+- name: Unblock pass (advisory)
+  if: always()
+  run: interlocks fix-optimize --base=origin/main --annotate --metrics
+```
+
+`--annotate` emits `::notice::` / `::warning::` PR annotations (never `::error::`, never changes the exit code); `--metrics` rolls the artifacts up into `.lintfix/metrics.json`. Both are produced before `--apply` runs, so CI still gets hints and metrics even when an apply fails. `interlocks setup --ci=github` installs this step for you.
+
+**Advanced (power-user).** The phased commands behind `fix-optimize` stay available for finer control: `fix-plan` (non-mutating plan only), `fix-replay` (replay history into `.lintfix/replay.json`), `fix-annotate` (annotations from an existing JSON), and `fix-metrics` (standalone aggregation). The golden path needs none of them.
 
 ## Troubleshooting: Integration Escape Hatches
 

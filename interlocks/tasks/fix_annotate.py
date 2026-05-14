@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from interlocks import ui
-from interlocks.config import load_config
+from interlocks.config import load_config, relpath
 from interlocks.lintfix import escrow
 from interlocks.runner import arg_value
 
@@ -43,11 +43,24 @@ def cmd_fix_annotate(*, source: Source | None = None, input_path: str | None = N
     """
     src: Source = source or _arg_source()
     input_arg = input_path if input_path is not None else arg_value("--input=", "")
+    emit_annotations(load_config().project_root, source=src, input_path=input_arg)
 
-    cfg = load_config()
-    path = _resolve_path(cfg.project_root, src, input_arg)
+
+def emit_annotations(
+    project_root: Path,
+    *,
+    source: Source,
+    input_path: str = "",
+) -> None:
+    """Read the fix JSON for ``source`` and print one workflow command per candidate.
+
+    The single implementation behind both ``fix-annotate`` and the inline
+    ``fix-optimize --annotate`` path. Non-failing on a missing file (exits the
+    caller's flow with no output); a malformed file is the one hard error.
+    """
+    path = _resolve_path(project_root, source, input_path)
     if not path.is_file():
-        ui.row("fix-annotate", "(no plan)", "ok", detail=cfg.relpath(path), state="ok")
+        ui.row("fix-annotate", "(no plan)", "ok", detail=relpath(project_root, path), state="ok")
         return
 
     try:
@@ -57,7 +70,7 @@ def cmd_fix_annotate(*, source: Source | None = None, input_path: str | None = N
         sys.exit(2)
 
     counts = {"notice": 0, "warning": 0, "skip": 0}
-    for c in _iter_candidates(payload, src):
+    for c in _iter_candidates(payload, source):
         if c.get("classification") == "skip":
             counts["skip"] += 1
             continue
@@ -67,7 +80,7 @@ def cmd_fix_annotate(*, source: Source | None = None, input_path: str | None = N
 
     ui.section("fix-annotate")
     ui.kv_block([
-        ("source", cfg.relpath(path)),
+        ("source", relpath(project_root, path)),
         ("notice", str(counts["notice"])),
         ("warning", str(counts["warning"])),
         ("skip", str(counts["skip"])),

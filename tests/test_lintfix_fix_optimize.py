@@ -35,6 +35,7 @@ from interlocks.lintfix.optimize import (
 )
 from interlocks.lintfix.rules import Mode
 from interlocks.lintfix.verify import BatchVerifyResult
+from interlocks.tasks import fix_annotate
 from interlocks.tasks import fix_optimize as fix_optimize_mod
 
 _PYPROJECT = textwrap.dedent("""
@@ -171,6 +172,103 @@ def test_fix_optimize_no_changed_files_exits_clean(repo: Path) -> None:
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload["selected"] == []
     assert payload["not_selected"] == []
+
+
+def test_fix_optimize_writes_plan_json_alongside_optimize(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+
+    result = _run(repo)
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    plan_json = repo / ".lintfix" / "plan.json"
+    assert plan_json.is_file()
+    payload = json.loads(plan_json.read_text(encoding="utf-8"))
+    # Same content `fix-plan` writes — every discovered rule is a candidate.
+    rules = {c["rule"] for c in payload["candidates"]}
+    assert {"I001", "F401"}.issubset(rules)
+
+
+def test_fix_optimize_auto_discovers_replay_json(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+    lintfix = repo / ".lintfix"
+    lintfix.mkdir()
+    (lintfix / "replay.json").write_text(
+        json.dumps({"rules": [_stats_row("I001")]}), encoding="utf-8"
+    )
+
+    result = _run(repo, "--verbose")
+    assert result.returncode == 0, result.stderr + result.stdout
+    # Auto-discovered stats source is named in the summary — never silent.
+    assert ".lintfix/replay.json" in result.stdout
+
+
+def test_fix_optimize_no_stats_flag_skips_discovery(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+    lintfix = repo / ".lintfix"
+    lintfix.mkdir()
+    (lintfix / "replay.json").write_text(
+        json.dumps({"rules": [_stats_row("I001")]}), encoding="utf-8"
+    )
+
+    result = _run(repo, "--no-stats", "--verbose")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert ".lintfix/replay.json" not in result.stdout
+
+
+def test_fix_optimize_annotate_emits_annotation_lines(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+
+    result = _run(repo, "--annotate")
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "::notice file=" in result.stdout
+    assert "[I001]" in result.stdout
+
+
+def test_fix_optimize_metrics_writes_metrics_json(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+
+    result = _run(repo, "--metrics")
+    assert result.returncode == 0, result.stderr + result.stdout
+
+    metrics = json.loads((repo / ".lintfix" / "metrics.json").read_text(encoding="utf-8"))
+    # plan.json + optimize.json were both written this run, so both sections populate.
+    assert metrics["sources"]["plan"] is True
+    assert metrics["sources"]["optimize"] is True
+    assert "plan" in metrics
+    assert "optimize" in metrics
+
+
+def test_fix_optimize_apply_failure_still_annotates(repo: Path) -> None:
+    f = repo / "sample.py"
+    original = _DIRTY
+    f.write_text(original, encoding="utf-8")
+
+    result = _run(
+        repo,
+        "--annotate",
+        "--apply",
+        f'--verify-cmd={sys.executable} -c "import sys;sys.exit(1)"',
+    )
+
+    # Annotations run before --apply, so CI still gets hints on apply failure.
+    assert "::notice file=" in result.stdout
+    assert result.returncode != 0
+    assert f.read_text(encoding="utf-8") == original
+    assert (repo / ".lintfix" / "failed.patch").is_file()
+
+
+def test_unblock_alias_runs_fix_optimize(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, "-m", "interlocks.cli", "unblock", "--base=HEAD"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (repo / ".lintfix" / "optimize.json").is_file()
+    assert (repo / ".lintfix" / "plan.json").is_file()
 
 
 # ─────────────── in-process unit layer ────────────────────────────
@@ -322,10 +420,20 @@ def verbose(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--verbose"])
 
 
-def test_print_summary_no_candidates(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
-    fix_optimize_mod._print_summary(
-        _plan(), _selection(), "HEAD", "unblock", ".lintfix/optimize.json"
+def _opts(base: str = "HEAD", budget_name: str = "unblock") -> fix_optimize_mod._Options:
+    return fix_optimize_mod._Options(
+        base=base,
+        budget_name=budget_name,
+        apply=False,
+        stats_path="",
+        verify_cmd=("true",),
+        annotate=False,
+        metrics=False,
     )
+
+
+def test_print_summary_no_candidates(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
+    fix_optimize_mod._print_summary(_plan(), _selection(), _opts(), ".lintfix/optimize.json")
     out = capsys.readouterr().out
     assert "(no candidates)" in out
 
@@ -338,7 +446,7 @@ def test_print_summary_with_selected_and_rejected(
         selected=(_opt_candidate("I001"),),
         rejected=(_opt_candidate("F401", value=0),),
     )
-    fix_optimize_mod._print_summary(plan, selection, "HEAD", "unblock", "out.json")
+    fix_optimize_mod._print_summary(plan, selection, _opts(), "out.json")
     out = capsys.readouterr().out
     assert "SELECTED" in out
     assert "NOT SELECTED" in out
@@ -350,7 +458,7 @@ def test_print_summary_candidates_but_nothing_selected(
     verbose: None, capsys: pytest.CaptureFixture[str]
 ) -> None:
     plan = _plan(candidates=(_planned_candidate(rule="F401", mode="escrow"),))
-    fix_optimize_mod._print_summary(plan, _selection(), "HEAD", "unblock", "out.json")
+    fix_optimize_mod._print_summary(plan, _selection(), _opts(), "out.json")
     out = capsys.readouterr().out
     assert "(none)" in out
 
@@ -494,3 +602,112 @@ def test_cmd_fix_optimize_apply_path_invokes_verifier(
         base="HEAD", budget="unblock", apply=True, stats_path="", verify_cmd=("true",)
     )
     assert len(calls) == 1
+
+
+# --- _resolve_stats_path --------------------------------------------------
+
+
+def test_resolve_stats_path_defaults_to_replay_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize"])
+    assert fix_optimize_mod._resolve_stats_path() == ".lintfix/replay.json"
+
+
+def test_resolve_stats_path_explicit_stats_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--stats=custom/replay.json"])
+    assert fix_optimize_mod._resolve_stats_path() == "custom/replay.json"
+
+
+def test_resolve_stats_path_no_stats_flag_disables_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--no-stats"])
+    assert fix_optimize_mod._resolve_stats_path() == ""
+
+
+# --- cmd_fix_optimize: artifact set + opt-in flags ------------------------
+
+
+def _patch_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        plan_module,
+        "build_plan",
+        lambda **_kw: _plan(candidates=(_planned_candidate(rule="I001"),)),
+    )
+    monkeypatch.setattr(plan_module, "materialize_escrow_patches", lambda *_a: {})
+
+
+def test_cmd_fix_optimize_writes_plan_json_alongside_optimize(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize"])
+    _patch_plan(monkeypatch)
+    fix_optimize_mod.cmd_fix_optimize(
+        base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
+    )
+    plan_json = json.loads((project / ".lintfix" / "plan.json").read_text(encoding="utf-8"))
+    assert {c["rule"] for c in plan_json["candidates"]} == {"I001"}
+
+
+def test_cmd_fix_optimize_metrics_flag_writes_populated_metrics(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--metrics"])
+    _patch_plan(monkeypatch)
+    fix_optimize_mod.cmd_fix_optimize(
+        base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
+    )
+    metrics = json.loads((project / ".lintfix" / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["sources"]["plan"] is True
+    assert metrics["sources"]["optimize"] is True
+
+
+def test_cmd_fix_optimize_stale_replay_shows_stats_row(
+    project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--verbose"])
+    _patch_plan(monkeypatch)
+    lintfix = project / ".lintfix"
+    lintfix.mkdir()
+    (lintfix / "replay.json").write_text(
+        json.dumps({"rules": [_stats_row("I001")]}), encoding="utf-8"
+    )
+    # stats_path=None → _resolve_stats_path() auto-discovers .lintfix/replay.json.
+    fix_optimize_mod.cmd_fix_optimize(
+        base="HEAD", budget="unblock", apply=False, stats_path=None, verify_cmd=("true",)
+    )
+    out = capsys.readouterr().out
+    assert ".lintfix/replay.json" in out
+
+
+def test_cmd_fix_optimize_annotate_error_does_not_change_exit_code(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--annotate"])
+    _patch_plan(monkeypatch)
+
+    def _boom(*_a: object, **_kw: object) -> None:
+        raise RuntimeError("annotate boom")
+
+    monkeypatch.setattr(fix_annotate, "emit_annotations", _boom)
+    # Must complete without propagating — annotation failure is advisory only.
+    fix_optimize_mod.cmd_fix_optimize(
+        base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
+    )
+    assert (project / ".lintfix" / "optimize.json").is_file()
+
+
+def test_cmd_fix_optimize_annotate_systemexit_is_swallowed(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--annotate"])
+    _patch_plan(monkeypatch)
+
+    def _exit(*_a: object, **_kw: object) -> None:
+        raise SystemExit(2)
+
+    monkeypatch.setattr(fix_annotate, "emit_annotations", _exit)
+    # A hard sys.exit from the annotator must not escape fix-optimize.
+    fix_optimize_mod.cmd_fix_optimize(
+        base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
+    )
+    assert (project / ".lintfix" / "optimize.json").is_file()

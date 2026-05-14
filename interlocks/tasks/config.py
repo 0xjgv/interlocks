@@ -8,7 +8,6 @@ need a single command answering "what can I configure?".
 from __future__ import annotations
 
 import json
-import sys
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -21,7 +20,7 @@ from interlocks.config import (
     load_optional_config,
 )
 from interlocks.defaults_path import TOOL_CONFIG_SPECS, ToolConfigSource, tool_config_source
-from interlocks.runner import fail_skip
+from interlocks.runner import fail_skip, subcommand_args
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -30,7 +29,7 @@ if TYPE_CHECKING:
 
 
 def cmd_config() -> None:
-    args = _config_args()
+    args = subcommand_args("config")
     if args and args[0] == "show":
         _cmd_config_show(args[1:])
         return
@@ -62,15 +61,6 @@ def cmd_config() -> None:
 
     ui.section("Next steps")
     _print_next_steps(cfg, pyproject_present=pyproject.is_file())
-
-
-def _config_args() -> list[str]:
-    raw = sys.argv[1:]
-    try:
-        start = raw.index("config") + 1
-    except ValueError:
-        return []
-    return [arg for arg in raw[start:] if arg not in {"--quiet", "--verbose"}]
 
 
 def _config_usage() -> str:

@@ -147,6 +147,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.evaluate:cmd_evaluate",
     ),
     Behavior(
+        "cli-explain-all",
+        "cli",
+        "explain with no argument documents every command",
+        "interlocks.tasks.explain:cmd_explain",
+    ),
+    Behavior(
+        "cli-explain-one",
+        "cli",
+        "explain a single command prints just that command's prose",
+        "interlocks.tasks.explain:cmd_explain",
+    ),
+    Behavior(
         "doctor-readiness",
         "doctor",
         "doctor reports setup readiness",
@@ -490,6 +502,24 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "fix-optimize-totals-match-selected-subset",
         "task",
         "fix-optimize totals equal the summed value and cost of the selected subset",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "unblock-alias-writes-artifact-set",
+        "task",
+        "the unblock alias runs fix-optimize and writes the full .lintfix artifact set",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "fix-optimize-annotate-emits-lines",
+        "task",
+        "fix-optimize --annotate emits GitHub Actions annotation lines inline",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "fix-optimize-metrics-writes-report",
+        "task",
+        "fix-optimize --metrics writes a metrics.json with populated plan and optimize sections",
         "interlocks.tasks.fix_optimize:cmd_fix_optimize",
     ),
 )

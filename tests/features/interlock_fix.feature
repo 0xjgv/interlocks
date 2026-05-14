@@ -69,3 +69,23 @@ Feature: per-command coverage of the fix-* harness
     When I run "interlocks fix-optimize --base=HEAD" in the greenfield project
     Then the greenfield command exits 0
     And the optimize totals equal the sum of the selected subset
+
+  # req: unblock-alias-writes-artifact-set
+  Scenario: the unblock alias writes the full .lintfix artifact set
+    When I run "interlocks unblock --base=HEAD" in the greenfield project
+    Then the greenfield command exits 0
+    And the file ".lintfix/plan.json" exists in the greenfield project
+    And the file ".lintfix/optimize.json" exists in the greenfield project
+
+  # req: fix-optimize-annotate-emits-lines
+  Scenario: fix-optimize --annotate emits GitHub annotation lines
+    When I run "interlocks fix-optimize --base=HEAD --annotate" in the greenfield project
+    Then the greenfield command exits 0
+    And the greenfield output has annotation lines
+
+  # req: fix-optimize-metrics-writes-report
+  Scenario: fix-optimize --metrics writes a populated metrics report
+    When I run "interlocks fix-optimize --base=HEAD --metrics" in the greenfield project
+    Then the greenfield command exits 0
+    And the file ".lintfix/metrics.json" exists in the greenfield project
+    And the metrics sources include plan and optimize

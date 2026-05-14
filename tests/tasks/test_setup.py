@@ -74,13 +74,18 @@ def test_setup_installs_hooks_agent_docs_and_skill(
         for hook in hooks
     )
 
-    assert "interlocks check" in (tmp_path / "AGENTS.md").read_text(encoding="utf-8").lower()
-    assert "interlocks check" in (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").lower()
+    agents_md = (tmp_path / "AGENTS.md").read_text(encoding="utf-8").lower()
+    claude_md = (tmp_path / "CLAUDE.md").read_text(encoding="utf-8").lower()
+    assert "interlocks check" in agents_md
+    assert "interlocks check" in claude_md
+    assert "unblock" in agents_md
+    assert "unblock" in claude_md
 
     from interlocks.defaults_path import path as defaults_path
 
     installed = tmp_path / ".claude" / "skills" / "interlocks" / "SKILL.md"
     assert installed.read_bytes() == defaults_path("skill/SKILL.md").read_bytes()
+    assert b"unblock" in installed.read_bytes()
 
 
 def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -165,6 +170,13 @@ def test_setup_ci_installs_github_workflow(
     workflow = tmp_path / ".github" / "workflows" / "interlocks.yml"
     body = workflow.read_text(encoding="utf-8")
     assert "uses: 0xjgv/interlocks@v1" in body
+    # The advisory unblock pass is a single self-sufficient step.
+    assert "interlocks fix-optimize" in body
+    assert "--annotate --metrics" in body
+    # The former 3-step trio (fix-plan / fix-annotate / fix-metrics) is collapsed.
+    assert "interlocks fix-plan" not in body
+    assert "interlocks fix-annotate" not in body
+    assert "interlocks fix-metrics" not in body
     assert "Installed GitHub Actions workflow" in capsys.readouterr().out
 
     first = workflow.read_text(encoding="utf-8")

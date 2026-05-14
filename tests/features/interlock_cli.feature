@@ -74,3 +74,17 @@ Feature: interlocks CLI surface area
     Given I run "interlocks evaluate" on a project with a traceability gap
     Then the output contains "── Next Actions"
     And the output contains "Close with `"
+
+  # req: cli-explain-all
+  Scenario: explain with no argument documents every command
+    Given I run "interlocks explain"
+    Then the output lists every registered command
+    And the output contains "When to use"
+    And the output contains "Mutates"
+    And the output contains "Exit codes"
+
+  # req: cli-explain-one
+  Scenario: explain a single command prints just that command's prose
+    Given I run "interlocks explain coverage"
+    Then the output contains "When to use"
+    And the output does not contain "[fix]"

@@ -209,6 +209,73 @@ def test_optimize_source_reads_selected_and_not_selected(
     assert ".lintfix/escrow/F401.patch" in out
 
 
+@pytest.mark.parametrize("entry", ["cmd", "emit"])
+def test_emit_annotations_and_cmd_wrapper_share_behavior(
+    project: Path, capsys: pytest.CaptureFixture[str], entry: str
+) -> None:
+    """`emit_annotations` is the single core; `cmd_fix_annotate` is a thin wrapper."""
+    plan = {
+        "base": "main",
+        "head": "abc",
+        "mode": "unblock",
+        "ruff_version": "0.x",
+        "candidates": [_plan_candidate("I001", "auto", ["a.py"])],
+    }
+    (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+    if entry == "cmd":
+        with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate"]):
+            fix_annotate.cmd_fix_annotate()
+    else:
+        fix_annotate.emit_annotations(project, source="plan")
+
+    out = _capsys_stdout(capsys)
+    assert "::notice file=a.py,line=1::" in out
+    assert "[I001]" in out
+
+
+def test_emit_annotations_missing_file_is_non_failing(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # No plan.json on disk — emit nothing, do not raise, do not exit.
+    fix_annotate.emit_annotations(project, source="plan")
+    out = _capsys_stdout(capsys)
+    assert "::notice" not in out
+
+
+def test_emit_annotations_reads_optimize_source(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    optimize = {
+        "base": "main",
+        "head": "abc",
+        "budget": "unblock",
+        "ruff_version": "0.x",
+        "total_value": 8,
+        "total_cost": {"outside_diff": 0, "changed_lines": 1, "files": 1, "risk": 0},
+        "selected": [
+            {
+                "rule": "I001",
+                "value": 8,
+                "cost": {"outside_diff": 0, "changed_lines": 1, "files": 1, "risk": 0},
+                "policy_mode": "auto",
+                "unsafe": False,
+                "files": ["a.py"],
+                "patch_path": None,
+                "reason": None,
+                "diagnostic_count": 1,
+            }
+        ],
+        "not_selected": [],
+    }
+    (project / ".lintfix" / "optimize.json").write_text(json.dumps(optimize), encoding="utf-8")
+
+    fix_annotate.emit_annotations(project, source="optimize")
+    out = _capsys_stdout(capsys)
+    assert "::notice file=a.py,line=1::" in out
+    assert "[I001]" in out
+
+
 def test_cli_entrypoint_runs_fix_annotate(project: Path) -> None:
     """Smoke: the subcommand is wired into `interlocks` and exits 0."""
     plan = {

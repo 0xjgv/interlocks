@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
+from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME
 from interlocks.config import (
     CONFIG_KEYS,
     InterlockConfig,
@@ -21,6 +22,7 @@ from interlocks.config import (
     preset_defaults,
 )
 from interlocks.tasks.config import cmd_config
+from interlocks.tasks.explain import cmd_explain
 
 _DEFAULT_HELP_GROUPS = (
     ("Start here", ("doctor", "check", "ci", "setup")),
@@ -28,6 +30,7 @@ _DEFAULT_HELP_GROUPS = (
         "Common gates",
         (
             "fix",
+            "fix-optimize",
             "format",
             "lint",
             "typecheck",
@@ -558,3 +561,81 @@ def test_cmd_help_does_not_mention_user_global(
     assert "user-global" not in out
     assert "XDG_CONFIG_HOME" not in out
     assert "~/.config/interlocks" not in out
+
+
+# ─────────────── interlocks explain ─────────────────────────────────
+
+
+def test_command_docs_cover_every_command() -> None:
+    """Drift guard: every command in ``TASKS`` has a ``CommandDoc``, and vice versa."""
+    assert set(COMMAND_DOCS_BY_NAME) == set(TASKS)
+
+
+def test_command_docs_summary_matches_task_description() -> None:
+    """``CommandDoc.summary`` is canonical — the bare ``TASKS`` string must match it."""
+    for doc in COMMAND_DOCS:
+        assert doc.summary == TASKS[doc.name][1], doc.name
+
+
+def test_cmd_explain_all(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    for name in TASKS:
+        assert f"  [{name}]  " in out
+    assert "When to use:" in out
+    assert "Mutates:" in out
+    assert "Exit codes:" in out
+
+
+def test_cmd_explain_single_command(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "coverage"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "  [coverage]  " in out
+    assert "When to use:" in out
+    assert "[fix]" not in out
+
+
+def test_cmd_explain_unknown_command_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "bogus"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_explain()
+
+    assert exc.value.code == 1
+    assert "unknown command: bogus" in capsys.readouterr().out
+
+
+def test_cmd_explain_rejects_unknown_option(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_explain()
+
+    assert exc.value.code == 1
+    assert "--json" in capsys.readouterr().out
+
+
+def test_cmd_explain_resolves_alias(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "attribution"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "  [behavior-attribution]  " in out
+    assert "(alias: attribution)" in out

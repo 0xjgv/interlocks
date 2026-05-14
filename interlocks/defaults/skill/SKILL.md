@@ -53,6 +53,7 @@ Branch on intent:
 - **Authoring code** → `uvx --from interlocks il check` after edits. Fast: fix + format + typecheck + test.
 - **Pre-commit** → automated via hook. If missing, run `uvx --from interlocks il pre-commit`.
 - **Pre-PR / verifying CI parity** → `uvx --from interlocks il ci`. Adds coverage, CRAP, audit, deps, arch.
+- **PR blocked by many lint rules** → `il unblock` (preview, writes `.lintfix/`) then `il unblock --apply`. Discovers + budget-optimizes the full fixable set in one run; `il fix` remains the single-pass safe-fix shortcut.
 - **Investigating one failure** → run the single gate: `il lint`, `il typecheck`, `il coverage`, etc.
 - **Setting up a fresh repo** → `il init` (greenfield only) → `il setup` → `il check` → `il doctor` if blocked → optional `il setup --ci=github`.
 - **Long-running gates** → `il nightly` (full coverage + mutation).

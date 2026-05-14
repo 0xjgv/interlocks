@@ -43,6 +43,7 @@ PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
     "config",
     "doctor",
     "evaluate",
+    "explain",
     "init",
     "presets",
     "setup",
@@ -226,6 +227,16 @@ def arg_flag_value(flag: str, default_when_bare: str) -> str | None:
         if arg.startswith(flag + "="):
             return arg.split("=", 1)[1] or default_when_bare
     return None
+
+
+def subcommand_args(name: str) -> list[str]:
+    """Args passed after subcommand ``name`` in sys.argv, minus global verbosity flags."""
+    raw = sys.argv[1:]
+    try:
+        start = raw.index(name) + 1
+    except ValueError:
+        return []
+    return [arg for arg in raw[start:] if arg not in {"--quiet", "--verbose"}]
 
 
 def preflight(command: str) -> None:

@@ -541,6 +541,14 @@ def _enum_override(table: dict[str, Any], key: str) -> str | None:
     return value if value in _ENUM_OPTIONS[key] else None
 
 
+def relpath(project_root: Path, path: Path) -> str:
+    """Project-root-relative string form of ``path`` (absolute path if outside)."""
+    try:
+        return str(path.relative_to(project_root))
+    except ValueError:
+        return str(path)
+
+
 @dataclass(frozen=True)
 class InterlockConfig:
     project_root: Path
@@ -595,10 +603,7 @@ class InterlockConfig:
 
     def relpath(self, path: Path) -> str:
         """Project-root-relative string form of ``path`` (absolute path if outside)."""
-        try:
-            return str(path.relative_to(self.project_root))
-        except ValueError:
-            return str(path)
+        return relpath(self.project_root, path)
 
     @property
     def src_dir_arg(self) -> str:
