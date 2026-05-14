@@ -1,13 +1,19 @@
 # interlocks Strategy Memo
 
+## Ultimate Goal
+
+Close the gap between the code a team writes today and the quality bar they want — automatically, in increments small enough that progress never stops, until the hard merge gate is one the codebase already passes.
+
+The hard gate is the destination, not the toll booth. Adaptation — `check --changed` scoping, threshold ratcheting, the lintfix optimizer, adoption-friction tooling — is the vehicle that gets a codebase there. The metric that matters is friction per unit of quality delta: minimize what halts an engineer for every increment of quality gained.
+
 ## Thesis
 
-- greenfield codebases: adopt interlocks early and enforces high quality code from day one
-- brownfield codebases: ratchet existing codebases to high quality
-- adoption: bring interlocks to a codebase through a skill, and let model adjust thresholds over time (towards the high quality preset)
-- how?
+- greenfield codebases: adopt interlocks early, so the high-quality gate is the starting state
+- brownfield codebases: ratchet existing codebases toward the gate one PR at a time, never in one halting step
+- adoption: bring interlocks to a codebase through a skill, and let the model adjust thresholds over time toward the high-quality preset
+- the gate is non-negotiable as an outcome; how a team reaches it is adaptive
 
-interlocks should be positioned as an opinionated Python quality interlocks for platform and DevEx teams that manage many repositories. Its strongest promise is not “a wrapper around tools”; it is one enforceable quality workflow for linting, typechecking, tests, coverage, dependency hygiene, architecture checks, complexity, and stricter gates when teams are ready.
+interlocks is an opinionated Python quality workflow for platform and DevEx teams that manage many repositories. Its strongest promise is not “a wrapper around tools” and not “the thing that blocks you”; it is one quality workflow — linting, typechecking, tests, coverage, dependency hygiene, architecture checks, complexity, and stricter gates — that a codebase grows into rather than has imposed on it.
 
 The AI-era wedge is credible: teams adopting coding agents need hard merge gates because code volume rises faster than review capacity. But the buyer and first serious user is still likely a platform or DevEx owner who already feels CI drift across many Python services.
 
