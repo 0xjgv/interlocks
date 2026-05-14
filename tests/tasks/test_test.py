@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import stub_project_venv
+
 PYPROJECT = textwrap.dedent("""
     [project]
     name = "sample"
@@ -85,6 +87,7 @@ def tmp_project_no_tests(tmp_path: Path) -> Path:
     (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "sample.py").write_text("", encoding="utf-8")
+    stub_project_venv(tmp_path)
     return tmp_path
 
 

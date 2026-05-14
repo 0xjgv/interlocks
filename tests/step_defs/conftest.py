@@ -8,6 +8,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+from tests.conftest import stub_project_venv
+
 # Minimal tmp-project pyproject. `[tool.interlocks]` knobs are tuned so all four
 # stages (check/pre-commit/ci/nightly) can run to green in-test without
 # tripping thresholds or waiting on mutation for minutes.
@@ -106,6 +108,7 @@ def make_flat_tmp_project(tmp_path: Path) -> Path:
         '"""Trivial passing test."""\n\n\ndef test_ok() -> None:\n    assert True\n',
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
     return tmp_path
 
 
@@ -205,6 +208,7 @@ def make_legacy_greenfield_project(tmp_path: Path, *, dirty: bool = True) -> Pat
     if dirty:
         (src / "views.py").write_text(_LEGACY_DIRTY_VIEWS, encoding="utf-8")
         (src / "admin.py").write_text(_LEGACY_DIRTY_ADMIN, encoding="utf-8")
+    stub_project_venv(project)  # created post-commit — stays out of the baseline tree
     return project
 
 
@@ -245,6 +249,7 @@ def make_tmp_project(tmp_path: Path) -> Path:
         '"""Trivial passing test."""\n\n\ndef test_ok() -> None:\n    assert True\n',
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
     return tmp_path
 
 

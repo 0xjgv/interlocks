@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import TmpProjectFactory
+from tests.conftest import TmpProjectFactory, stub_project_venv
 
 _PYPROJECT = textwrap.dedent(
     """\
@@ -313,6 +313,7 @@ def _write_require_acceptance_check_project(
         ),
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
 
 
 def _capture_check_parallel_descriptions(
@@ -380,6 +381,23 @@ def test_check_appends_required_failure_when_behavior_coverage_missing(
 
     assert "Acceptance (required)" in descriptions
     assert "Acceptance (pytest-bdd)" not in descriptions
+
+
+def test_check_skips_dependency_gates_without_project_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Non-uv project, no .venv: typecheck + test skip with a nudge, not false negatives."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "no-env"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
+        encoding="utf-8",
+    )
+    # deliberately no stub_project_venv() — this is the cold-start state
+
+    descriptions = _capture_check_parallel_descriptions(tmp_path, monkeypatch)
+
+    assert descriptions == []
+    assert "no project environment" in capsys.readouterr().out
 
 
 def test_check_fails_when_tests_fail(tmp_project: Path) -> None:

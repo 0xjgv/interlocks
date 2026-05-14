@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 import os
+import sys
 import textwrap
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -73,6 +74,19 @@ def _write_tree(root: Path, files: Mapping[str, str]) -> None:
         target.write_text(content, encoding="utf-8")
 
 
+def stub_project_venv(root: Path) -> None:
+    """Symlink ``.venv`` to the active interpreter's environment.
+
+    ``check`` and ``doctor`` treat a project as environment-ready only when an
+    in-tree venv interpreter exists — otherwise dependency-aware gates
+    (typecheck, test) are skipped because they would run against the wrong
+    environment. Pointing ``.venv`` at the test runner's own prefix gives
+    throwaway projects a real, importable interpreter (pytest + coverage
+    available) without the cost of building a venv per test.
+    """
+    (root / ".venv").symlink_to(sys.prefix, target_is_directory=True)
+
+
 TmpProjectFactory = Callable[..., Path]
 
 
@@ -113,6 +127,7 @@ def make_tmp_project(tmp_path: Path) -> TmpProjectFactory:
         tests_to_write = _DEFAULT_TEST_FILES if test_files is None else test_files
         if tests_to_write:
             _write_tree(root / "tests", tests_to_write)
+        stub_project_venv(root)
         return root
 
     return factory

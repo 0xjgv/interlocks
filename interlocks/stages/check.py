@@ -10,7 +10,12 @@ from interlocks.acceptance_status import (
     acceptance_failure_task,
     classify_acceptance_with_details,
 )
-from interlocks.config import InterlockConfig, load_config
+from interlocks.config import (
+    CREATE_PROJECT_ENV_HINT,
+    InterlockConfig,
+    load_config,
+    project_env_ready,
+)
 from interlocks.git import changed_py_files_vs
 from interlocks.reports.suppressions import print_suppressions_report
 from interlocks.runner import (
@@ -88,6 +93,12 @@ def cmd_check() -> None:
 def _parallel_tasks(
     cfg: InterlockConfig, scope_ref: str | None, scoped_files: list[str] | None
 ) -> list[Task]:
+    if not project_env_ready(cfg):
+        warn_skip(
+            "typecheck, test: skipped — no project environment. Create one "
+            f"{CREATE_PROJECT_ENV_HINT}, then re-run — `interlocks doctor` has details."
+        )
+        return []
     tasks = [task_typecheck(scoped_files)]
     optional = (_test_task(scope_ref), _acceptance_task(cfg, scope_ref))
     tasks.extend(t for t in optional if t is not None)

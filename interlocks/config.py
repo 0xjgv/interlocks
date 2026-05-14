@@ -645,6 +645,22 @@ def python_command_prefix(cfg: InterlockConfig) -> list[str]:
     return [sys.executable]
 
 
+CREATE_PROJECT_ENV_HINT = "(`uv sync`, or `python -m venv .venv && pip install -e .`)"
+
+
+def project_env_ready(cfg: InterlockConfig) -> bool:
+    """True when dependency-aware gates (typecheck, test) can run truthfully.
+
+    ``uv`` projects are always ready — ``uv run`` materializes the environment on
+    demand. Non-uv projects need an in-tree ``.venv``; without one, typecheck
+    resolves no third-party imports and tests run under interlocks' own
+    interpreter — both produce false negatives, not real findings.
+    """
+    if cfg.test_invoker == "uv":
+        return True
+    return detect_target_interpreter(cfg.project_root) is not None
+
+
 def invoker_prefix(cfg: InterlockConfig) -> list[str]:
     """Argv prefix for invoking a Python module in the target project."""
     return [*python_command_prefix(cfg), "-m"]

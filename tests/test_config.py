@@ -16,6 +16,7 @@ from interlocks.config import (
     find_project_root,
     invoker_prefix,
     load_config,
+    project_env_ready,
 )
 from interlocks.defaults.tools import default_pin
 
@@ -822,3 +823,16 @@ def test_invoker_prefix_uv_ignores_target_venv(tmp_path: Path) -> None:
     _make_stub_venv_python(tmp_path)
     cfg = _cfg(project_root=tmp_path, test_invoker="uv")
     assert invoker_prefix(cfg) == ["uv", "run", "python", "-m"]
+
+
+def test_project_env_ready_non_uv_requires_venv(tmp_path: Path) -> None:
+    cfg = _cfg(project_root=tmp_path)
+    assert project_env_ready(cfg) is False
+    _make_stub_venv_python(tmp_path)
+    assert project_env_ready(cfg) is True
+
+
+def test_project_env_ready_uv_always_ready(tmp_path: Path) -> None:
+    """uv materializes the environment on demand — no in-tree .venv required."""
+    cfg = _cfg(project_root=tmp_path, test_invoker="uv")
+    assert project_env_ready(cfg) is True

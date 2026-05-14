@@ -15,7 +15,14 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from interlocks import ui
-from interlocks.config import InterlockConfigError, find_project_root, kv_with_source, load_config
+from interlocks.config import (
+    CREATE_PROJECT_ENV_HINT,
+    InterlockConfigError,
+    find_project_root,
+    kv_with_source,
+    load_config,
+    project_env_ready,
+)
 from interlocks.crash.storage import cache_dir as _crash_cache_dir
 from interlocks.detect import expected_target_interpreter
 from interlocks.setup_state import (
@@ -71,7 +78,7 @@ def cmd_doctor() -> None:
 
     cfg = _safe_load_config(pyproject_path, failures)
     _collect_blockers(cfg, pyproject_path, blockers)
-    _collect_tool_warnings(project_root, cfg, warnings, blockers)
+    _collect_tool_warnings(cfg, warnings, blockers)
 
     rows = _collect_setup_rows(project_root, cfg, pyproject_path)
     is_blocked = bool(blockers or failures or any(r.state == "fail" for r in rows))
@@ -138,12 +145,16 @@ def _collect_blockers(
         blockers.append(f"missing source path: {cfg.src_dir_arg}")
     if not cfg.test_dir.exists():
         blockers.append(f"missing test path: {cfg.test_dir_arg}")
+    if not project_env_ready(cfg):
+        blockers.append(
+            "no project environment — typecheck/test produce false negatives; "
+            f"create one {CREATE_PROJECT_ENV_HINT}"
+        )
     for unsupported in cfg.unsupported_presets:
         blockers.append(f"unsupported preset: {unsupported}")
 
 
 def _collect_tool_warnings(
-    project_root: Path,
     cfg: InterlockConfig | None,
     warnings: list[str],
     blockers: list[str],
@@ -154,10 +165,6 @@ def _collect_tool_warnings(
     for name in _BUNDLED_TOOLS:
         if shutil.which(name) is None:
             warnings.append(f"tool not found on PATH: {name}")
-
-    venv_python = expected_target_interpreter(project_root)
-    if not venv_python.is_file():
-        warnings.append(f"no .venv found under project root ({venv_python})")
 
 
 def _collect_setup_rows(
@@ -217,7 +224,9 @@ def _venv_row(cfg: InterlockConfig) -> CheckRow:
     target = cfg.relpath(venv_python)
     if venv_python.is_file():
         return CheckRow("venv", target, "present", "ok")
-    return CheckRow("venv", target, "missing", "warn")
+    if project_env_ready(cfg):
+        return CheckRow("venv", target, "missing", "warn")
+    return CheckRow("venv", target, "missing — typecheck/test blocked", "fail")
 
 
 def _local_integration_rows(project_root: Path) -> list[CheckRow]:

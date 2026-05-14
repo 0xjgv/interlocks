@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import interlocks
+from tests.conftest import stub_project_venv
 
 # When running under an outer interpreter whose site-packages .pth shadows
 # this checkout (e.g. a parent-repo pre-commit hook), point the subprocess's
@@ -80,6 +81,7 @@ def test_doctor_in_process_reports_sections(
         '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
 
     from interlocks.config import clear_cache
@@ -100,10 +102,9 @@ def test_doctor_in_process_reports_sections(
     # Warn-only project is non-blocking; status shows gap count.
     assert "status                 ready" in captured.out
     assert "ready (" in captured.out  # "ready (N gaps)"
-    # Derived Next Steps flags the missing preset + CI + venv, not the generic line.
+    # Derived Next Steps flags the missing preset + CI, not the generic line.
     assert "Run `interlocks presets`" in captured.out
     assert "Wire CI via `interlocks ci`" in captured.out
-    assert "Create a venv" in captured.out
     # task_doctor is CLI-only — it never composes into a stage pipeline.
     assert task_doctor() is None
 
@@ -257,6 +258,7 @@ def test_doctor_flags_missing_hooks_under_existing_git_or_claude(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _write_probe_project(tmp_path)
+    stub_project_venv(tmp_path)
     (tmp_path / ".git").mkdir()
     (tmp_path / ".claude").mkdir()
 
@@ -286,9 +288,21 @@ def test_doctor_warns_on_acceptance_configured_without_scaffold(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _write_probe_project(tmp_path, tool_interlock='acceptance_runner = "pytest-bdd"')
+    stub_project_venv(tmp_path)
 
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
     assert "Run `interlocks init-acceptance`" in out
+
+
+def test_doctor_blocks_when_no_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Non-uv project, no .venv: doctor blocks — typecheck/test would be false negatives."""
+    _write_probe_project(tmp_path)  # no stub_project_venv — cold-start state
+
+    out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+    assert "status                 blocked" in out
+    assert "no project environment" in out
 
 
 def test_doctor_ready_state_when_all_artifacts_wired(
