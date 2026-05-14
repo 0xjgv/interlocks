@@ -170,10 +170,10 @@ def test_setup_ci_installs_github_workflow(
     workflow = tmp_path / ".github" / "workflows" / "interlocks.yml"
     body = workflow.read_text(encoding="utf-8")
     assert "uses: 0xjgv/interlocks@v1" in body
-    # The advisory unblock pass is a single self-sufficient step.
+    # fix-optimize is self-sufficient: it subsumes fix-plan / fix-annotate / fix-metrics,
+    # so the workflow invokes it alone rather than chaining the three.
     assert "interlocks fix-optimize" in body
     assert "--annotate --metrics" in body
-    # The former 3-step trio (fix-plan / fix-annotate / fix-metrics) is collapsed.
     assert "interlocks fix-plan" not in body
     assert "interlocks fix-annotate" not in body
     assert "interlocks fix-metrics" not in body
