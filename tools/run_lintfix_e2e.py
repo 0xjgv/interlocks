@@ -171,6 +171,43 @@ def scenario_fix_optimize_preview(context: ScenarioContext) -> None:
     _show_if_verbose(context, result)
 
 
+def scenario_fix_optimize_budget(context: ScenarioContext) -> None:
+    repo = _repo(context, "fix-optimize-budget")
+    result = run_cli(
+        repo,
+        "fix-optimize",
+        "--base=HEAD",
+        "--budget=renovation",
+        repo_root=context.repo_root,
+    )
+    _expect_success(result)
+
+    optimize = _read_json(repo / ".lintfix" / "optimize.json")
+    _expect(optimize["budget"] == "renovation", "budget name mismatch")
+    selected = {entry["rule"]: entry for entry in optimize["selected"]}
+    rejected = {entry["rule"]: entry for entry in optimize["not_selected"]}
+
+    _expect(
+        all(entry["policy_mode"] == "auto" for entry in selected.values()),
+        "non-auto rule selected",
+    )
+    _expect(not any(entry["unsafe"] for entry in selected.values()), "unsafe rule selected")
+    for rule in ("F401", "UP045"):
+        _expect(
+            rejected[rule]["reason"] == "policy mode is escrow",
+            f"{rule} reason mismatch",
+        )
+
+    total_value = sum(entry["value"] for entry in selected.values())
+    _expect(optimize["total_value"] == total_value, "total_value != summed selected value")
+    for dim in ("outside_diff", "changed_lines", "files", "risk"):
+        summed = sum(entry["cost"][dim] for entry in selected.values())
+        _expect(optimize["total_cost"][dim] == summed, f"total_cost {dim} mismatch")
+
+    _expect_unchanged_dirty_files(repo)
+    _show_if_verbose(context, result)
+
+
 def scenario_fix_annotate(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-annotate")
     _expect_success(run_cli(repo, "fix-plan", "--base=HEAD", repo_root=context.repo_root))
@@ -272,6 +309,7 @@ def scenario_fix_replay(context: ScenarioContext) -> None:
 SCENARIOS: dict[str, Scenario] = {
     "fix-plan-preview": scenario_fix_plan_preview,
     "fix-optimize-preview": scenario_fix_optimize_preview,
+    "fix-optimize-budget": scenario_fix_optimize_budget,
     "fix-annotate": scenario_fix_annotate,
     "fix-metrics": scenario_fix_metrics,
     "apply-success": scenario_apply_success,

@@ -480,6 +480,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "fix-metrics writes a metrics.json with an all-false sources truthtable when no inputs",
         "interlocks.tasks.fix_metrics:cmd_fix_metrics",
     ),
+    Behavior(
+        "fix-optimize-rejects-escrow-with-policy-reason",
+        "task",
+        "fix-optimize rejects an escrow candidate with a policy-mode reason",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "fix-optimize-totals-match-selected-subset",
+        "task",
+        "fix-optimize totals equal the summed value and cost of the selected subset",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
 )
 
 

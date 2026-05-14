@@ -57,3 +57,15 @@ Feature: per-command coverage of the fix-* harness
     Then the greenfield command exits 0
     And the file ".lintfix/metrics.json" exists in the greenfield project
     And the metrics sources truthtable is all false
+
+  # req: fix-optimize-rejects-escrow-with-policy-reason
+  Scenario: fix-optimize rejects an escrow candidate with a policy-mode reason
+    When I run "interlocks fix-optimize --base=HEAD" in the greenfield project
+    Then the greenfield command exits 0
+    And the optimize rejects rule "F401" with reason mentioning "escrow"
+
+  # req: fix-optimize-totals-match-selected-subset
+  Scenario: fix-optimize totals equal the selected subset
+    When I run "interlocks fix-optimize --base=HEAD" in the greenfield project
+    Then the greenfield command exits 0
+    And the optimize totals equal the sum of the selected subset

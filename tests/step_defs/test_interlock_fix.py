@@ -161,5 +161,28 @@ def _metrics_sources_all_false(greenfield_project: Path) -> None:
     assert sources == {"plan": False, "optimize": False, "replay": False}, sources
 
 
+@then(parsers.parse('the optimize rejects rule "{rule}" with reason mentioning "{needle}"'))
+def _optimize_rejects_rule(greenfield_project: Path, rule: str, needle: str) -> None:
+    payload = json.loads(
+        (greenfield_project / ".lintfix" / "optimize.json").read_text(encoding="utf-8")
+    )
+    by_rule = {c["rule"]: c for c in payload["not_selected"]}
+    assert rule in by_rule, f"{rule} missing from not_selected: {sorted(by_rule)}"
+    reason = by_rule[rule]["reason"] or ""
+    assert needle in reason, by_rule[rule]
+
+
+@then("the optimize totals equal the sum of the selected subset")
+def _optimize_totals_match_selected(greenfield_project: Path) -> None:
+    payload = json.loads(
+        (greenfield_project / ".lintfix" / "optimize.json").read_text(encoding="utf-8")
+    )
+    selected = payload["selected"]
+    assert payload["total_value"] == sum(c["value"] for c in selected), payload
+    total_cost = payload["total_cost"]
+    for dim in ("outside_diff", "changed_lines", "files", "risk"):
+        assert total_cost[dim] == sum(c["cost"][dim] for c in selected), (dim, payload)
+
+
 def _detail(result: subprocess.CompletedProcess[str]) -> str:
     return f"exit={result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"

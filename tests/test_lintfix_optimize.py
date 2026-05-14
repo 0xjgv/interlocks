@@ -11,6 +11,7 @@ from interlocks.lintfix import optimize
 from interlocks.lintfix.budgets import UNBLOCK, Budget, CandidateCost
 from interlocks.lintfix.classify import CandidateMetrics, Classification
 from interlocks.lintfix.plan import PlannedCandidate
+from interlocks.lintfix.stats import RuleStats
 
 
 def _planned(
@@ -83,6 +84,34 @@ def _candidate(
         selectable=selectable,
         policy_mode=policy_mode,
         unsafe=unsafe,
+    )
+
+
+def _plan(selected: set[int], *, value: int, outside: int = 0) -> optimize._Plan:
+    return optimize._Plan(
+        selected=frozenset(selected),
+        value=value,
+        cost=optimize.CostVector(outside_diff=outside, changed_lines=0, files=0, risk=0),
+        files=frozenset(),
+    )
+
+
+def _rule_stats(*, prs_helped: int, unsafe_seen: bool = False) -> RuleStats:
+    return RuleStats(
+        rule="I001",
+        mutation_class="import_sort",
+        current_mode="auto",
+        prs_with_candidate=prs_helped,
+        prs_helped=prs_helped,
+        median_changed_lines=0.0,
+        p95_changed_lines=0.0,
+        median_outside_diff_lines=0.0,
+        p95_outside_diff_lines=0.0,
+        unsafe_seen=unsafe_seen,
+        revert_signal=0,
+        on_pareto_frontier=False,
+        recommended_mode="auto",
+        rationale="",
     )
 
 
@@ -254,3 +283,133 @@ def test_optimize_explains_displaced_candidate() -> None:
     assert rejected.candidate.rule == "SMALL"
     # SMALL alone fits, but adding it to BIG bursts the lines budget.
     assert "changed-lines" in rejected.reason or "displaced" in rejected.reason
+
+
+# --- CostVector ----------------------------------------------------------
+
+
+def test_cost_vector_add_sums_all_dimensions() -> None:
+    a = optimize.CostVector(outside_diff=1, changed_lines=2, files=3, risk=4)
+    b = optimize.CostVector(outside_diff=10, changed_lines=20, files=30, risk=40)
+    assert a + b == optimize.CostVector(outside_diff=11, changed_lines=22, files=33, risk=44)
+
+
+# --- Pareto domination / pruning -----------------------------------------
+
+
+def test_dominates_true_on_strict_improvement() -> None:
+    # equal value, strictly cheaper in one dimension → a dominates b.
+    a = _plan({0}, value=10, outside=0)
+    b = _plan({1}, value=10, outside=5)
+    assert optimize._dominates(a, b) is True
+
+
+def test_dominates_false_for_same_selection() -> None:
+    a = _plan({0}, value=10, outside=0)
+    b = _plan({0}, value=5, outside=5)
+    assert optimize._dominates(a, b) is False
+
+
+def test_dominates_false_when_value_lower() -> None:
+    a = _plan({0}, value=5)
+    b = _plan({1}, value=10)
+    assert optimize._dominates(a, b) is False
+
+
+def test_dominates_false_when_not_cost_le_everywhere() -> None:
+    # a wins on value but is more expensive on outside-diff → no domination.
+    a = _plan({0}, value=20, outside=5)
+    b = _plan({1}, value=10, outside=0)
+    assert optimize._dominates(a, b) is False
+
+
+def test_prune_dominated_drops_strictly_dominated_plan() -> None:
+    strong = _plan({0}, value=10, outside=0)
+    weak = _plan({1}, value=5, outside=5)
+    assert optimize._prune_dominated([strong, weak]) == [strong]
+
+
+def test_prune_dominated_keeps_pareto_incomparable_plans() -> None:
+    # higher value but also higher cost → neither dominates the other.
+    cheap = _plan({0}, value=5, outside=0)
+    pricey = _plan({1}, value=20, outside=10)
+    assert set(optimize._prune_dominated([cheap, pricey])) == {cheap, pricey}
+
+
+# --- optimize tie-break --------------------------------------------------
+
+
+def test_optimize_tie_break_prefers_lower_risk() -> None:
+    """Equal-value, disjoint-file candidates that can't both fit the risk
+    budget → the tie-break key picks the lower-risk one."""
+    budget = Budget(
+        name="risk-capped",
+        max_files=10,
+        max_changed_lines=100,
+        max_outside_diff_lines=100,
+        max_risk=5,  # fits either candidate alone, never both
+    )
+    candidates = (
+        _candidate("RISKY", value=10, files=("a.py",), risk=5),
+        _candidate("SAFE", value=10, files=("b.py",), risk=1),
+    )
+    result = optimize.optimize(candidates, budget)
+    assert [s.candidate.rule for s in result.selected] == ["SAFE"]
+
+
+# --- value_for with replay stats -----------------------------------------
+
+
+def test_value_for_adds_replay_support_score() -> None:
+    planned = _planned("I001", diagnostic_count=1, inside=0, outside=0)
+    stats = _rule_stats(prs_helped=3)
+    # findings(8) + support(5*3) + noise(0) - penalty(0) = 23
+    assert optimize.value_for(planned, stats) == 23
+
+
+def test_value_for_unsafe_seen_stats_contribute_zero_support() -> None:
+    planned = _planned("I001", diagnostic_count=1, inside=0, outside=0)
+    stats = _rule_stats(prs_helped=3, unsafe_seen=True)
+    # unsafe_seen zeroes the support term → findings(8) only
+    assert optimize.value_for(planned, stats) == 8
+
+
+def test_candidates_from_plan_applies_stats_support_score() -> None:
+    planned = (_planned("I001", diagnostic_count=1, inside=0, outside=0),)
+    stats = {"I001": _rule_stats(prs_helped=2)}
+    [candidate] = optimize.candidates_from_plan(planned, stats)
+    # findings(8) + support(5*2) = 18
+    assert candidate.value == 18
+
+
+def test_value_for_floors_at_zero() -> None:
+    # advisory penalty would drive value negative; the floor clamps to 0.
+    planned = _planned("SIM102", mode="advisory", diagnostic_count=0, inside=0, outside=0)
+    assert optimize.value_for(planned) == 0
+
+
+# --- _budget_overflow reason branches ------------------------------------
+
+
+def test_budget_overflow_reports_outside_diff() -> None:
+    budget = Budget(
+        name="b",
+        max_files=100,
+        max_changed_lines=1000,
+        max_outside_diff_lines=5,  # binding
+        max_risk=100,
+    )
+    candidate = _candidate("X", value=1, outside=10, lines=1, files_count=1)
+    assert optimize._budget_overflow(candidate, optimize._Plan(), budget) == "outside-diff"
+
+
+def test_budget_overflow_reports_files() -> None:
+    budget = Budget(
+        name="b",
+        max_files=1,  # binding
+        max_changed_lines=1000,
+        max_outside_diff_lines=1000,
+        max_risk=100,
+    )
+    candidate = _candidate("X", value=1, outside=0, lines=1, files_count=5)
+    assert optimize._budget_overflow(candidate, optimize._Plan(), budget) == "files"
