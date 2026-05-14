@@ -190,3 +190,119 @@ def test_cmd_fix_replay_serializes_recommendation_payload(
     # Exact-catalog F401 with low outside-diff promotes from escrow → auto.
     assert f401["recommended_mode"] == "auto"
     assert f401["rationale"]
+
+
+# ─────────────── _run_plan_and_load (in-process) ──────────────────
+
+
+def _completed(rc: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(["git"], rc, stdout, stderr)
+
+
+def test_run_plan_and_load_bad_rc_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(replay_module, "_run", lambda *_a, **_kw: _completed(1, stderr="boom"))
+    with pytest.raises(replay_module._ReplayError, match="fix-plan rc=1"):
+        replay_module._run_plan_and_load(tmp_path, "parentsha", "unblock", "commitsha")
+
+
+def test_run_plan_and_load_missing_plan_json_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(replay_module, "_run", lambda *_a, **_kw: _completed(0))
+    with pytest.raises(replay_module._ReplayError, match=r"plan\.json missing"):
+        replay_module._run_plan_and_load(tmp_path, "parentsha", "unblock", "commitsha")
+
+
+def test_run_plan_and_load_bad_json_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(replay_module, "_run", lambda *_a, **_kw: _completed(0))
+    (tmp_path / ".lintfix").mkdir()
+    (tmp_path / ".lintfix" / "plan.json").write_text("not json {", encoding="utf-8")
+    with pytest.raises(replay_module._ReplayError, match="parse error"):
+        replay_module._run_plan_and_load(tmp_path, "parentsha", "unblock", "commitsha")
+
+
+def test_run_plan_and_load_happy_path_parses_samples(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(replay_module, "_run", lambda *_a, **_kw: _completed(0))
+    (tmp_path / ".lintfix").mkdir()
+    (tmp_path / ".lintfix" / "plan.json").write_text(
+        json.dumps({
+            "candidates": [
+                {
+                    "rule": "I001",
+                    "classification": "auto",
+                    "mutation_class": "import_sort",
+                    "changed_lines_total": 4,
+                    "changed_lines_outside_diff": 1,
+                    "risk": 2,
+                    "unsafe": False,
+                }
+            ]
+        }),
+        encoding="utf-8",
+    )
+    samples = replay_module._run_plan_and_load(tmp_path, "parentsha", "unblock", "commitsha")
+    assert len(samples) == 1
+    assert samples[0].rule == "I001"
+    assert samples[0].commit == "commitsha"
+
+
+# ─────────────── _replay_one (in-process) ─────────────────────────
+
+
+def test_replay_one_missing_parent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(replay_module, "_first_parent", lambda *_a: "")
+    point = replay_module._replay_one("commitsha", "unblock", tmp_path, "main")
+    assert point.error == "no parent commit"
+    assert point.samples == ()
+
+
+def test_replay_one_worktree_add_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(replay_module, "_first_parent", lambda *_a: "parentsha")
+    monkeypatch.setattr(replay_module, "_find_revert", lambda *_a: None)
+    monkeypatch.setattr(replay_module, "_add_worktree", lambda *_a: False)
+    point = replay_module._replay_one("commitsha", "unblock", tmp_path, "main")
+    assert point.error == "git worktree add failed"
+    assert point.parent == "parentsha"
+
+
+def test_replay_one_surfaces_replay_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(replay_module, "_first_parent", lambda *_a: "parentsha")
+    monkeypatch.setattr(replay_module, "_find_revert", lambda *_a: None)
+    monkeypatch.setattr(replay_module, "_add_worktree", lambda *_a: True)
+    monkeypatch.setattr(replay_module, "_remove_worktree", lambda *_a: None)
+
+    def _boom(*_a: object) -> object:
+        raise replay_module._ReplayError("fix-plan rc=2: kaboom")
+
+    monkeypatch.setattr(replay_module, "_run_plan_and_load", _boom)
+    point = replay_module._replay_one("commitsha", "unblock", tmp_path, "main")
+    assert point.error == "fix-plan rc=2: kaboom"
+    assert point.samples == ()
+
+
+def test_replay_one_happy_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    sample = stats_module.CandidateSample(
+        rule="I001",
+        mutation_class="import_sort",
+        classification="auto",
+        changed_lines_total=4,
+        changed_lines_outside_diff=1,
+        risk=2,
+        unsafe=False,
+        commit="commitsha",
+        reverted_in=None,
+    )
+    monkeypatch.setattr(replay_module, "_first_parent", lambda *_a: "parentsha")
+    monkeypatch.setattr(replay_module, "_find_revert", lambda *_a: None)
+    monkeypatch.setattr(replay_module, "_add_worktree", lambda *_a: True)
+    monkeypatch.setattr(replay_module, "_remove_worktree", lambda *_a: None)
+    monkeypatch.setattr(replay_module, "_run_plan_and_load", lambda *_a: (sample,))
+
+    point = replay_module._replay_one("commitsha", "unblock", tmp_path, "main")
+    assert point.error is None
+    assert point.parent == "parentsha"
+    assert point.samples == (sample,)

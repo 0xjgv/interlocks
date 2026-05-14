@@ -150,6 +150,10 @@ def lizard_functions(src_arg: str) -> list[FunctionStats]:
 def _parse_lizard(stdout: str) -> list[FunctionStats]:
     rows: list[FunctionStats] = []
     for line in stdout.splitlines():
+        # lizard re-lists every CCN>15 function under a trailing warnings block.
+        # Stop at its header so high-complexity functions aren't counted twice.
+        if line.startswith("!!!!") and "Warnings" in line:
+            break
         m = _LIZARD_LINE.match(line)
         if not m:
             continue

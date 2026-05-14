@@ -14,14 +14,47 @@ from __future__ import annotations
 
 import shlex
 import sys
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from interlocks import ui
 from interlocks.config import load_config
 from interlocks.lintfix import budgets, classify, diff, escrow, rules, simulate, verify
 from interlocks.runner import arg_flag_value, arg_value
 
+if TYPE_CHECKING:
+    from interlocks.config import InterlockConfig
+
 _DEFAULT_VERIFY_CMD: tuple[str, ...] = ("interlocks", "ci")
 _ESCROW_MODES: tuple[str, ...] = ("escrow", "advisory")
+
+
+@dataclass(frozen=True)
+class _FixRuleArgs:
+    """Resolved fix-rule inputs — CLI kwargs with argv fallbacks applied."""
+
+    rule: str
+    apply: bool
+    base: str
+    budget_name: str
+    verify_cmd: tuple[str, ...]
+
+
+def _resolve_args(
+    rule: str | None,
+    apply: bool | None,
+    base: str | None,
+    budget: str | None,
+    verify_cmd: tuple[str, ...] | None,
+) -> _FixRuleArgs:
+    """Fold each ``None`` kwarg back to its argv-derived default."""
+    return _FixRuleArgs(
+        rule=rule or _required_rule(),
+        apply=apply if apply is not None else (arg_flag_value("--apply", "1") is not None),
+        base=base or arg_value("--base=", "origin/main"),
+        budget_name=budget or arg_value("--budget=", "unblock"),
+        verify_cmd=verify_cmd or _verify_cmd_argv(),
+    )
 
 
 def cmd_fix_rule(
@@ -33,31 +66,39 @@ def cmd_fix_rule(
     verify_cmd: tuple[str, ...] | None = None,
 ) -> None:
     """Plan (or apply) a rule-scoped ruff fix. Falls back to argv when args omitted."""
-    rule = rule or _required_rule()
-    apply = apply if apply is not None else (arg_flag_value("--apply", "1") is not None)
-    base = base or arg_value("--base=", "origin/main")
-    budget_name = budget or arg_value("--budget=", "unblock")
-    verify_cmd = verify_cmd or _verify_cmd_argv()
+    args = _resolve_args(rule, apply, base, budget, verify_cmd)
 
     cfg = load_config()
-    base_sha = diff.resolve_base(base)
+    base_sha = diff.resolve_base(args.base)
     if not base_sha:
-        ui.row("fix-rule", rule, "skipped", detail=f"unknown base ref {base!r}", state="warn")
+        ui.row(
+            "fix-rule",
+            args.rule,
+            "skipped",
+            detail=f"unknown base ref {args.base!r}",
+            state="warn",
+        )
         return
 
     files = diff.changed_files(base_sha)
     if not files:
-        ui.row("fix-rule", rule, "no changed .py files vs base", state="ok")
+        ui.row("fix-rule", args.rule, "no changed .py files vs base", state="ok")
         return
 
-    candidate = simulate.simulate_rule(rule, files)
+    candidate = simulate.simulate_rule(args.rule, files)
     if candidate.returncode >= 2:
-        ui.row("fix-rule", rule, "ruff failed", detail=f"rc={candidate.returncode}", state="fail")
+        ui.row(
+            "fix-rule",
+            args.rule,
+            "ruff failed",
+            detail=f"rc={candidate.returncode}",
+            state="fail",
+        )
         sys.exit(candidate.returncode)
 
     hunks = diff.changed_hunks(base_sha, files)
-    policy = rules.policy_for(rule)
-    profile = budgets.profile(budget_name)
+    policy = rules.policy_for(args.rule)
+    profile = budgets.profile(args.budget_name)
     classification = classify.classify(
         patch_text=candidate.diff,
         diff_hunks=hunks,
@@ -65,27 +106,46 @@ def cmd_fix_rule(
         budget=profile,
     )
 
-    _print_plan(classification, candidate.diff, base, budget_name)
+    _print_plan(classification, candidate.diff, args.base, args.budget_name)
 
+    rc = _dispatch_classification(classification, args, candidate, files, cfg)
+    if rc:
+        sys.exit(rc)
+
+
+def _dispatch_classification(
+    classification: classify.Classification,
+    args: _FixRuleArgs,
+    candidate: simulate.CandidatePatch,
+    files: tuple[str, ...],
+    cfg: InterlockConfig,
+) -> int:
+    """Act on the classified candidate; return a non-zero exit code on failure.
+
+    Covers the four post-classify workflows — skip, escrow/advisory, plan-only
+    (no ``--apply``), and auto-apply + verify — keeping ``cmd_fix_rule`` a thin
+    orchestrator.
+    """
+    rule = args.rule
     if classification.mode == "skip":
         ui.row("fix-rule", rule, "skip", detail=classification.reason or "", state="warn")
-        return
+        return 0
 
     if classification.mode in _ESCROW_MODES:
         target = escrow.write_patch(cfg.project_root, rule, candidate.diff)
-        rel = cfg.relpath(target)
-        ui.row("fix-rule", rule, classification.mode, detail=rel, state="ok")
-        return
+        ui.row("fix-rule", rule, classification.mode, detail=cfg.relpath(target), state="ok")
+        return 0
 
-    if not apply:
+    if not args.apply:
         ui.row("fix-rule", rule, "auto-eligible", detail="re-run with --apply", state="ok")
-        return
+        return 0
 
     files_to_apply = classification.metrics.files_touched or files
-    result = verify.apply_with_verify(rule=rule, files=files_to_apply, verify_cmd=verify_cmd)
+    result = verify.apply_with_verify(rule=rule, files=files_to_apply, verify_cmd=args.verify_cmd)
     if result.applied:
         ui.row("fix-rule", rule, "applied + verified", state="ok")
-        return
+        return 0
+
     escrow.write_failed_patch(cfg.project_root, candidate.diff)
     ui.row(
         "fix-rule",
@@ -94,7 +154,7 @@ def cmd_fix_rule(
         detail=".lintfix/failed.patch",
         state="fail",
     )
-    sys.exit(result.returncode or 1)
+    return result.returncode or 1
 
 
 def _print_plan(c: classify.Classification, diff_text: str, base: str, budget_name: str) -> None:

@@ -1,9 +1,13 @@
-"""Integration tests for ``interlocks fix-plan``.
+"""Tests for ``interlocks fix-plan``.
 
-Builds a real git repo, introduces multiple kinds of fixable diagnostics
-(I001 import sort + F401 unused import), runs the CLI, and asserts the
-working tree stayed clean while ``.lintfix/plan.json`` and the F401 escrow
-patch were both materialized.
+Two layers:
+
+1. Real-git integration tests with multiple fixable diagnostics (I001 import
+   sort + F401 unused import) run through the CLI subprocess: the working tree
+   stays clean while ``.lintfix/plan.json`` and the F401 escrow patch are
+   materialized.
+2. In-process unit tests for ``_print_plan`` — called directly with
+   constructed candidate lists, asserting on captured stdout.
 """
 
 from __future__ import annotations
@@ -15,6 +19,12 @@ import textwrap
 from pathlib import Path
 
 import pytest
+
+from interlocks.lintfix import plan as plan_module
+from interlocks.lintfix.budgets import CandidateCost
+from interlocks.lintfix.classify import CandidateMetrics, Classification
+from interlocks.lintfix.rules import Mode
+from interlocks.tasks import fix_plan as fix_plan_mod
 
 _PYPROJECT = textwrap.dedent("""
     [project]
@@ -118,3 +128,94 @@ def test_fix_plan_exits_clean_when_no_changed_files(repo: Path) -> None:
     assert plan_path.is_file()
     payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert payload["candidates"] == []
+
+
+# ─────────────── in-process unit layer ────────────────────────────
+
+
+def _planned_candidate(
+    *,
+    rule: str,
+    mode: Mode,
+    reason: str | None = None,
+    files: tuple[str, ...] = ("sample.py",),
+) -> plan_module.PlannedCandidate:
+    metrics = CandidateMetrics(
+        files_touched=files,
+        changed_lines_total=4,
+        changed_lines_inside_diff=3,
+        changed_lines_outside_diff=1,
+        comment_deletes=0,
+        control_flow_edits=0,
+    )
+    classification = Classification(
+        rule=rule,
+        mode=mode,
+        metrics=metrics,
+        cost=CandidateCost(
+            files_touched=len(files),
+            changed_lines_total=4,
+            changed_lines_outside_diff=1,
+            risk=3,
+        ),
+        reason=reason,
+        patch_id=":".join((rule, *files)),
+    )
+    return plan_module.PlannedCandidate(
+        classification=classification,
+        diff_text="DIFF",
+        unsafe=False,
+        diagnostic_count=1,
+        mutation_class="import_sort",
+    )
+
+
+def _plan(*candidates: plan_module.PlannedCandidate) -> plan_module.Plan:
+    return plan_module.Plan(
+        base="HEAD",
+        head="abc123",
+        budget="unblock",
+        ruff_version="0.x",
+        candidates=candidates,
+        discovery_error=None,
+    )
+
+
+@pytest.fixture
+def verbose(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-plan", "--verbose"])
+
+
+def test_print_plan_no_candidates(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
+    fix_plan_mod._print_plan(_plan(), "HEAD", "unblock", ".lintfix/plan.json")
+    out = capsys.readouterr().out
+    assert "(no candidates)" in out
+    assert ".lintfix/plan.json" in out
+
+
+def test_print_plan_single_group(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
+    plan = _plan(_planned_candidate(rule="I001", mode="auto"))
+    fix_plan_mod._print_plan(plan, "HEAD", "unblock", "plan.json")
+    out = capsys.readouterr().out
+    assert "AUTO-APPLY ELIGIBLE" in out
+    assert "I001" in out
+    # Groups with no members are not printed.
+    assert "PATCH ESCROW" not in out
+    assert "SKIPPED" not in out
+
+
+def test_print_plan_all_groups(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
+    plan = _plan(
+        _planned_candidate(rule="I001", mode="auto"),
+        _planned_candidate(rule="F401", mode="escrow"),
+        _planned_candidate(rule="SIM102", mode="advisory", reason="style only"),
+        _planned_candidate(rule="UP007", mode="skip", reason="unsafe"),
+    )
+    fix_plan_mod._print_plan(plan, "HEAD", "unblock", "plan.json")
+    out = capsys.readouterr().out
+    assert "AUTO-APPLY ELIGIBLE" in out
+    assert "PATCH ESCROW" in out
+    assert "ADVISORY" in out
+    assert "SKIPPED" in out
+    # The classifier reason is surfaced in the per-candidate summary line.
+    assert "style only" in out

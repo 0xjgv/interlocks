@@ -50,6 +50,23 @@ def test_parse_lizard_empty_input() -> None:
     assert _parse_lizard("") == []
 
 
+def test_parse_lizard_stops_at_warnings_block() -> None:
+    """lizard re-lists CCN>15 functions under a warnings block — count once."""
+    stdout = (
+        "      61     16    472      5      71 cmd_big@27-97@pkg/mod.py\n"
+        "      18      4    171      4      18 helper@100-117@pkg/mod.py\n"
+        "1 file analyzed.\n"
+        "======================================================\n"
+        "!!!! Warnings (cyclomatic_complexity > 15 ...) !!!!\n"
+        "================================================\n"
+        "      61     16    472      5      71 cmd_big@27-97@pkg/mod.py\n"
+    )
+    rows = _parse_lizard(stdout)
+    names = [r.name for r in rows]
+    assert names == ["cmd_big", "helper"]
+    assert names.count("cmd_big") == 1
+
+
 # ─────────────── function_coverage ─────────────────────────────────
 
 
