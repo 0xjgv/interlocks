@@ -11,6 +11,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -375,6 +376,95 @@ def scenario_fix_replay(context: ScenarioContext) -> None:
     _show_if_verbose(context, result)
 
 
+def scenario_budget_small_format_skip(context: ScenarioContext) -> None:
+    repo = _repo(context, "budget-small-format-skip")
+    _seed_unformatted_baseline(repo)
+    _make_small_format_drift_edit(repo)
+
+    result = run_cli(
+        repo,
+        "fix-optimize",
+        "--base=HEAD",
+        "--budget=dynamic",
+        "--apply",
+        f"--verify-cmd={sys.executable} -c pass",
+        repo_root=context.repo_root,
+    )
+    _expect_success(result)
+
+    optimize = _read_json(repo / ".lintfix" / "optimize.json")
+    _expect(optimize["budget"] == "dynamic", "budget name mismatch")
+    rejected_format = _first_format_rejection(optimize, "src/playground/format_debt.py")
+    _expect(
+        "outside-author-hunk budget" in str(rejected_format["reason"]),
+        "format rejection should mention outside-author-hunk budget",
+    )
+    source = (repo / "src" / "playground" / "format_debt.py").read_text(encoding="utf-8")
+    _expect("def alpha()->int:" in source, "broad format cleanup was applied")
+    _expect("return 22" in source, "small author edit was lost")
+    _show_if_verbose(context, result)
+
+
+def scenario_budget_renovation_format(context: ScenarioContext) -> None:
+    repo = _repo(context, "budget-renovation-format")
+    _seed_unformatted_baseline(repo)
+    _make_small_format_drift_edit(repo)
+
+    result = run_cli(
+        repo,
+        "fix-optimize",
+        "--base=HEAD",
+        "--budget=renovation",
+        "--apply",
+        f"--verify-cmd={sys.executable} -c pass",
+        repo_root=context.repo_root,
+    )
+    _expect_success(result)
+
+    optimize = _read_json(repo / ".lintfix" / "optimize.json")
+    selected_format = _first_format_selection(optimize, "src/playground/format_debt.py")
+    _expect(selected_format["kind"] == "format", "selected candidate is not format")
+    source = (repo / "src" / "playground" / "format_debt.py").read_text(encoding="utf-8")
+    _expect("def alpha() -> int:" in source, "renovation did not apply broad format")
+    _expect("return 22" in source, "small author edit was lost")
+    _show_if_verbose(context, result)
+
+
+def scenario_budget_deleted_file(context: ScenarioContext) -> None:
+    repo = _repo(context, "budget-deleted-file")
+    git(repo, "restore", ".")
+    obsolete = "\n".join(f"VALUE_{i} = {i}" for i in range(30)) + "\n"
+    write_text(repo / "src" / "playground" / "obsolete.py", obsolete)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "add obsolete module")
+
+    (repo / "src" / "playground" / "obsolete.py").unlink()
+    write_text(
+        repo / "src" / "playground" / "imports.py",
+        "import sys\nimport os\n\n\n"
+        "def environment() -> str:\n"
+        "    return f'{sys.version_info.major}:{os.name}'\n",
+    )
+
+    result = run_cli(
+        repo,
+        "fix-optimize",
+        "--base=HEAD",
+        "--budget=dynamic",
+        repo_root=context.repo_root,
+    )
+    _expect_success(result)
+
+    optimize = _read_json(repo / ".lintfix" / "optimize.json")
+    _expect(int(optimize["author_cost"]) >= 30, "deleted file lines missing from author cost")
+    for entry in [*optimize["selected"], *optimize["not_selected"]]:
+        _expect(
+            "src/playground/obsolete.py" not in entry["files"],
+            "deleted file was passed to a mutation candidate",
+        )
+    _show_if_verbose(context, result)
+
+
 SCENARIOS: dict[str, Scenario] = {
     "fix-plan-preview": scenario_fix_plan_preview,
     "fix-optimize-preview": scenario_fix_optimize_preview,
@@ -389,6 +479,9 @@ SCENARIOS: dict[str, Scenario] = {
     "apply-rollback": scenario_apply_rollback,
     "empty-plan": scenario_empty_plan,
     "fix-replay": scenario_fix_replay,
+    "budget-small-format-skip": scenario_budget_small_format_skip,
+    "budget-renovation-format": scenario_budget_renovation_format,
+    "budget-deleted-file": scenario_budget_deleted_file,
 }
 
 
@@ -414,6 +507,49 @@ def _expect_unchanged_dirty_files(repo: Path) -> None:
 def _read_json(path: Path) -> dict[str, object]:
     _expect(path.is_file(), f"missing JSON artifact: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _seed_unformatted_baseline(repo: Path) -> None:
+    git(repo, "restore", ".")
+    write_text(
+        repo / "src" / "playground" / "format_debt.py",
+        "def alpha()->int:\n"
+        "    return 1\n\n\n"
+        "def beta()->int:\n"
+        "    return 2\n\n\n"
+        "def gamma()->int:\n"
+        "    return 3\n",
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "add format debt")
+
+
+def _make_small_format_drift_edit(repo: Path) -> None:
+    path = repo / "src" / "playground" / "format_debt.py"
+    source = path.read_text(encoding="utf-8")
+    path.write_text(source.replace("return 2", "return 22"), encoding="utf-8")
+
+
+def _first_format_entry(
+    optimize: dict[str, object],
+    relpath: str,
+    *,
+    bucket: str,
+) -> dict[str, object]:
+    entries = cast("list[dict[str, object]]", optimize[bucket])
+    for entry in entries:
+        files = cast("list[str]", entry["files"])
+        if entry["kind"] == "format" and relpath in files:
+            return entry
+    raise E2EFailure(f"missing {bucket} format candidate for {relpath}")
+
+
+def _first_format_rejection(optimize: dict[str, object], relpath: str) -> dict[str, object]:
+    return _first_format_entry(optimize, relpath, bucket="not_selected")
+
+
+def _first_format_selection(optimize: dict[str, object], relpath: str) -> dict[str, object]:
+    return _first_format_entry(optimize, relpath, bucket="selected")
 
 
 def _show_if_verbose(context: ScenarioContext, *results: CommandResult) -> None:

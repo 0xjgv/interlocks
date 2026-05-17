@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from interlocks.runner import capture
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-_DIFF_FILE = re.compile(r"^\+\+\+ b/(.+)$")
+_FULL_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+_DIFF_FILE = re.compile(r"^\+\+\+ (?:b/)?(.+?)(?:\t.*)?$")
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,9 @@ class Hunk:
     def contains(self, line: int) -> bool:
         return self.start <= line <= self.end
 
+    def overlaps(self, other: Hunk) -> bool:
+        return self.start <= other.end and other.start <= self.end
+
 
 @dataclass(frozen=True)
 class FileHunks:
@@ -36,6 +40,20 @@ class FileHunks:
 
     def contains(self, line: int) -> bool:
         return any(h.contains(line) for h in self.hunks)
+
+
+@dataclass(frozen=True)
+class AuthorEditCost:
+    """Deletion-aware author diff cost used to size mutation budgets."""
+
+    additions: int
+    deletions: int
+    replacement_pairs: int
+    deleted_file_lines: int
+
+    @property
+    def total(self) -> int:
+        return self.additions + self.deletions + self.replacement_pairs
 
 
 def resolve_base(base: str) -> str:
@@ -56,6 +74,52 @@ def changed_files(base: str) -> tuple[str, ...]:
     untracked = capture(["git", "ls-files", "--others", "--exclude-standard"])
     files = set(diff.stdout.splitlines()) | set(untracked.stdout.splitlines())
     return tuple(sorted(f for f in files if f.endswith(".py")))
+
+
+def deleted_files(base: str) -> tuple[str, ...]:
+    """Return deleted .py files differing from ``base``."""
+    if not base:
+        return ()
+    diff = capture(["git", "diff", "--name-only", "--diff-filter=D", base])
+    return tuple(sorted(f for f in diff.stdout.splitlines() if f.endswith(".py")))
+
+
+def author_edit_cost(base: str, files: tuple[str, ...] | None = None) -> AuthorEditCost:
+    """Return deletion-aware cost for the current author diff vs ``base``.
+
+    ``files`` may limit the calculation to surviving mutation input files. Deleted
+    Python files are always included because they affect review surface while
+    remaining invalid Ruff inputs.
+    """
+    if not base:
+        return AuthorEditCost(0, 0, 0, 0)
+    args = ["git", "diff", "--numstat", base]
+    if files:
+        args.extend(["--", *files])
+    result = capture(args)
+    additions = deletions = replacements = deleted_lines = 0
+    deleted = set(deleted_files(base))
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3 or parts[0] == "-" or parts[1] == "-":
+            continue
+        added = int(parts[0])
+        removed = int(parts[1])
+        path = parts[-1]
+        additions += added
+        deletions += removed
+        replacements += min(added, removed)
+        if path in deleted:
+            deleted_lines += removed
+    if files:
+        deleted_result = capture(["git", "diff", "--numstat", "--diff-filter=D", base])
+        for line in deleted_result.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[1] != "-" and parts[-1].endswith(".py"):
+                removed = int(parts[1])
+                deletions += removed
+                deleted_lines += removed
+    return AuthorEditCost(additions, deletions, replacements, deleted_lines)
 
 
 def changed_hunks(base: str, files: tuple[str, ...]) -> dict[str, FileHunks]:
@@ -96,6 +160,29 @@ def _parse_diff(text: str) -> dict[str, FileHunks]:
             continue
         by_file[current_path].append(Hunk(start, start + count - 1))
     return {path: FileHunks(path, tuple(hunks)) for path, hunks in by_file.items()}
+
+
+def changed_line_ranges_from_patch(text: str) -> dict[str, tuple[Hunk, ...]]:
+    """Return post-image changed ranges from a unified patch."""
+    by_file: dict[str, list[Hunk]] = {}
+    current_path: str | None = None
+    for line in text.splitlines():
+        m_file = _DIFF_FILE.match(line)
+        if m_file:
+            captured = m_file.group(1)
+            if captured is None:
+                continue
+            current_path = captured
+            by_file.setdefault(captured, [])
+            continue
+        m_hunk = _FULL_HUNK_HEADER.match(line)
+        if m_hunk is None or current_path is None:
+            continue
+        start = int(m_hunk.group(3))
+        count = int(m_hunk.group(4) or "1")
+        if count:
+            by_file[current_path].append(Hunk(start, start + count - 1))
+    return {path: tuple(hunks) for path, hunks in by_file.items()}
 
 
 def _full_file_hunk(path: str) -> Hunk:

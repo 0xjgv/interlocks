@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from interlocks.lintfix.budgets import UNBLOCK
-from interlocks.lintfix.classify import classify, measure
+from interlocks.lintfix.classify import classify, measure, measure_tool_patch_cost
 from interlocks.lintfix.diff import FileHunks, Hunk
 from interlocks.lintfix.rules import policy_for
 
@@ -123,3 +123,19 @@ def test_risky_path_increases_risk() -> None:
     # base_risk(2) + migrations(+10) > UNBLOCK.max_risk(8) → downgrades to escrow.
     assert result.mode == "escrow"
     assert "risk" in (result.reason or "")
+
+
+def test_measure_tool_patch_cost_exposes_edit_cost_and_risk_signals() -> None:
+    patch = """\
+--- a/pkg/views.py
++++ b/pkg/views.py
+@@ -50,2 +50,2 @@
+-if x == True:
++if x:
+"""
+    result = measure_tool_patch_cost(patch, _hunks("pkg/views.py", (1, 5)), base_risk=3)
+    assert result.cost.files_touched == 1
+    assert result.cost.changed_lines_total == 2
+    assert result.cost.changed_lines_outside_diff == 2
+    assert result.metrics.control_flow_edits == 2
+    assert result.cost.risk > 3

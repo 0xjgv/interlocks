@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from interlocks.config import load_config
 from interlocks.lintfix import budgets, classify, diff, discover, escrow, rules, simulate
+from interlocks.lintfix.classify import CandidateMetrics, Classification
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,6 +43,7 @@ class PlannedCandidate:
     unsafe: bool
     diagnostic_count: int
     mutation_class: rules.MutationClass
+    kind: str = "lint"
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,7 @@ class Plan:
     ruff_version: str
     candidates: tuple[PlannedCandidate, ...]
     discovery_error: DiscoveryError | None
+    author_cost: int = 0
 
 
 def build_plan(*, base: str, budget_name: str) -> Plan:
@@ -72,8 +75,9 @@ def build_plan(*, base: str, budget_name: str) -> Plan:
         return _empty_plan(base, head, budget_name, ruff_version)
 
     files = diff.changed_files(base_sha)
+    author_cost = diff.author_edit_cost(base_sha).total
     if not files:
-        return _empty_plan(base, head, budget_name, ruff_version)
+        return _empty_plan(base, head, budget_name, ruff_version, author_cost=author_cost)
 
     discovery = discover.discover_fixable_rules(files)
     if discovery.returncode >= 2:
@@ -83,11 +87,14 @@ def build_plan(*, base: str, budget_name: str) -> Plan:
             budget_name,
             ruff_version,
             error=DiscoveryError(discovery.returncode, discovery.stderr),
+            author_cost=author_cost,
         )
 
     hunks = diff.changed_hunks(base_sha, files)
-    profile = budgets.profile(budget_name)
-    candidates = tuple(_candidate_for(rc, hunks, profile) for rc in discovery.candidates)
+    profile = budgets.profile(budget_name, author_cost=author_cost)
+    lint_candidates = tuple(_candidate_for(rc, hunks, profile) for rc in discovery.candidates)
+    format_candidates = tuple(_format_candidate_for(f, hunks) for f in files)
+    candidates = lint_candidates + tuple(c for c in format_candidates if c.diff_text.strip())
 
     return Plan(
         base=base,
@@ -96,6 +103,7 @@ def build_plan(*, base: str, budget_name: str) -> Plan:
         ruff_version=ruff_version,
         candidates=candidates,
         discovery_error=None,
+        author_cost=author_cost,
     )
 
 
@@ -106,8 +114,9 @@ def _empty_plan(
     ruff_version: str,
     *,
     error: DiscoveryError | None = None,
+    author_cost: int = 0,
 ) -> Plan:
-    return Plan(base, head, budget_name, ruff_version, (), error)
+    return Plan(base, head, budget_name, ruff_version, (), error, author_cost)
 
 
 def _candidate_for(
@@ -148,6 +157,38 @@ def _candidate_for(
     )
 
 
+def _format_candidate_for(
+    file: str,
+    hunks: dict[str, diff.FileHunks],
+) -> PlannedCandidate:
+    patch = simulate.simulate_format(file)
+    patch_cost = classify.measure_tool_patch_cost(
+        patch.diff,
+        hunks,
+        base_risk=1,
+    )
+    metrics = patch_cost.metrics
+    cost = patch_cost.cost
+    mode: rules.Mode = "auto" if metrics.changed_lines_total else "skip"
+    reason = None if mode == "auto" else "patch is empty"
+    classification = Classification(
+        rule=patch.rule,
+        mode=mode,
+        metrics=metrics if metrics.files_touched else CandidateMetrics((file,), 0, 0, 0, 0, 0),
+        cost=cost,
+        reason=reason,
+        patch_id=patch.rule,
+    )
+    return PlannedCandidate(
+        classification=classification,
+        diff_text=patch.diff,
+        unsafe=False,
+        diagnostic_count=1,
+        mutation_class="other",
+        kind="format",
+    )
+
+
 def serialize(plan: Plan, *, patch_paths: dict[str, str] | None = None) -> dict[str, Any]:
     """Render :class:`Plan` as a JSON-ready dict.
 
@@ -160,6 +201,7 @@ def serialize(plan: Plan, *, patch_paths: dict[str, str] | None = None) -> dict[
         "base": plan.base,
         "head": plan.head,
         "mode": plan.budget,
+        "author_cost": plan.author_cost,
         "ruff_version": plan.ruff_version,
         "candidates": [_serialize_candidate(c, paths) for c in plan.candidates],
     }
@@ -174,6 +216,7 @@ def _serialize_candidate(c: PlannedCandidate, paths: dict[str, str]) -> dict[str
         "mode": cls.mode,
         "classification": cls.mode,
         "mutation_class": c.mutation_class,
+        "kind": c.kind,
         "files_touched": len(m.files_touched),
         "files": list(m.files_touched),
         "changed_lines_total": m.changed_lines_total,

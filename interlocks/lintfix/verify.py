@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from interlocks.lintfix.simulate import apply_rule
+from interlocks.lintfix.simulate import apply_format, apply_rule
 from interlocks.runner import capture
 
 if TYPE_CHECKING:
@@ -96,6 +96,55 @@ def apply_many_with_verify(
                 returncode=apply_result.returncode,
                 stdout=apply_result.stdout,
                 stderr=apply_result.stderr,
+                restored=True,
+                applied_rules=tuple(applied),
+                failed_rule=rule,
+            )
+        applied.append(rule)
+    result = capture(list(verify_cmd))
+    if result.returncode == 0:
+        return BatchVerifyResult(
+            applied=True,
+            returncode=0,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            restored=False,
+            applied_rules=tuple(applied),
+        )
+    _restore(snapshot)
+    return BatchVerifyResult(
+        applied=False,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        restored=True,
+        applied_rules=tuple(applied),
+    )
+
+
+def apply_many_candidates_with_verify(
+    *,
+    candidates: Sequence[tuple[str, str, tuple[str, ...]]],
+    verify_cmd: Sequence[str],
+) -> BatchVerifyResult:
+    """Apply selected lint/format candidates in order; verify once; restore on failure."""
+    if not candidates:
+        return BatchVerifyResult(True, 0, "", "", restored=False, applied_rules=())
+    all_files = tuple({f for _, _, files in candidates for f in files})
+    snapshot = _snapshot(all_files)
+    applied: list[str] = []
+    for kind, rule, files in candidates:
+        if kind == "format":
+            result = apply_format(files[0])
+        else:
+            result = apply_rule(rule, files)
+        if result.returncode >= 2:
+            _restore(snapshot)
+            return BatchVerifyResult(
+                applied=False,
+                returncode=result.returncode,
+                stdout=result.stdout,
+                stderr=result.stderr,
                 restored=True,
                 applied_rules=tuple(applied),
                 failed_rule=rule,

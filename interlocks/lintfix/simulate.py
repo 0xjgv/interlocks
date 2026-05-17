@@ -47,6 +47,22 @@ def simulate_rule(rule: str, files: tuple[str, ...]) -> CandidatePatch:
     return CandidatePatch(rule, files, result.stdout, result.returncode)
 
 
+def simulate_format(file: str) -> CandidatePatch:
+    """Return the Ruff format diff for one file without mutating it."""
+    cfg = load_config()
+    cmd = uvx_tool(
+        "ruff",
+        "format",
+        "--diff",
+        "--force-exclude",
+        *ruff_config_args(),
+        file,
+        version=cfg.tool_version("ruff"),
+    )
+    result = capture(cmd)
+    return CandidatePatch(f"FORMAT:{file}", (file,), result.stdout, result.returncode)
+
+
 def apply_rule(rule: str, files: tuple[str, ...]) -> subprocess.CompletedProcess[str]:
     """Apply ``rule`` to ``files`` in the working tree (auto-mode only).
 
@@ -61,6 +77,20 @@ def apply_rule(rule: str, files: tuple[str, ...]) -> subprocess.CompletedProcess
         "--force-exclude",
         *ruff_config_args(),
         *files,
+        version=cfg.tool_version("ruff"),
+    )
+    return capture(cmd)
+
+
+def apply_format(file: str) -> subprocess.CompletedProcess[str]:
+    """Apply Ruff format to one file."""
+    cfg = load_config()
+    cmd = uvx_tool(
+        "ruff",
+        "format",
+        "--force-exclude",
+        *ruff_config_args(),
+        file,
         version=cfg.tool_version("ruff"),
     )
     return capture(cmd)

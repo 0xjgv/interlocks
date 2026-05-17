@@ -106,11 +106,12 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     ),
     CommandDoc(
         "fix-optimize",
-        "Pick the highest-value rule subset under budget; writes the full "
+        "Pick the highest-value lint/format subset under budget; writes the full "
         ".lintfix/ set (--annotate / --metrics for CI; --apply to mutate)",
-        "The self-sufficient multi-rule unblock command — discovers every fixable "
-        "rule, picks the best subset under budget, and writes the full .lintfix/ set; "
-        "`--apply` applies and verifies, restoring the tree on failure.",
+        "The self-sufficient mutation planner — discovers fixable Ruff rules and "
+        "per-file format diffs, picks the best subset under `--budget=` or "
+        "`--mutation-budget=`, and writes the full .lintfix/ set; `--renovate` "
+        "selects the explicit broad-cleanup profile.",
         mutates=True,
         outputs=(".lintfix/plan.json", ".lintfix/optimize.json", ".lintfix/metrics.json"),
         exit_codes=(
@@ -317,8 +318,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     # ── Stages ───────────────────────────────────────────────────────────
     CommandDoc(
         "check",
-        "Fix + format + typecheck + test (full repo)",
-        "The local edit loop — run after edits, before pushing; `fix` and `format` mutate source.",
+        "Budgeted lint/format mutation + typecheck + test (full repo)",
+        "The local edit loop — run after edits, before pushing; default mutation is "
+        "budgeted from the author diff and broad cleanup requires `--renovate` or "
+        "`--mutation-budget=renovation`.",
         mutates=True,
         outputs=(),
         exit_codes=(
@@ -330,8 +333,9 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     CommandDoc(
         "pre-commit",
         "Staged checks + tests",
-        "Git pre-commit stage — fixes and formats staged Python files, re-stages, "
-        "then typechecks and tests; wired automatically by the pre-commit hook.",
+        "Git pre-commit stage — applies selected budgeted lint/format candidates, "
+        "re-stages changed files, then typechecks and tests; use `--renovate` for "
+        "intentional broad cleanup.",
         mutates=True,
         outputs=(),
         exit_codes=(
@@ -368,9 +372,9 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     ),
     CommandDoc(
         "post-edit",
-        "Format if source files changed (Claude Code hook)",
-        "Editor/agent hook interface — advisory ruff fix + format on changed "
-        "Python files; never blocks.",
+        "Budgeted lint/format mutation if source files changed (Claude Code hook)",
+        "Editor/agent hook interface — advisory budgeted Ruff lint/format mutation "
+        "on changed Python files; skipped broad candidates are recorded in .lintfix/.",
         mutates=True,
         outputs=(),
         exit_codes=((0, "always (advisory hook; never blocks)"),),

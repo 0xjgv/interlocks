@@ -30,8 +30,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from interlocks.lintfix.budgets import Budget
+    from interlocks.lintfix.diff import Hunk
     from interlocks.lintfix.plan import PlannedCandidate
     from interlocks.lintfix.stats import RuleStats
+
+from interlocks.lintfix import diff as diff_module
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,8 @@ class Candidate:
     selectable: bool
     policy_mode: str
     unsafe: bool = False
+    kind: str = "lint"
+    changed_ranges: Mapping[str, tuple[Hunk, ...]] | None = None
 
 
 @dataclass(frozen=True)
@@ -158,6 +163,8 @@ def candidates_from_plan(
                 selectable=(cls.mode == "auto" and not p.unsafe),
                 policy_mode=cls.mode,
                 unsafe=p.unsafe,
+                kind=p.kind,
+                changed_ranges=diff_module.changed_line_ranges_from_patch(p.diff_text),
             )
         )
     return tuple(out)
@@ -167,7 +174,12 @@ def candidates_from_plan(
 
 
 def conflicts(a: Candidate, b: Candidate) -> bool:
-    """Conservative: two candidates conflict if they touch any shared file."""
+    """Return true when candidates touch any shared file.
+
+    Conservative by design: two candidates that touch the same file are flagged
+    as conflicting regardless of changed-range overlap. ``Candidate.changed_ranges``
+    is plumbed through so a future relaxation can use hunk-level overlap.
+    """
     return bool(set(a.files) & set(b.files))
 
 
@@ -298,7 +310,7 @@ def _rejection_reason(
         None,
     )
     if blocker is not None:
-        return f"conflicts with selected rule {blocker}"
+        return f"conflicts with selected candidate {blocker}"
     over = _budget_overflow(candidate, best, budget)
     if over is not None:
         return f"would exceed {over} budget"
@@ -309,9 +321,9 @@ def _budget_overflow(candidate: Candidate, best: _Plan, budget: Budget) -> str |
     """If adding ``candidate`` to ``best`` would bust a budget, return its name."""
     combined = best.cost + candidate.cost
     if combined.outside_diff > budget.max_outside_diff_lines:
-        return "outside-diff"
+        return "outside-author-hunk"
     if combined.changed_lines > budget.max_changed_lines:
-        return "changed-lines"
+        return "total changed-lines"
     if combined.files > budget.max_files:
         return "files"
     if combined.risk > budget.max_risk:

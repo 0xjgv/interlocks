@@ -86,6 +86,46 @@ def _greenfield_clean_tree(greenfield_project: Path) -> None:
     )
 
 
+@given("the greenfield project has a small format drift edit")
+def _small_format_drift(greenfield_project: Path) -> None:
+    _write_clean_greenfield_sources(greenfield_project)
+    (greenfield_project / "src" / "legacy" / "views.py").write_text(
+        '"""Views."""\n\nVALUES = [1,2,3]\n',
+        encoding="utf-8",
+    )
+
+
+@given("the greenfield project has a large rewrite format drift")
+def _large_rewrite_format_drift(greenfield_project: Path) -> None:
+    _write_clean_greenfield_sources(greenfield_project)
+    body = "\n".join(f"VALUE_{i} = [1,2,3]" for i in range(80)) + "\n"
+    (greenfield_project / "src" / "legacy" / "views.py").write_text(body, encoding="utf-8")
+
+
+@given("the greenfield project has a deletion-heavy lintfix change")
+def _deletion_heavy_lintfix_change(greenfield_project: Path) -> None:
+    _write_clean_greenfield_sources(greenfield_project)
+    obsolete = greenfield_project / "src" / "legacy" / "obsolete.py"
+    obsolete.write_text("\n".join(f"OLD_{i} = {i}" for i in range(80)) + "\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "src/legacy/views.py", "src/legacy/admin.py", "src/legacy/obsolete.py"],
+        cwd=greenfield_project,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "add obsolete module"],
+        cwd=greenfield_project,
+        check=True,
+        capture_output=True,
+    )
+    obsolete.unlink()
+    (greenfield_project / "src" / "legacy" / "views.py").write_text(
+        '"""Views."""\n\nVALUES = [1,2,3]\n',
+        encoding="utf-8",
+    )
+
+
 @then(parsers.parse('the plan classifies rule "{rule}" as "{classification}"'))
 def _plan_classifies(greenfield_project: Path, rule: str, classification: str) -> None:
     payload = json.loads(
@@ -198,6 +238,78 @@ def _optimize_totals_match_selected(greenfield_project: Path) -> None:
     total_cost = payload["total_cost"]
     for dim in ("outside_diff", "changed_lines", "files", "risk"):
         assert total_cost[dim] == sum(c["cost"][dim] for c in selected), (dim, payload)
+
+
+@then("the active lintfix budget is micro")
+def _active_lintfix_budget_is_micro(greenfield_project: Path) -> None:
+    payload = _optimize_payload(greenfield_project)
+    budget = payload["active_budget"]
+    assert budget["name"] == "dynamic", payload
+    assert budget["max_changed_lines"] == 5, payload
+    assert budget["max_outside_diff_lines"] == 0, payload
+
+
+@then("the active lintfix budget allows more than the micro floor")
+def _active_lintfix_budget_above_micro(greenfield_project: Path) -> None:
+    payload = _optimize_payload(greenfield_project)
+    assert payload["active_budget"]["max_changed_lines"] > 5, payload
+
+
+@then(parsers.parse('the optimize skips a format candidate with reason mentioning "{needle}"'))
+def _optimize_skips_format_reason(greenfield_project: Path, needle: str) -> None:
+    skipped = _first_format_rejection(greenfield_project)
+    assert needle in (skipped["reason"] or ""), skipped
+
+
+@then("the optimize author cost includes deleted-file lines")
+def _optimize_author_cost_includes_deleted_file(greenfield_project: Path) -> None:
+    payload = _optimize_payload(greenfield_project)
+    assert payload["author_cost"] >= 80, payload
+
+
+@then(parsers.parse('no optimize candidate touches "{relpath}"'))
+def _no_optimize_candidate_touches(greenfield_project: Path, relpath: str) -> None:
+    payload = _optimize_payload(greenfield_project)
+    entries = [*payload["selected"], *payload["not_selected"]]
+    assert all(relpath not in entry["files"] for entry in entries), entries
+
+
+@then("the optimize skipped format entry includes cost budget and reason")
+def _skipped_format_has_cost_budget_reason(greenfield_project: Path) -> None:
+    payload = _optimize_payload(greenfield_project)
+    skipped = _first_format_rejection(greenfield_project)
+    assert skipped["cost"]["changed_lines"] > 0, skipped
+    assert "active_budget" in payload, payload
+    assert skipped["reason"], skipped
+
+
+@then("the optimize selects a format candidate")
+def _optimize_selects_format(greenfield_project: Path) -> None:
+    payload = _optimize_payload(greenfield_project)
+    assert any(entry["kind"] == "format" for entry in payload["selected"]), payload
+
+
+def _write_clean_greenfield_sources(project: Path) -> None:
+    (project / "src" / "legacy" / "views.py").write_text(
+        _LEGACY_CLEAN_VIEWS,
+        encoding="utf-8",
+    )
+    (project / "src" / "legacy" / "admin.py").write_text(
+        _LEGACY_CLEAN_ADMIN,
+        encoding="utf-8",
+    )
+
+
+def _optimize_payload(project: Path) -> dict[str, object]:
+    return json.loads((project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))
+
+
+def _first_format_rejection(project: Path) -> dict[str, object]:
+    payload = _optimize_payload(project)
+    for entry in payload["not_selected"]:
+        if entry["kind"] == "format":
+            return entry
+    raise AssertionError(f"no rejected format candidate: {payload}")
 
 
 def _detail(result: subprocess.CompletedProcess[str]) -> str:

@@ -7,10 +7,13 @@ import time
 from interlocks import ui
 from interlocks.config import load_config
 from interlocks.git import stage, staged_py_files
-from interlocks.runner import print_stage_verdict, reset_results, run_tasks
+from interlocks.runner import (
+    print_stage_verdict,
+    reset_results,
+    run_tasks,
+)
 from interlocks.skip import current_skip_policy, maybe_print_skip_banner, run_unless_skipped
-from interlocks.tasks.fix import cmd_fix
-from interlocks.tasks.format import cmd_format
+from interlocks.stages._budgeted import run_budgeted_mutation
 from interlocks.tasks.test import task_test
 from interlocks.tasks.typecheck import task_typecheck
 
@@ -30,9 +33,9 @@ def cmd_pre_commit() -> None:
     maybe_print_skip_banner(skip_policy)
     ui.section("Pre-commit Checks")
     try:
-        run_unless_skipped("fix", lambda: cmd_fix(files), skip_policy)
-        run_unless_skipped("format", lambda: cmd_format(files), skip_policy)
-        if not (skip_policy.enabled("fix") and skip_policy.enabled("format")):
+        run_unless_skipped("format", lambda: None, skip_policy)
+        run_unless_skipped("fix", _run_budgeted_mutation, skip_policy)
+        if not skip_policy.enabled("fix"):
             stage(files)
 
         src_prefix = f"{cfg.src_dir_arg}/"
@@ -46,3 +49,7 @@ def cmd_pre_commit() -> None:
         elapsed = time.monotonic() - start
         ui.stage_footer(elapsed)
         print_stage_verdict("pre-commit", elapsed)
+
+
+def _run_budgeted_mutation() -> None:
+    run_budgeted_mutation(base="HEAD", emit_legacy_rows=True)

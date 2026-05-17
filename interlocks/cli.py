@@ -325,7 +325,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             ),
             "fix-optimize": (
                 cmd_fix_optimize,
-                "Pick the highest-value rule subset under budget; writes the full "
+                "Pick the highest-value lint/format subset under budget; writes the full "
                 ".lintfix/ set (--annotate / --metrics for CI; --apply to mutate)",
             ),
             "fix-annotate": (
@@ -371,11 +371,14 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
     (
         "Stages",
         {
-            "check": (cmd_check, "Fix + format + typecheck + test (full repo)"),
+            "check": (cmd_check, "Budgeted lint/format mutation + typecheck + test (full repo)"),
             "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
             "ci": (cmd_ci, "Full verification: lint, audit, typecheck, tests, coverage, CRAP"),
             "nightly": (cmd_nightly, "Long-running gates: coverage + mutation (blocking)"),
-            "post-edit": (cmd_post_edit, "Format if source files changed (Claude Code hook)"),
+            "post-edit": (
+                cmd_post_edit,
+                "Budgeted lint/format mutation if source files changed (Claude Code hook)",
+            ),
             "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
             "clean": (cmd_clean, "Remove cache, build, coverage, and generated artifacts"),
         },

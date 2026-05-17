@@ -33,12 +33,11 @@ from interlocks.skip import (
     maybe_print_skip_banner,
     run_unless_skipped,
 )
+from interlocks.stages._budgeted import run_budgeted_mutation
 from interlocks.tasks.acceptance import task_acceptance_with_attribution
 from interlocks.tasks.behavior_attribution import cmd_behavior_attribution_cached_advisory
 from interlocks.tasks.crap import cmd_crap_cached_advisory
 from interlocks.tasks.deps import task_deps
-from interlocks.tasks.fix import cmd_fix
-from interlocks.tasks.format import cmd_format
 from interlocks.tasks.test import task_test
 from interlocks.tasks.typecheck import task_typecheck
 
@@ -78,8 +77,11 @@ def cmd_check() -> None:
 
     try:
         ui.section("Quality Checks")
-        run_unless_skipped("fix", lambda: cmd_fix(scoped_files), skip_policy)
-        run_unless_skipped("format", lambda: cmd_format(scoped_files), skip_policy)
+        run_unless_skipped(
+            "fix",
+            lambda: _run_budgeted_mutation(base=scope_ref or "HEAD"),
+            skip_policy,
+        )
         ui.section("Parallel")
         run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
         ui.section("Advisory")
@@ -149,6 +151,10 @@ def _run_advisory(
 
 def _skip_under_changed(label: str, reason: str) -> None:
     warn_skip(f"{label}: skipped under --changed — {reason}")
+
+
+def _run_budgeted_mutation(*, base: str) -> None:
+    run_budgeted_mutation(base=base, emit_legacy_rows=True)
 
 
 def _print_footer(elapsed: float) -> None:

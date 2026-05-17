@@ -83,7 +83,7 @@ def cmd_fix_optimize(
     stats_map = _load_stats(opts.stats_path, cfg.project_root)
     stats_source = opts.stats_path if stats_map is not None else None
     candidates = optimize_mod.candidates_from_plan(plan.candidates, stats_map)
-    profile = budgets.profile(opts.budget_name)
+    profile = budgets.profile(opts.budget_name, author_cost=plan.author_cost)
     selection = optimize_mod.optimize(candidates, profile)
 
     plan_by_rule = {c.classification.rule: c for c in plan.candidates}
@@ -117,9 +117,12 @@ def _resolve_options(
     verify_cmd: tuple[str, ...] | None,
 ) -> _Options:
     """Merge keyword overrides with CLI argv into a resolved :class:`_Options`."""
+    cli_budget = arg_value("--mutation-budget=", arg_value("--budget=", "unblock"))
+    if arg_flag_value("--renovate", "1") is not None:
+        cli_budget = "renovation"
     return _Options(
         base=base or arg_value("--base=", "origin/main"),
-        budget_name=budget or arg_value("--budget=", "unblock"),
+        budget_name=budget or cli_budget,
         apply=apply if apply is not None else (arg_flag_value("--apply", "1") is not None),
         stats_path=stats_path if stats_path is not None else _resolve_stats_path(),
         verify_cmd=verify_cmd or _verify_cmd_argv(),
@@ -166,7 +169,24 @@ def _apply_selection(
         (s.candidate.rule, plan_by_rule[s.candidate.rule].classification.metrics.files_touched)
         for s in selection.selected
     )
-    result = verify.apply_many_with_verify(rules_and_files=rules_and_files, verify_cmd=verify_cmd)
+    candidates = tuple(
+        (
+            plan_by_rule[s.candidate.rule].kind,
+            s.candidate.rule,
+            plan_by_rule[s.candidate.rule].classification.metrics.files_touched,
+        )
+        for s in selection.selected
+    )
+    if all(kind == "lint" for kind, _, _ in candidates):
+        result = verify.apply_many_with_verify(
+            rules_and_files=rules_and_files,
+            verify_cmd=verify_cmd,
+        )
+    else:
+        result = verify.apply_many_candidates_with_verify(
+            candidates=candidates,
+            verify_cmd=verify_cmd,
+        )
     if result.applied:
         rules = ", ".join(result.applied_rules)
         ui.row("fix-optimize", rules or "(none)", "applied + verified", state="ok")
@@ -193,6 +213,10 @@ def _serialize(
         "base": plan.base,
         "head": plan.head,
         "budget": selection.budget_name,
+        "author_cost": plan.author_cost,
+        "active_budget": asdict(
+            budgets.profile(selection.budget_name, author_cost=plan.author_cost)
+        ),
         "ruff_version": plan.ruff_version,
         "total_value": selection.total_value,
         "total_cost": asdict(selection.total_cost),
@@ -220,6 +244,7 @@ def _serialize_candidate(
         "value": c.value,
         "cost": asdict(c.cost),
         "policy_mode": c.policy_mode,
+        "kind": c.kind,
         "unsafe": c.unsafe,
         "files": list(c.files),
         "patch_path": patch_paths.get(c.rule),
@@ -264,6 +289,7 @@ def _print_summary(
     ui.section("plan")
     ui.kv_block([
         ("path", out_rel),
+        ("author cost", str(plan.author_cost)),
         ("selected", str(len(selection.selected))),
         ("total value", str(selection.total_value)),
         (
@@ -279,6 +305,7 @@ def _print_summary(
 
 def _candidate_line(c: optimize_mod.Candidate) -> str:
     return (
+        f"kind={c.kind}  "
         f"value={c.value}  "
         f"cost={{outside={c.cost.outside_diff}, lines={c.cost.changed_lines}, "
         f"files={c.cost.files}, risk={c.cost.risk}}}"

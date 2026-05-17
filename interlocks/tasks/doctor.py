@@ -159,6 +159,10 @@ def _collect_tool_warnings(
     warnings: list[str],
     blockers: list[str],
 ) -> None:
+    warnings.append(
+        "default check mutation is budgeted by author diff; use `interlocks check --renovate` "
+        "or `--mutation-budget=renovation` for intentional project-wide cleanup"
+    )
     if cfg is not None and cfg.test_invoker == "uv" and shutil.which("uv") is None:
         blockers.append("test_invoker is `uv`, but `uv` was not found on PATH")
 

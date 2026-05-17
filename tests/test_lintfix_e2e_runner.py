@@ -118,3 +118,26 @@ def test_runner_subprocess_smoke_fix_optimize_budget(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert "[ok] fix-optimize-budget" in result.stdout
+
+
+def test_runner_subprocess_budget_mutation_scenarios(tmp_path: Path) -> None:
+    script = Path(__file__).resolve().parents[1] / "tools" / "run_lintfix_e2e.py"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--keep-going",
+            "--scenario=budget-small-format-skip",
+            "--scenario=budget-renovation-format",
+            "--scenario=budget-deleted-file",
+            f"--target-root={tmp_path / 'lintfix-e2e'}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "[ok] budget-small-format-skip" in result.stdout
+    assert "[ok] budget-renovation-format" in result.stdout
+    assert "[ok] budget-deleted-file" in result.stdout

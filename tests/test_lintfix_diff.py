@@ -7,7 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from interlocks.lintfix.diff import changed_files, changed_hunks, resolve_base
+from interlocks.lintfix.diff import (
+    Hunk,
+    author_edit_cost,
+    changed_files,
+    changed_hunks,
+    changed_line_ranges_from_patch,
+    deleted_files,
+    resolve_base,
+)
 
 
 def _git(*args: str, cwd: Path) -> None:
@@ -87,3 +95,86 @@ def test_changed_hunks_treats_untracked_as_full_file(repo: Path) -> None:
 
 def test_changed_files_empty_when_base_unknown() -> None:
     assert changed_files("") == ()
+
+
+def test_author_edit_cost_counts_replacements_and_deletions(repo: Path) -> None:
+    (repo / "base.py").write_text("x = 2\n" * 3, encoding="utf-8")
+    base = resolve_base("HEAD")
+
+    cost = author_edit_cost(base)
+
+    assert cost.additions == 3
+    assert cost.deletions == 5
+    assert cost.replacement_pairs == 3
+    assert cost.total == 11
+
+
+def test_author_edit_cost_counts_small_addition(repo: Path) -> None:
+    (repo / "base.py").write_text("x = 1\n" * 5 + "y = 2\n", encoding="utf-8")
+    base = resolve_base("HEAD")
+
+    cost = author_edit_cost(base)
+
+    assert cost.additions == 1
+    assert cost.deletions == 0
+    assert cost.replacement_pairs == 0
+    assert cost.total == 1
+
+
+def test_author_edit_cost_counts_pure_deletion(repo: Path) -> None:
+    (repo / "base.py").write_text("x = 1\n" * 3, encoding="utf-8")
+    base = resolve_base("HEAD")
+
+    cost = author_edit_cost(base)
+
+    assert cost.additions == 0
+    assert cost.deletions == 2
+    assert cost.replacement_pairs == 0
+    assert cost.total == 2
+
+
+def test_author_edit_cost_counts_mixed_add_delete_hunks(repo: Path) -> None:
+    (repo / "base.py").write_text("x = 1\ny = 2\nz = 3\nnew = 4\n", encoding="utf-8")
+    base = resolve_base("HEAD")
+
+    cost = author_edit_cost(base)
+
+    assert cost.additions == 3
+    assert cost.deletions == 4
+    assert cost.replacement_pairs == 3
+    assert cost.total == 10
+
+
+def test_deleted_python_files_count_in_author_cost_but_not_changed_files(repo: Path) -> None:
+    (repo / "base.py").unlink()
+    base = resolve_base("HEAD")
+
+    assert "base.py" not in changed_files(base)
+    assert deleted_files(base) == ("base.py",)
+    cost = author_edit_cost(base)
+    assert cost.deleted_file_lines == 5
+    assert cost.deletions == 5
+    assert cost.total == 5
+
+
+def test_changed_line_ranges_from_patch_accepts_ruff_and_git_paths() -> None:
+    patch = """\
+--- a/a.py
++++ b/a.py
+@@ -1,1 +1,2 @@
+ x = 1
++y = 2
+--- b.py
++++ b.py
+@@ -10,2 +10,3 @@
+ z = 1
++q = 2
+"""
+    ranges = changed_line_ranges_from_patch(patch)
+    assert ranges["a.py"] == (Hunk(1, 2),)
+    assert ranges["b.py"] == (Hunk(10, 12),)
+
+
+def test_hunk_overlap_detection() -> None:
+    assert Hunk(2, 4).overlaps(Hunk(4, 8))
+    assert not Hunk(2, 4).overlaps(Hunk(5, 8))

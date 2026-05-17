@@ -105,6 +105,8 @@ def test_doctor_in_process_reports_sections(
     # Derived Next Steps flags the missing preset + CI, not the generic line.
     assert "Run `interlocks presets`" in captured.out
     assert "Wire CI via `interlocks ci`" in captured.out
+    assert "default check mutation is budgeted by author diff" in captured.out
+    assert "interlocks check --renovate" in captured.out
     # task_doctor is CLI-only — it never composes into a stage pipeline.
     assert task_doctor() is None
 

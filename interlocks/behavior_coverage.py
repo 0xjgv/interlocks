@@ -522,6 +522,36 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "fix-optimize --metrics writes a metrics.json with populated plan and optimize sections",
         "interlocks.tasks.fix_optimize:cmd_fix_optimize",
     ),
+    Behavior(
+        "lintfix-small-edit-budget",
+        "task",
+        "dynamic lintfix budget skips broad format churn for a small edit",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "lintfix-large-rewrite-budget",
+        "task",
+        "dynamic lintfix budget grows proportionally for a large rewrite",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "lintfix-deletion-budget",
+        "task",
+        "deleted Python files count toward dynamic lintfix budget without becoming Ruff inputs",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "lintfix-broad-format-skip",
+        "task",
+        "broad outside-author-hunk format candidates are skipped with an explainable reason",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
+    Behavior(
+        "lintfix-renovation-mode",
+        "task",
+        "renovation budget permits intentional broad lintfix cleanup",
+        "interlocks.tasks.fix_optimize:cmd_fix_optimize",
+    ),
 )
 
 

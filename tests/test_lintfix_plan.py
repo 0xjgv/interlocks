@@ -8,6 +8,7 @@ isolates the orchestration logic.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,11 @@ from interlocks.lintfix.diff import FileHunks, Hunk
 
 def _stub_files(monkeypatch: pytest.MonkeyPatch, *, base_sha: str, files: tuple[str, ...]) -> None:
     monkeypatch.setattr(plan_module.diff, "resolve_base", lambda _: base_sha)
+    monkeypatch.setattr(
+        plan_module.diff,
+        "author_edit_cost",
+        lambda _base: SimpleNamespace(total=20),
+    )
     monkeypatch.setattr(plan_module.diff, "changed_files", lambda _: files)
     monkeypatch.setattr(
         plan_module.diff,
@@ -25,6 +31,11 @@ def _stub_files(monkeypatch: pytest.MonkeyPatch, *, base_sha: str, files: tuple[
         lambda _base, fs: {f: FileHunks(f, (Hunk(1, 200),)) for f in fs},
     )
     monkeypatch.setattr(plan_module.diff, "head_sha", lambda: "HEAD_SHA")
+    monkeypatch.setattr(
+        simulate,
+        "simulate_format",
+        lambda file: simulate.CandidatePatch(f"FORMAT:{file}", (file,), "", 0),
+    )
 
 
 _I001_PATCH = """\
@@ -35,6 +46,14 @@ _I001_PATCH = """\
 -import os
 +import os
 +import sys
+"""
+
+_FORMAT_PATCH = """\
+--- a/sample.py
++++ b/sample.py
+@@ -1,1 +1,1 @@
+-x = [1,2,3]
++x = [1, 2, 3]
 """
 
 
@@ -59,6 +78,67 @@ def test_build_plan_classifies_safe_fixable_rule_as_auto(monkeypatch: pytest.Mon
     assert candidate.classification.mode == "auto"
     assert candidate.unsafe is False
     assert candidate.mutation_class == "import_sort"
+
+
+def test_build_plan_adds_format_candidate_when_format_diff_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_files(monkeypatch, base_sha="BASE", files=("sample.py",))
+    monkeypatch.setattr(
+        discover,
+        "discover_fixable_rules",
+        lambda files: discover.DiscoveryResult((), 0, ""),
+    )
+    monkeypatch.setattr(
+        simulate,
+        "simulate_format",
+        lambda file: simulate.CandidatePatch(f"FORMAT:{file}", (file,), _FORMAT_PATCH, 0),
+    )
+
+    plan = plan_module.build_plan(base="origin/main", budget_name="dynamic")
+
+    [candidate] = plan.candidates
+    assert candidate.kind == "format"
+    assert candidate.classification.rule == "FORMAT:sample.py"
+    assert candidate.classification.mode == "auto"
+
+
+def test_build_plan_mixes_lint_and_format_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_files(monkeypatch, base_sha="BASE", files=("sample.py",))
+    monkeypatch.setattr(
+        discover,
+        "discover_fixable_rules",
+        lambda files: discover.DiscoveryResult(
+            (discover.RuleCandidate("I001", files, True, False, 1),), 1, ""
+        ),
+    )
+    monkeypatch.setattr(
+        simulate,
+        "simulate_rule",
+        lambda rule, files: simulate.CandidatePatch(rule, files, _I001_PATCH, 0),
+    )
+    monkeypatch.setattr(
+        simulate,
+        "simulate_format",
+        lambda file: simulate.CandidatePatch(f"FORMAT:{file}", (file,), _FORMAT_PATCH, 0),
+    )
+
+    plan = plan_module.build_plan(base="origin/main", budget_name="dynamic")
+
+    assert [candidate.kind for candidate in plan.candidates] == ["lint", "format"]
+
+
+def test_build_plan_skips_no_diff_format_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_files(monkeypatch, base_sha="BASE", files=("sample.py",))
+    monkeypatch.setattr(
+        discover,
+        "discover_fixable_rules",
+        lambda files: discover.DiscoveryResult((), 0, ""),
+    )
+
+    plan = plan_module.build_plan(base="origin/main", budget_name="dynamic")
+
+    assert plan.candidates == ()
 
 
 def test_build_plan_marks_unsafe_only_rule_as_skip(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,6 +247,7 @@ def test_serialize_matches_spec_schema(monkeypatch: pytest.MonkeyPatch) -> None:
         "mode",
         "classification",
         "mutation_class",
+        "kind",
         "files_touched",
         "files",
         "changed_lines_total",

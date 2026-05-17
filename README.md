@@ -31,6 +31,9 @@ uvx --from interlocks il check
 
 `check` runs the local edit loop: fix, format, typecheck, tests, optional acceptance tests, advisory dependency hygiene, cached CRAP feedback when fresh coverage exists, and the suppressions report. It is the command to run after edits before pushing.
 
+For a practical walkthrough of the budgeted lint/format mutation path, see
+[`docs/lintfix-mutation-budget-howto.md`](docs/lintfix-mutation-budget-howto.md).
+
 The core quality tools ship with the CLI. Unpinned `uvx` follows the latest PyPI release, which is right for exploration.
 
 ### 2. Install and Wire Local Integrations

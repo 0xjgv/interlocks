@@ -89,3 +89,40 @@ Feature: per-command coverage of the fix-* harness
     Then the greenfield command exits 0
     And the file ".lintfix/metrics.json" exists in the greenfield project
     And the metrics sources include plan and optimize
+
+  # req: lintfix-small-edit-budget
+  Scenario: small edits do not trigger broad lintfix format mutation
+    Given the greenfield project has a small format drift edit
+    When I run "interlocks fix-optimize --base=HEAD --budget=dynamic" in the greenfield project
+    Then the greenfield command exits 0
+    And the active lintfix budget is micro
+    And the optimize skips a format candidate with reason mentioning "outside-author-hunk"
+
+  # req: lintfix-large-rewrite-budget
+  Scenario: large rewrites receive proportional lintfix format budget
+    Given the greenfield project has a large rewrite format drift
+    When I run "interlocks fix-optimize --base=HEAD --budget=dynamic" in the greenfield project
+    Then the greenfield command exits 0
+    And the active lintfix budget allows more than the micro floor
+
+  # req: lintfix-deletion-budget
+  Scenario: deletion-heavy changes count deleted lines without formatting deleted files
+    Given the greenfield project has a deletion-heavy lintfix change
+    When I run "interlocks fix-optimize --base=HEAD --budget=dynamic" in the greenfield project
+    Then the greenfield command exits 0
+    And the optimize author cost includes deleted-file lines
+    And no optimize candidate touches "src/legacy/obsolete.py"
+
+  # req: lintfix-broad-format-skip
+  Scenario: broad outside-author-hunk format is skipped with an explainable reason
+    Given the greenfield project has a small format drift edit
+    When I run "interlocks fix-optimize --base=HEAD --budget=dynamic" in the greenfield project
+    Then the greenfield command exits 0
+    And the optimize skipped format entry includes cost budget and reason
+
+  # req: lintfix-renovation-mode
+  Scenario: explicit renovation mode allows broad lintfix cleanup
+    Given the greenfield project has a small format drift edit
+    When I run "interlocks fix-optimize --base=HEAD --budget=renovation" in the greenfield project
+    Then the greenfield command exits 0
+    And the optimize selects a format candidate

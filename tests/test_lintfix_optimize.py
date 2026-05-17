@@ -10,6 +10,7 @@ from __future__ import annotations
 from interlocks.lintfix import optimize
 from interlocks.lintfix.budgets import UNBLOCK, Budget, CandidateCost
 from interlocks.lintfix.classify import CandidateMetrics, Classification
+from interlocks.lintfix.diff import Hunk
 from interlocks.lintfix.plan import PlannedCandidate
 from interlocks.lintfix.stats import RuleStats
 
@@ -70,6 +71,8 @@ def _candidate(
     selectable: bool = True,
     policy_mode: str = "auto",
     unsafe: bool = False,
+    kind: str = "lint",
+    changed_ranges: dict[str, tuple[Hunk, ...]] | None = None,
 ) -> optimize.Candidate:
     return optimize.Candidate(
         rule=rule,
@@ -84,6 +87,8 @@ def _candidate(
         selectable=selectable,
         policy_mode=policy_mode,
         unsafe=unsafe,
+        kind=kind,
+        changed_ranges=changed_ranges,
     )
 
 
@@ -172,6 +177,40 @@ def test_no_conflict_when_files_disjoint() -> None:
     a = _candidate("I001", value=10, files=("a.py",))
     b = _candidate("W292", value=5, files=("b.py",))
     assert optimize.conflicts(a, b) is False
+
+
+def test_conflicts_when_changed_ranges_overlap_on_shared_file() -> None:
+    a = _candidate(
+        "I001",
+        value=10,
+        files=("shared.py",),
+        changed_ranges={"shared.py": (Hunk(2, 4),)},
+    )
+    b = _candidate(
+        "FORMAT:shared.py",
+        value=10,
+        files=("shared.py",),
+        kind="format",
+        changed_ranges={"shared.py": (Hunk(4, 8),)},
+    )
+    assert optimize.conflicts(a, b) is True
+
+
+def test_conflicts_stays_conservative_for_same_file_even_when_ranges_do_not_overlap() -> None:
+    a = _candidate(
+        "I001",
+        value=10,
+        files=("shared.py",),
+        changed_ranges={"shared.py": (Hunk(2, 3),)},
+    )
+    b = _candidate(
+        "FORMAT:shared.py",
+        value=10,
+        files=("shared.py",),
+        kind="format",
+        changed_ranges={"shared.py": (Hunk(8, 9),)},
+    )
+    assert optimize.conflicts(a, b) is True
 
 
 # --- DP optimization ------------------------------------------------------
@@ -382,6 +421,36 @@ def test_candidates_from_plan_applies_stats_support_score() -> None:
     assert candidate.value == 18
 
 
+def test_candidates_from_plan_preserves_kind_and_patch_ranges() -> None:
+    diff_text = """\
+--- a/pkg/a.py
++++ b/pkg/a.py
+@@ -3,1 +3,2 @@
+ x = 1
++y = 2
+"""
+    planned = (
+        _planned(
+            "FORMAT:pkg/a.py",
+            files=("pkg/a.py",),
+            diagnostic_count=1,
+        ),
+    )
+    planned = (
+        planned[0].__class__(
+            classification=planned[0].classification,
+            diff_text=diff_text,
+            unsafe=False,
+            diagnostic_count=1,
+            mutation_class="other",
+            kind="format",
+        ),
+    )
+    [candidate] = optimize.candidates_from_plan(planned)
+    assert candidate.kind == "format"
+    assert candidate.changed_ranges == {"pkg/a.py": (Hunk(3, 4),)}
+
+
 def test_value_for_floors_at_zero() -> None:
     # advisory penalty would drive value negative; the floor clamps to 0.
     planned = _planned("SIM102", mode="advisory", diagnostic_count=0, inside=0, outside=0)
@@ -400,7 +469,7 @@ def test_budget_overflow_reports_outside_diff() -> None:
         max_risk=100,
     )
     candidate = _candidate("X", value=1, outside=10, lines=1, files_count=1)
-    assert optimize._budget_overflow(candidate, optimize._Plan(), budget) == "outside-diff"
+    assert optimize._budget_overflow(candidate, optimize._Plan(), budget) == "outside-author-hunk"
 
 
 def test_budget_overflow_reports_files() -> None:

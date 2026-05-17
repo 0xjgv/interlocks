@@ -292,6 +292,7 @@ def _planned_candidate(
     files: tuple[str, ...] = ("sample.py",),
     diff_text: str = "DIFF",
     diagnostic_count: int = 1,
+    kind: str = "lint",
 ) -> plan_module.PlannedCandidate:
     classification = Classification(
         rule=rule,
@@ -311,7 +312,8 @@ def _planned_candidate(
         diff_text=diff_text,
         unsafe=False,
         diagnostic_count=diagnostic_count,
-        mutation_class="import_sort",
+        mutation_class="other" if kind == "format" else "import_sort",
+        kind=kind,
     )
 
 
@@ -338,6 +340,7 @@ def _opt_candidate(rule: str = "I001", value: int = 8) -> Candidate:
         files=("sample.py",),
         selectable=True,
         policy_mode="auto",
+        kind="format" if rule.startswith("FORMAT:") else "lint",
     )
 
 
@@ -527,6 +530,40 @@ def test_apply_selection_verify_failure_writes_failed_patch_and_exits(
     assert failed.read_text(encoding="utf-8") == "FAILED-DIFF"
 
 
+def test_apply_selection_format_candidate_uses_candidate_verifier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan_by_rule = {
+        "FORMAT:sample.py": _planned_candidate(
+            rule="FORMAT:sample.py",
+            kind="format",
+            diff_text="FORMAT-DIFF",
+        )
+    }
+    seen: dict[str, object] = {}
+
+    def _fake_apply(*, candidates: object, verify_cmd: object) -> BatchVerifyResult:
+        seen["candidates"] = candidates
+        return BatchVerifyResult(
+            applied=True,
+            returncode=0,
+            stdout="",
+            stderr="",
+            restored=False,
+            applied_rules=("FORMAT:sample.py",),
+        )
+
+    monkeypatch.setattr(verify_mod, "apply_many_candidates_with_verify", _fake_apply)
+    fix_optimize_mod._apply_selection(
+        tmp_path,
+        plan_by_rule,
+        _selection(selected=(_opt_candidate("FORMAT:sample.py"),)),
+        ("interlocks", "ci"),
+    )
+
+    assert seen["candidates"] == (("format", "FORMAT:sample.py", ("sample.py",)),)
+
+
 # --- cmd_fix_optimize -----------------------------------------------------
 
 
@@ -555,6 +592,39 @@ def test_cmd_fix_optimize_writes_optimize_json(
 
     payload = json.loads((project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))
     assert {c["rule"] for c in payload["selected"]} == {"I001"}
+    assert payload["active_budget"]["name"] == "unblock"
+
+
+def test_cmd_fix_optimize_serializes_skipped_format_reason(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skipped = _planned_candidate(
+        rule="FORMAT:sample.py",
+        mode="auto",
+        kind="format",
+        diff_text="FORMAT-DIFF",
+    )
+    monkeypatch.setattr(
+        plan_module,
+        "build_plan",
+        lambda **_kw: _plan(candidates=(skipped,)),
+    )
+    monkeypatch.setattr(plan_module, "materialize_escrow_patches", lambda *_a: {})
+    monkeypatch.setattr(
+        fix_optimize_mod.optimize_mod,
+        "optimize",
+        lambda candidates, budget: _selection(rejected=tuple(candidates)),
+    )
+
+    fix_optimize_mod.cmd_fix_optimize(
+        base="HEAD", budget="dynamic", apply=False, stats_path="", verify_cmd=("true",)
+    )
+
+    payload = json.loads((project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))
+    [rejected] = payload["not_selected"]
+    assert rejected["kind"] == "format"
+    assert rejected["reason"] == "displaced"
+    assert "active_budget" in payload
 
 
 def test_cmd_fix_optimize_discovery_error_exits(

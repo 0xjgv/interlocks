@@ -62,9 +62,36 @@ class Classification:
     patch_id: str
 
 
+@dataclass(frozen=True)
+class ToolPatchCost:
+    """Reusable cost summary for one unified tool patch."""
+
+    cost: CandidateCost
+    metrics: CandidateMetrics
+
+
 def measure(patch_text: str, hunks: dict[str, FileHunks]) -> CandidateMetrics:
     """Parse a unified diff and return metrics."""
     return _measure(patch_text, hunks)
+
+
+def measure_tool_patch_cost(
+    patch_text: str,
+    hunks: dict[str, FileHunks],
+    *,
+    base_risk: int = 0,
+    unsafe: bool = False,
+) -> ToolPatchCost:
+    """Measure edit volume, outside-author-hunk churn, files, and risk signals."""
+    metrics = _measure(patch_text, hunks)
+    cost = CandidateCost(
+        files_touched=len(metrics.files_touched),
+        changed_lines_total=metrics.changed_lines_total,
+        changed_lines_outside_diff=metrics.changed_lines_outside_diff,
+        risk=_score_risk(metrics, base=base_risk, unsafe=unsafe),
+        unsafe=unsafe,
+    )
+    return ToolPatchCost(cost=cost, metrics=metrics)
 
 
 def classify(
@@ -76,15 +103,14 @@ def classify(
     unsafe: bool = False,
 ) -> Classification:
     """Score and classify a candidate patch given ``policy`` and ``budget``."""
-    metrics = _measure(patch_text, diff_hunks)
-    risk = _score_risk(metrics, base=policy.base_risk, unsafe=unsafe)
-    cost = CandidateCost(
-        files_touched=len(metrics.files_touched),
-        changed_lines_total=metrics.changed_lines_total,
-        changed_lines_outside_diff=metrics.changed_lines_outside_diff,
-        risk=risk,
+    patch_cost = measure_tool_patch_cost(
+        patch_text,
+        diff_hunks,
+        base_risk=policy.base_risk,
         unsafe=unsafe,
     )
+    metrics = patch_cost.metrics
+    cost = patch_cost.cost
     mode, reason = _decide(policy.mode, metrics, cost, budget)
     files = metrics.files_touched
     patch_id = ":".join((policy.rule, *files)) if files else policy.rule

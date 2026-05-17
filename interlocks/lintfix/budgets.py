@@ -8,6 +8,7 @@ on fail so the caller can surface a precise rejection message.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import floor
 
 
 @dataclass(frozen=True)
@@ -38,11 +39,40 @@ RENOVATION = Budget(
     max_risk=30,
 )
 
+_DYNAMIC_FLOOR = 5
+_DYNAMIC_RATIO = 0.33
+_DYNAMIC_ABSOLUTE_CAP = 300
+_DYNAMIC_OUTSIDE_RATIO = 0.05
+_DYNAMIC_OUTSIDE_CAP = 50
+_MICRO_AUTHOR_COST = 10
+
+
+def dynamic(author_cost: int) -> Budget:
+    """Return the default stage budget derived from author edit cost."""
+    normalized = max(0, author_cost)
+    max_changed = min(
+        _DYNAMIC_ABSOLUTE_CAP,
+        max(_DYNAMIC_FLOOR, round(normalized * _DYNAMIC_RATIO)),
+    )
+    max_outside = min(_DYNAMIC_OUTSIDE_CAP, floor(normalized * _DYNAMIC_OUTSIDE_RATIO))
+    if normalized <= _MICRO_AUTHOR_COST:
+        max_outside = 0
+    return Budget(
+        name="dynamic",
+        max_files=max(1, min(RENOVATION.max_files, max_changed)),
+        max_changed_lines=max_changed,
+        max_outside_diff_lines=max_outside,
+        max_risk=UNBLOCK.max_risk,
+    )
+
+
 _PROFILES: dict[str, Budget] = {UNBLOCK.name: UNBLOCK, RENOVATION.name: RENOVATION}
 
 
-def profile(name: str) -> Budget:
+def profile(name: str, *, author_cost: int | None = None) -> Budget:
     """Return the budget profile by name. Defaults to ``unblock`` if unknown."""
+    if name == "dynamic":
+        return dynamic(author_cost or 0)
     return _PROFILES.get(name, UNBLOCK)
 
 

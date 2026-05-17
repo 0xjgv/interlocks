@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -47,20 +48,22 @@ def _run_post_edit(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_post_edit_formats_uncommitted_file(tmp_project: Path) -> None:
+def test_post_edit_skips_broad_uncommitted_format_with_artifact(tmp_project: Path) -> None:
     target = tmp_project / "app" / "mod.py"
     target.write_text("x = 0\n", encoding="utf-8")
     _git(tmp_project, "add", "-A")
     _git(tmp_project, "commit", "-q", "-m", "init")
     # stage a modification, then modify again so porcelain status is "MM"
-    target.write_text("x=1\n", encoding="utf-8")
+    target.write_text("x = [1]\n", encoding="utf-8")
     _git(tmp_project, "add", "app/mod.py")
-    target.write_text("x=1\ny   =   2\nz=3\n", encoding="utf-8")
+    target.write_text("x = [1,2,3]\n", encoding="utf-8")
 
     result = _run_post_edit(tmp_project)
 
     assert result.returncode == 0, result.stderr
-    assert target.read_text(encoding="utf-8") == "x = 1\ny = 2\nz = 3\n"
+    assert target.read_text(encoding="utf-8") == "x = [1,2,3]\n"
+    payload = json.loads((tmp_project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))
+    assert payload["not_selected"][0]["reason"] == "would exceed outside-author-hunk budget"
 
 
 def test_post_edit_noop_when_no_changes(tmp_project: Path) -> None:
@@ -82,7 +85,7 @@ def test_post_edit_noop_in_process(tmp_project: Path, monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(post_edit_mod, "changed_py_files", list)
     calls: list[object] = []
-    monkeypatch.setattr(post_edit_mod, "run", lambda *a, **k: calls.append(None))
+    monkeypatch.setattr(post_edit_mod, "run_budgeted_mutation", lambda **_k: calls.append(None))
 
     monkeypatch.chdir(tmp_project)
     post_edit_mod.cmd_post_edit()
@@ -92,16 +95,16 @@ def test_post_edit_noop_in_process(tmp_project: Path, monkeypatch: pytest.Monkey
 def test_post_edit_in_process_runs_ruff_on_changed_files(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Changed files -> cmd_post_edit dispatches two run() calls (fix + format)."""
+    """Changed files -> cmd_post_edit dispatches one budgeted mutation call."""
     from interlocks.stages import post_edit as post_edit_mod
 
     monkeypatch.setattr(post_edit_mod, "changed_py_files", lambda: ["app/mod.py"])
-    tasks_ran: list[str] = []
-    monkeypatch.setattr(post_edit_mod, "run", lambda task, **_: tasks_ran.append(task.description))
+    calls: list[object] = []
+    monkeypatch.setattr(post_edit_mod, "run_budgeted_mutation", lambda **kw: calls.append(kw))
 
     monkeypatch.chdir(tmp_project)
     post_edit_mod.cmd_post_edit()
-    assert tasks_ran == ["Fix lint errors", "Format code"]
+    assert len(calls) == 1
 
 
 def test_post_edit_tolerates_unfixable_lint(tmp_project: Path) -> None:
@@ -116,7 +119,5 @@ def test_post_edit_tolerates_unfixable_lint(tmp_project: Path) -> None:
 
     result = _run_post_edit(tmp_project)
 
-    # no_exit=True: post-edit returns 0 even though ruff reports undefined names
+    # post-edit is advisory: budgeted mutation failures do not fail the hook
     assert result.returncode == 0, result.stderr
-    # ruff format still normalized the spacing
-    assert "y = undefined_name" in target.read_text(encoding="utf-8")

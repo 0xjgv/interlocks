@@ -7,6 +7,7 @@ from interlocks.lintfix.budgets import (
     UNBLOCK,
     CandidateCost,
     check_budget,
+    dynamic,
     profile,
 )
 
@@ -70,3 +71,26 @@ def test_renovation_admits_what_unblock_blocks() -> None:
     )
     assert check_budget(big, UNBLOCK) is not None
     assert check_budget(big, RENOVATION) is None
+
+
+def test_dynamic_micro_change_has_zero_outside_hunk_budget() -> None:
+    budget = dynamic(10)
+    assert budget.name == "dynamic"
+    assert budget.max_changed_lines == 5
+    assert budget.max_outside_diff_lines == 0
+
+
+def test_dynamic_normal_change_uses_ratio() -> None:
+    budget = dynamic(100)
+    assert budget.max_changed_lines == 33
+    assert budget.max_outside_diff_lines == 5
+
+
+def test_dynamic_large_change_uses_absolute_caps() -> None:
+    budget = dynamic(10_000)
+    assert budget.max_changed_lines == 300
+    assert budget.max_outside_diff_lines == 50
+
+
+def test_profile_dynamic_uses_author_cost() -> None:
+    assert profile("dynamic", author_cost=100).max_changed_lines == 33

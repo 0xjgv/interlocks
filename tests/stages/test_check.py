@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -123,16 +124,22 @@ def test_check_passes_on_clean_project_verbose(tmp_project: Path) -> None:
     assert "check: ok — " in out
 
 
-def test_check_fixes_trivially_fixable_lint(tmp_project: Path) -> None:
-    """Unused-import should be auto-fixed by `ruff check --fix`; check still passes."""
+def test_check_skips_format_when_micro_budget_would_touch_outside_hunk(tmp_project: Path) -> None:
+    """Small edits get an explainable skip instead of broad default format churn."""
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_project, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=tmp_project, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_project, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_project, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=tmp_project, check=True)
     dirty = textwrap.dedent(
         '''\
-        """Tiny module with an unused import."""
-
-        import os  # will be removed by ruff --fix
+        """Tiny module with format drift."""
 
 
         def add(a: int, b: int) -> int:
+            values = [1,2,3]
             return a + b
         '''
     )
@@ -141,7 +148,11 @@ def test_check_fixes_trivially_fixable_lint(tmp_project: Path) -> None:
     result = _run_check(tmp_project)
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
-    assert "import os" not in (tmp_project / "interlocks" / "core.py").read_text(encoding="utf-8")
+    payload = json.loads((tmp_project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))
+    [format_candidate] = [
+        candidate for candidate in payload["not_selected"] if candidate["kind"] == "format"
+    ]
+    assert format_candidate["reason"] == "would exceed outside-author-hunk budget"
 
 
 def test_check_in_process_dispatches_stages(
@@ -151,8 +162,9 @@ def test_check_in_process_dispatches_stages(
     from interlocks.stages import check as check_mod
 
     calls: list[object] = []
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
-    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: calls.append("format"))
+    monkeypatch.setattr(
+        check_mod, "_run_budgeted_mutation", lambda **_k: calls.append("budgeted-mutation")
+    )
     monkeypatch.setattr(
         check_mod,
         "run_tasks",
@@ -174,8 +186,7 @@ def test_check_in_process_dispatches_stages(
     check_mod.cmd_check()
 
     assert calls == [
-        "fix",
-        "format",
+        "budgeted-mutation",
         ("run_tasks", ["Type check", "Run tests"]),
         ("run", "Deps (deptry)", {"no_exit": True}),
         "cached-crap",
@@ -195,8 +206,9 @@ def test_check_skip_filters_direct_and_parallel_tasks(
 
     calls: list[object] = []
     monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--skip=fix,typecheck,deps,crap"])
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
-    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: calls.append("format"))
+    monkeypatch.setattr(
+        check_mod, "_run_budgeted_mutation", lambda **_k: calls.append("budgeted-mutation")
+    )
     monkeypatch.setattr(
         check_mod,
         "run_tasks",
@@ -211,7 +223,7 @@ def test_check_skip_filters_direct_and_parallel_tasks(
 
     check_mod.cmd_check()
 
-    assert calls == ["format", ("run_tasks", ["typecheck", "test"])]
+    assert calls == [("run_tasks", ["typecheck", "test"])]
     out = capsys.readouterr().out
     assert "skips active" in out
     assert "fix: skipped by global skip policy" in out
@@ -225,12 +237,12 @@ def test_check_in_process_runs_suppressions_on_failure(
     from interlocks.stages import check as check_mod
 
     calls: list[str] = []
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: calls.append("fix"))
 
     def boom(*_a: object, **_k: object) -> None:
+        calls.append("budgeted-mutation")
         raise SystemExit(2)
 
-    monkeypatch.setattr(check_mod, "cmd_format", boom)
+    monkeypatch.setattr(check_mod, "_run_budgeted_mutation", boom)
     monkeypatch.setattr(check_mod, "run_tasks", lambda tasks: calls.append("run_tasks"))
     monkeypatch.setattr(
         check_mod, "print_suppressions_report", lambda: calls.append("suppressions")
@@ -239,7 +251,7 @@ def test_check_in_process_runs_suppressions_on_failure(
     monkeypatch.chdir(tmp_project)
     with pytest.raises(SystemExit):
         check_mod.cmd_check()
-    assert calls == ["fix", "suppressions"]
+    assert calls == ["budgeted-mutation", "suppressions"]
 
 
 def test_check_success_is_one_verdict_line(tmp_project: Path) -> None:
@@ -322,8 +334,7 @@ def _capture_check_parallel_descriptions(
     from interlocks.stages import check as check_mod
 
     captured: list[str] = []
-    monkeypatch.setattr(check_mod, "cmd_fix", lambda *_a, **_k: None)
-    monkeypatch.setattr(check_mod, "cmd_format", lambda *_a, **_k: None)
+    monkeypatch.setattr(check_mod, "_run_budgeted_mutation", lambda **_k: None)
     monkeypatch.setattr(
         check_mod, "run_tasks", lambda tasks: captured.extend(t.description for t in tasks)
     )

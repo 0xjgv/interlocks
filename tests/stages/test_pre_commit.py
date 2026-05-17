@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -55,20 +56,22 @@ def _run_pre_commit(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_pre_commit_fixes_and_restages_staged_file(tmp_project: Path) -> None:
+def test_pre_commit_skips_broad_format_and_leaves_staged_file(tmp_project: Path) -> None:
+    (tmp_project / "tests" / "__init__.py").write_text("", encoding="utf-8")
+    _git(tmp_project, "add", "-A")
+    _git(tmp_project, "commit", "-q", "-m", "base")
     target = tmp_project / "tests" / "test_a.py"
-    target.write_text("x=1\ny   =   2\n", encoding="utf-8")
+    target.write_text("x = [1,2,3]\n", encoding="utf-8")
     _git(tmp_project, "add", "tests/test_a.py")
 
     result = _run_pre_commit(tmp_project)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    # The working-tree file was formatted in place
-    assert target.read_text(encoding="utf-8") == "x = 1\ny = 2\n"
-    # And the fixed content was re-staged (index matches working tree)
+    assert target.read_text(encoding="utf-8") == "x = [1,2,3]\n"
     diff = _git_capture(tmp_project, "diff", "--cached", "tests/test_a.py")
-    assert "x = 1" in diff
-    assert "y = 2" in diff
+    assert "x = [1,2,3]" in diff
+    payload = json.loads((tmp_project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))
+    assert payload["not_selected"][0]["reason"] == "would exceed outside-author-hunk budget"
 
 
 def test_pre_commit_noop_when_nothing_staged(tmp_project: Path) -> None:
@@ -107,8 +110,7 @@ def test_pre_commit_in_process_dispatches(
 
     pre_commit_mod.cmd_pre_commit()
     assert calls == [
-        ("fix", staged),
-        ("format", staged),
+        ("budgeted-mutation", None),
         ("stage", staged),
         ("run_tasks", expected_task_descs),
     ]
@@ -119,12 +121,12 @@ def test_pre_commit_in_process_dispatches(
     [
         (
             "fix",
-            ["format", "stage", "run_tasks"],
+            ["run_tasks"],
             "fix: skipped by global skip policy",
         ),
         (
             "format",
-            ["fix", "stage", "run_tasks"],
+            ["budgeted-mutation", "stage", "run_tasks"],
             "format: skipped by global skip policy",
         ),
         (
@@ -175,9 +177,8 @@ def _pre_commit_calls(
         argv.append(f"--skip={skip}")
     monkeypatch.setattr(sys, "argv", argv)
     monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
-    monkeypatch.setattr(pre_commit_mod, "cmd_fix", lambda files: calls.append(("fix", files)))
     monkeypatch.setattr(
-        pre_commit_mod, "cmd_format", lambda files: calls.append(("format", files))
+        pre_commit_mod, "_run_budgeted_mutation", lambda: calls.append(("budgeted-mutation", None))
     )
     monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
     monkeypatch.setattr(
