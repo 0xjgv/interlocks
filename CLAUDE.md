@@ -42,6 +42,7 @@ You own this product and the codebase.
 - Add task under `interlocks/tasks/`
 - Register in the relevant stage composition under `interlocks/stages/`
 - Cover with a Gherkin scenario in `tests/features/interlock_cli.feature`
+- Declare every CLI flag the task reads as a `FlagSpec` on its `CommandDoc` in `interlocks/command_docs.py` — the dispatcher rejects any `-*` token not declared there
 </important>
 
 <important if="you are reading thresholds or tool defaults in code">

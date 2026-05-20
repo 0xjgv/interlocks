@@ -129,6 +129,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.cli:main",
     ),
     Behavior(
+        "cli-unknown-flag-rejected",
+        "cli",
+        "unknown task flags are rejected and named",
+        "interlocks.cli:main",
+    ),
+    Behavior(
+        "cli-task-help-lists-flags",
+        "cli",
+        "per-task help lists declared flags",
+        "interlocks.cli:main",
+    ),
+    Behavior(
         "cli-config",
         "config",
         "config command prints resolved interlocks settings",

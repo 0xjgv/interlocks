@@ -46,7 +46,7 @@ Feature: interlocks CLI surface area
     And the output contains "interactive terminals prompt before opening a GitHub issue"
 
   # req: cli-minimal-default
-  Scenario: interlocks --quiet is rejected with exit 2
+  Scenario: interlocks --quiet is rejected with exit 1
     Given I run "interlocks help --quiet"
     Then the output contains "--quiet was removed"
 
@@ -57,6 +57,17 @@ Feature: interlocks CLI surface area
     And the output contains "[coverage]"
     And the output does not contain "coverage report --fail-under"
     And the output does not contain "failed"
+
+  # req: cli-unknown-flag-rejected
+  Scenario: Unknown flag is rejected and names the flag
+    Given I run "interlocks coverage --bogus-flag"
+    Then the output contains "unknown flag --bogus-flag"
+
+  # req: cli-task-help-lists-flags
+  Scenario: Per-task help lists declared flags with defaults
+    Given I run "interlocks coverage --help"
+    Then the output contains "--min"
+    And the output contains "coverage fail-under percentage"
 
   # req: cli-config
   Scenario: Agent reads config reference

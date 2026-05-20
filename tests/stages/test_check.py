@@ -300,7 +300,8 @@ def test_check_quiet_argv_is_rejected(tmp_project: Path) -> None:
         text=True,
         check=False,
     )
-    assert result.returncode == 2
+    # --quiet exits 1 (a usage error); exit 2 is reserved for no-pyproject.
+    assert result.returncode == 1
     assert "--quiet was removed" in result.stderr
 
 

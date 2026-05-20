@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+import importlib
+import inspect
 import json
 import re
 import sys
@@ -13,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
-from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME
+from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME, FlagSpec
 from interlocks.config import (
     CONFIG_KEYS,
     InterlockConfig,
@@ -353,6 +355,30 @@ def test_main_command_help_does_not_dispatch_task(
     assert "[coverage]" in out
 
 
+def test_main_command_help_lists_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`<task> --help` renders a Flags section for a flag-bearing task."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--help"])
+    main()
+    out = capsys.readouterr().out
+    assert "Usage: interlocks coverage" in out
+    assert "[coverage]" in out
+    assert "--min" in out
+    assert "coverage fail-under percentage" in out
+
+
+def test_main_command_help_omits_flags_section_for_flagless_task(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A task with no declared flags renders no Flags section (unchanged help)."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "--help"])
+    main()
+    out = capsys.readouterr().out
+    assert "Usage: interlocks fix" in out
+    assert "Flags" not in out
+
+
 def test_main_rejects_unknown_skip_label(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -401,6 +427,62 @@ def test_main_skips_flag_args(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setitem(TASKS, "help", (fake, "Show help"))
     monkeypatch.setattr(sys, "argv", ["interlocks", "--verbose", "help"])
+    main()
+    assert calls == ["ran"]
+
+
+def test_main_unknown_flag_exits_one(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An undeclared task flag is rejected with exit 1 and named on stderr."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--xyzzy"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "interlocks coverage: unknown flag --xyzzy" in capsys.readouterr().err
+
+
+def test_main_quiet_exits_one(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The deprecated --quiet exits 1 (was 2 — exit 2 is reserved for no-project)."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "--quiet"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "--quiet was removed" in capsys.readouterr().err
+
+
+def test_main_declared_flag_passes_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A declared task flag is accepted — validation does not reject it."""
+    calls: list[str] = []
+
+    def fake() -> None:
+        calls.append("ran")
+
+    monkeypatch.setitem(TASKS, "coverage", (fake, "Tests with coverage threshold (--min=N)"))
+    monkeypatch.setattr("interlocks.cli.preflight", lambda name: None)
+    monkeypatch.setattr("interlocks.cli.validate_cli_skip", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--min=80"])
+    main()
+    assert calls == ["ran"]
+
+
+def test_main_global_flags_pass_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Global/dispatcher-level flags (--verbose, --skip=) pass the task-flag validator."""
+    calls: list[str] = []
+
+    def fake() -> None:
+        calls.append("ran")
+
+    monkeypatch.setitem(TASKS, "coverage", (fake, "Tests with coverage threshold (--min=N)"))
+    monkeypatch.setattr("interlocks.cli.preflight", lambda name: None)
+    monkeypatch.setattr("interlocks.cli.validate_cli_skip", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--verbose", "--skip=test"])
     main()
     assert calls == ["ran"]
 
@@ -575,6 +657,95 @@ def test_command_docs_summary_matches_task_description() -> None:
     """``CommandDoc.summary`` is canonical — the bare ``TASKS`` string must match it."""
     for doc in COMMAND_DOCS:
         assert doc.summary == TASKS[doc.name][1], doc.name
+
+
+# Maps each command to the module(s) whose source declares its flag reads.
+# A command's flags may be read in a stage helper (e.g. stages/_budgeted.py)
+# in addition to its own module, so each entry is a tuple of import paths.
+_FLAG_SOURCE_MODULES: dict[str, tuple[str, ...]] = {
+    "coverage": ("interlocks.tasks.coverage",),
+    "crap": ("interlocks.tasks.crap",),
+    "mutation": ("interlocks.tasks.mutation",),
+    "fix-optimize": ("interlocks.tasks.fix_optimize",),
+    "fix-rule": ("interlocks.tasks.fix_rule",),
+    "fix-plan": ("interlocks.tasks.fix_plan",),
+    "fix-replay": ("interlocks.tasks.fix_replay",),
+    "fix-annotate": ("interlocks.tasks.fix_annotate",),
+    "baseline": ("interlocks.tasks.baseline_cmd",),
+    "trust": ("interlocks.tasks.stats",),
+    "setup": ("interlocks.tasks.setup",),
+    "config": ("interlocks.tasks.config",),
+    "check": ("interlocks.stages.check", "interlocks.stages._budgeted"),
+    "pre-commit": ("interlocks.stages._budgeted",),
+    "post-edit": ("interlocks.stages._budgeted",),
+}
+
+# Flag literals that appear in a module's source for unrelated reasons and
+# must not be counted as a declared task flag.
+_FLAG_SCAN_IGNORE: frozenset[str] = frozenset({"--quiet", "--verbose"})
+
+# arg_value("--x=", ...)  |  arg_flag_value("--x", ...)  |  "--x" in <seq>
+#   plus the bare-equality forms: arg == "--check"  /  "--json" == arg
+# `<seq>` is `sys.argv` (stats.py) or a local flags list (baseline_cmd.py).
+_FLAG_LITERAL_RE = re.compile(
+    r'arg_value\(\s*"(--[a-z-]+=)"'  # value flags carry the trailing =
+    r'|arg_flag_value\(\s*"(--[a-z-]+)"'  # boolean flags, no =
+    r'|"(--[a-z-]+(?:=[a-z]+)?)"\s*(?:in [\w.]+|==)'  # membership / equality (literal left)
+    r'|==\s*"(--[a-z-]+(?:=[a-z]+)?)"'  # equality with the literal on the right
+)
+
+
+def _scanned_flag_names(modules: tuple[str, ...]) -> set[str]:
+    """Recover the flag-name set a command reads, from its module source.
+
+    Normalizes to ``FlagSpec.name`` form: value flags keep the trailing ``=``,
+    boolean flags do not. ``--ci=github`` (a literal-valued membership check in
+    ``setup.py``) is normalized to ``--ci=``.
+    """
+    found: set[str] = set()
+    for module_path in modules:
+        src = inspect.getsource(importlib.import_module(module_path))
+        for value_flag, bool_flag, direct_flag, eq_flag in _FLAG_LITERAL_RE.findall(src):
+            flag = value_flag or bool_flag or direct_flag or eq_flag
+            if flag in _FLAG_SCAN_IGNORE:
+                continue
+            # `--ci=github` -> `--ci=` so it matches the declared value flag.
+            if "=" in flag and not flag.endswith("="):
+                flag = flag.split("=", 1)[0] + "="
+            found.add(flag)
+    return found
+
+
+def test_declared_flags_match_task_source() -> None:
+    """Drift guard: declared FlagSpec names equal the flag literals each task reads.
+
+    An undeclared-but-read flag would be hard-rejected by the dispatcher before
+    the task runs; a declared-but-unread flag is dead doc. Both are bugs.
+    """
+    for command, modules in _FLAG_SOURCE_MODULES.items():
+        declared = {spec.name for spec in COMMAND_DOCS_BY_NAME[command].flags}
+        scanned = _scanned_flag_names(modules)
+        assert declared == scanned, (
+            f"{command}: declared {sorted(declared)} != source-read {sorted(scanned)}"
+        )
+
+
+def test_every_flag_source_module_command_exists() -> None:
+    """The drift-guard module map only references real commands."""
+    assert set(_FLAG_SOURCE_MODULES) <= set(COMMAND_DOCS_BY_NAME)
+
+
+def test_command_doc_flags_default_to_empty() -> None:
+    """The new ``flags`` field defaults to ``()`` — non-flag-bearing docs unchanged."""
+    doc = COMMAND_DOCS_BY_NAME["help"]
+    assert doc.flags == ()
+
+
+def test_flag_spec_is_frozen() -> None:
+    """``FlagSpec`` is a frozen dataclass — declarations are immutable data."""
+    spec = FlagSpec("--min=", "value", "cfg.coverage_min", "coverage floor")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        spec.name = "--max="  # type: ignore[misc]
 
 
 def test_cmd_explain_all(

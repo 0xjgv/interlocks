@@ -14,6 +14,22 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class FlagSpec:
+    """One CLI flag a subcommand accepts. Pure data — declared, not parsed.
+
+    ``name`` carries the trailing ``=`` for value flags (``"--min="``) and no
+    ``=`` for boolean flags (``"--apply"``), mirroring how ``arg_value`` and
+    ``arg_flag_value`` callers spell the flag. ``default`` is the rendered
+    default shown in ``<task> --help``.
+    """
+
+    name: str  # "--min=" for value flags, "--apply" for boolean flags
+    kind: str  # "value" | "boolean"
+    default: str  # rendered default, e.g. "cfg.coverage_min" or "off"
+    description: str
+
+
+@dataclass(frozen=True)
 class CommandDoc:
     """Rich, agent-facing documentation for one `interlocks` subcommand.
 
@@ -28,6 +44,7 @@ class CommandDoc:
     mutates: bool
     outputs: tuple[str, ...]
     exit_codes: tuple[tuple[int, str], ...]
+    flags: tuple[FlagSpec, ...] = ()
 
 
 # Lives here, not in ``cli.py``, so ``tasks/explain.py`` can resolve aliases
@@ -77,6 +94,13 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "apply or verifier failed"),
             (2, "missing --rule or no pyproject.toml"),
         ),
+        flags=(
+            FlagSpec("--apply", "boolean", "off", "mutate source instead of planning"),
+            FlagSpec("--base=", "value", "origin/main", "git ref to diff against"),
+            FlagSpec("--budget=", "value", "unblock", "named budget profile"),
+            FlagSpec("--rule=", "value", "", "the single ruff rule to fix (e.g. I001)"),
+            FlagSpec("--verify-cmd=", "value", "", "command used to verify an apply"),
+        ),
     ),
     CommandDoc(
         "fix-plan",
@@ -90,6 +114,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "rule discovery failed"),
             _NO_PYPROJECT,
         ),
+        flags=(
+            FlagSpec("--base=", "value", "origin/main", "git ref to diff against"),
+            FlagSpec("--budget=", "value", "unblock", "named budget profile"),
+        ),
     ),
     CommandDoc(
         "fix-replay",
@@ -102,6 +130,11 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "replay written"),
             (1, "replay failed"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec("--base=", "value", "origin/main", "git ref to diff against"),
+            FlagSpec("--budget=", "value", "unblock", "named budget profile"),
+            FlagSpec("--n=", "value", "25", "number of commits to replay"),
         ),
     ),
     CommandDoc(
@@ -119,6 +152,18 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "apply or verifier failed"),
             _NO_PYPROJECT,
         ),
+        flags=(
+            FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
+            FlagSpec("--budget=", "value", "unblock", "named budget profile"),
+            FlagSpec("--base=", "value", "origin/main", "git ref to diff against"),
+            FlagSpec("--stats=", "value", "", "path to replay stats JSON"),
+            FlagSpec("--verify-cmd=", "value", "", "command used to verify an apply"),
+            FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
+            FlagSpec("--apply", "boolean", "off", "mutate source instead of planning"),
+            FlagSpec("--annotate", "boolean", "off", "emit GitHub Actions annotations"),
+            FlagSpec("--metrics", "boolean", "off", "write .lintfix/metrics.json"),
+            FlagSpec("--no-stats", "boolean", "off", "skip reading replay stats"),
+        ),
     ),
     CommandDoc(
         "fix-annotate",
@@ -129,6 +174,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         exit_codes=(
             (0, "annotations emitted (advisory; never fails CI)"),
             (2, "malformed plan JSON"),
+        ),
+        flags=(
+            FlagSpec("--input=", "value", "", "path to the plan JSON to annotate"),
+            FlagSpec("--source=", "value", "plan", "which .lintfix/ artifact to read"),
         ),
     ),
     CommandDoc(
@@ -289,6 +338,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "coverage below threshold"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--min=", "value", "cfg.coverage_min", "coverage fail-under percentage"),),
     ),
     CommandDoc(
         "crap",
@@ -300,6 +350,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "no CRAP offenders"),
             (1, "offenders found and enforce_crap is on"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec("--max=", "value", "cfg.crap_max", "max allowed CRAP score"),
+            FlagSpec("--changed-only", "boolean", "off", "limit to files changed vs main"),
         ),
     ),
     CommandDoc(
@@ -313,6 +367,21 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "score at or above threshold, or advisory skip"),
             (1, "score below threshold and enforce_mutation is on"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec(
+                "--min-score=", "value", "cfg.mutation_min_score", "enforce a mutation score floor"
+            ),
+            FlagSpec(
+                "--min-coverage=",
+                "value",
+                "cfg.mutation_min_coverage",
+                "minimum line coverage to run mutation",
+            ),
+            FlagSpec(
+                "--max-runtime=", "value", "cfg.mutation_max_runtime", "per-run timeout in seconds"
+            ),
+            FlagSpec("--changed-only", "boolean", "off", "limit to files changed vs main"),
         ),
     ),
     # ── Stages ───────────────────────────────────────────────────────────
@@ -329,6 +398,11 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "a gate failed"),
             _NO_PYPROJECT,
         ),
+        flags=(
+            FlagSpec("--changed", "boolean", "cfg.changed_ref", "scope to git-changed files"),
+            FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
+            FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
+        ),
     ),
     CommandDoc(
         "pre-commit",
@@ -342,6 +416,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "all gates passed"),
             (1, "a gate failed"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
+            FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
         ),
     ),
     CommandDoc(
@@ -378,6 +456,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=True,
         outputs=(),
         exit_codes=((0, "always (advisory hook; never blocks)"),),
+        flags=(
+            FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
+            FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
+        ),
     ),
     CommandDoc(
         "setup-hooks",
@@ -411,6 +493,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         exit_codes=(
             (0, "report rendered (advisory; never fails)"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec("--no-trend", "boolean", "off", "omit the historical trend section"),
+            FlagSpec("--refresh", "boolean", "off", "recompute metrics instead of reading cache"),
         ),
     ),
     CommandDoc(
@@ -446,6 +532,15 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "reference printed"),
             (1, "invalid arguments"),
         ),
+        flags=(
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON (config show)"),
+            FlagSpec(
+                "--bundled-only",
+                "boolean",
+                "off",
+                "show only the bundled tool config (config show)",
+            ),
+        ),
     ),
     CommandDoc(
         "doctor",
@@ -473,6 +568,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         exit_codes=(
             (0, "integrations installed or verified"),
             (1, "an integration is missing or stale (--check)"),
+        ),
+        flags=(
+            FlagSpec("--check", "boolean", "off", "verify integrations read-only"),
+            FlagSpec("--ci=", "value", "", "install a CI workflow (github)"),
         ),
     ),
     CommandDoc(
@@ -528,6 +627,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "check found a regression"),
             _NO_PYPROJECT,
         ),
+        flags=(
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            FlagSpec("--auto-pr", "boolean", "off", "open a PR when advancing the baseline"),
+        ),
     ),
     CommandDoc(
         "version",
@@ -562,3 +665,41 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
 
 
 COMMAND_DOCS_BY_NAME: dict[str, CommandDoc] = {doc.name: doc for doc in COMMAND_DOCS}
+
+
+# Dispatcher-level tokens that are valid on every command and must never be
+# matched against a task's declared FlagSpec set. `--skip` carries a value and
+# needs a prefix check; it is handled separately in `unknown_task_flags`.
+GLOBAL_FLAGS: frozenset[str] = frozenset({"--help", "-h", "--verbose", "--advanced", "--quiet"})
+
+
+def unknown_task_flags(task_name: str, raw_args: list[str]) -> list[str]:
+    """Return the ``-*`` tokens in ``raw_args`` that ``task_name`` does not accept.
+
+    A token is accepted when it is a global/dispatcher-level flag
+    (:data:`GLOBAL_FLAGS` or a ``--skip`` / ``--skip=…`` token), or when it
+    matches a declared :class:`FlagSpec` for the task. Value flags
+    (``FlagSpec.name`` ends with ``=``) match a ``--flag=value`` token by
+    prefix; boolean flags match the bare token, or its optional ``--flag=value``
+    form (``arg_flag_value`` accepts both). The first positional token (the task
+    name itself) is ignored — it never starts with ``-``.
+    """
+    doc = COMMAND_DOCS_BY_NAME.get(task_name)
+    declared = doc.flags if doc is not None else ()
+    value_prefixes = tuple(spec.name for spec in declared if spec.name.endswith("="))
+    boolean_names = frozenset(spec.name for spec in declared if not spec.name.endswith("="))
+    bad: list[str] = []
+    for arg in raw_args:
+        if not arg.startswith("-"):
+            continue
+        if arg in GLOBAL_FLAGS:
+            continue
+        if arg == "--skip" or arg.startswith("--skip="):
+            continue
+        # Boolean flags match the bare token or its `--flag=value` form.
+        if arg.split("=", 1)[0] in boolean_names:
+            continue
+        if any(arg.startswith(prefix) for prefix in value_prefixes):
+            continue
+        bad.append(arg)
+    return bad

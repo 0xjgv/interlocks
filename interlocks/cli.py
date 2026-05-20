@@ -8,7 +8,12 @@ import sys
 from typing import TYPE_CHECKING
 
 from interlocks import ui
-from interlocks.command_docs import ALIASES, alias_suffix
+from interlocks.command_docs import (
+    ALIASES,
+    COMMAND_DOCS_BY_NAME,
+    alias_suffix,
+    unknown_task_flags,
+)
 from interlocks.config import (
     clear_cache,
     kv_with_source,
@@ -100,6 +105,13 @@ def cmd_task_help(task_name: str) -> None:
     print(f"  Usage: interlocks {task_name}")
     ui.section("Command")
     _print_command_row(task_name, description, len(task_name) + 2)
+    doc = COMMAND_DOCS_BY_NAME.get(task_name)
+    if doc is not None and doc.flags:
+        ui.section("Flags")
+        width = max(len(spec.name) for spec in doc.flags) + 2
+        for spec in doc.flags:
+            default = f" (default: {spec.default})" if spec.default else ""
+            print(f"  {spec.name:<{width}}  {spec.kind:<8}{spec.description}{default}")
 
 
 def cmd_help_from_argv() -> None:
@@ -449,7 +461,7 @@ def main() -> None:
             "Pass --verbose for full output.",
             file=sys.stderr,
         )
-        sys.exit(2)
+        sys.exit(1)
     args = [a for a in raw_args if not a.startswith("-")]
 
     if not args:
@@ -466,6 +478,11 @@ def main() -> None:
     if "-h" in raw_args or "--help" in raw_args:
         cmd_task_help(task_name)
         return
+
+    bad = unknown_task_flags(task_name, raw_args)
+    if bad:
+        print(f"interlocks {task_name}: unknown flag {bad[0]}", file=sys.stderr)
+        sys.exit(1)
 
     validate_cli_skip()
     preflight(task_name)
