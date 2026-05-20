@@ -39,6 +39,26 @@ def _greenfield_project(tmp_path: Path) -> Path:
     return make_legacy_greenfield_project(tmp_path)
 
 
+@given("the greenfield project has no virtualenv")
+def _no_virtualenv(greenfield_project: Path) -> None:
+    """Cold-start state: drop the stubbed .venv and restore the clean baseline.
+
+    The greenfield fixture seeds deliberate lint/format violations to exercise
+    the fix-* flows; this scenario isolates the env-skip behavior, so it resets
+    the tracked tree to HEAD — leaving an env-less project whose only honest
+    ``ci`` finding would be the missing-environment skip.
+    """
+    venv = greenfield_project / ".venv"
+    if venv.is_symlink() or venv.exists():
+        venv.unlink()
+    subprocess.run(
+        ["git", "checkout", "--", "."],
+        cwd=greenfield_project,
+        check=True,
+        capture_output=True,
+    )
+
+
 @pytest.fixture
 def greenfield_files_snapshot(greenfield_project: Path) -> dict[str, str]:
     """Byte-for-byte capture of the seeded source files before a command runs."""

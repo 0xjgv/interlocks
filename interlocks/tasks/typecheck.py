@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from interlocks.config import InterlockConfig, load_config
+from interlocks.config import (
+    InterlockConfig,
+    load_config,
+    project_env_ready,
+    project_env_skip_message,
+)
 from interlocks.defaults_path import config_flag_if_absent
 from interlocks.detect import detect_target_interpreter
-from interlocks.runner import Task, run, uvx_tool
+from interlocks.runner import Task, run, uvx_tool, warn_skip
 
 
 def _typecheck_project_args(cfg: InterlockConfig) -> list[str]:
@@ -29,8 +34,17 @@ def _typecheck_pythonpath_args(cfg: InterlockConfig) -> list[str]:
     return ["--pythonpath", str(venv_python)]
 
 
-def task_typecheck(files: list[str] | None = None) -> Task:
+def task_typecheck(files: list[str] | None = None) -> Task | None:
+    """Type-check ``files`` (or the src dir) with basedpyright.
+
+    Returns ``None`` (after a ``warn_skip`` advisory) when a non-uv project has
+    no in-tree ``.venv``: without ``--pythonpath`` basedpyright cannot resolve
+    third-party imports, so its verdict would be installer-dependent.
+    """
     cfg = load_config()
+    if not project_env_ready(cfg):
+        warn_skip(project_env_skip_message("typecheck"))
+        return None
     targets = files if files else [cfg.src_dir_arg]
     return Task(
         "Type check",
@@ -47,4 +61,7 @@ def task_typecheck(files: list[str] | None = None) -> Task:
 
 
 def cmd_typecheck() -> None:
-    run(task_typecheck())
+    task = task_typecheck()
+    if task is None:
+        return
+    run(task)

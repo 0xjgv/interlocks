@@ -39,6 +39,7 @@ FAILING = textwrap.dedent("""
 def tmp_project(tmp_path: Path) -> Path:
     (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     (tmp_path / "tests").mkdir()
+    stub_project_venv(tmp_path)
     return tmp_path
 
 
@@ -131,3 +132,37 @@ def test_cmd_check_skips_tests_without_test_dir(
     cmd_check()
     captured = capsys.readouterr()
     assert "no test dir detected" in captured.out
+
+
+def test_cmd_test_skips_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Env-skip nudge wins over the no-test-dir nudge and over running tests."""
+    from interlocks.config import clear_cache
+    from interlocks.tasks.test import cmd_test
+
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    (tmp_path / "tests").mkdir()  # test dir present — env-skip must still win
+    monkeypatch.chdir(tmp_path)
+    clear_cache()
+
+    cmd_test()  # must not raise SystemExit
+    out = capsys.readouterr().out
+    assert "test: skipped — no project environment" in out
+    assert "no test dir detected" not in out
+
+
+def test_task_test_unchanged_when_env_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """task_test() itself still returns a Task whenever a test dir exists —
+    the env guard lives only in cmd_test (design Q4)."""
+    from interlocks.config import clear_cache
+    from interlocks.tasks.test import task_test
+
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    monkeypatch.chdir(tmp_path)
+    clear_cache()
+
+    assert task_test() is not None

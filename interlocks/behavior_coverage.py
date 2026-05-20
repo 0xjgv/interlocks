@@ -259,6 +259,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     ),
     Behavior("stage-ci", "stage", "ci runs PR-grade verification", "interlocks.stages.ci:cmd_ci"),
     Behavior(
+        "ci-no-venv-skip",
+        "stage",
+        "ci skips typecheck/coverage when the project has no environment",
+        "interlocks.stages.ci:cmd_ci",
+    ),
+    Behavior(
         "stage-nightly",
         "stage",
         "nightly runs long gates",

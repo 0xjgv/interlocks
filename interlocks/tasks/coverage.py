@@ -7,10 +7,12 @@ from interlocks.config import (
     build_coverage_test_command,
     coverage_invoker_prefix,
     load_config,
+    project_env_ready,
+    project_env_skip_message,
     python_command_prefix,
 )
 from interlocks.defaults_path import has_project_config, path
-from interlocks.runner import Task, arg_value, run
+from interlocks.runner import Task, arg_value, run, warn_skip
 
 
 def _coverage_rcfile_args(cfg: InterlockConfig) -> list[str]:
@@ -38,12 +40,19 @@ def _coverage_import_check_cmd(cfg: InterlockConfig) -> list[str] | None:
     return [*python_command_prefix(cfg), "-c", code]
 
 
-def task_coverage(*, min_pct: int | None = None) -> Task:
+def task_coverage(*, min_pct: int | None = None) -> Task | None:
     """Run tests under coverage and report against ``min_pct``.
 
     Precedence: explicit argument > ``--min=N`` on argv > ``cfg.coverage_min``.
+
+    Returns ``None`` (after a ``warn_skip`` advisory) when a non-uv project has
+    no in-tree ``.venv`` — running coverage against the installer's interpreter
+    would produce an installer-dependent verdict, not a real finding.
     """
     cfg = load_config()
+    if not project_env_ready(cfg):
+        warn_skip(project_env_skip_message("coverage"))
+        return None
     if min_pct is None:
         min_pct = int(arg_value("--min=", str(cfg.coverage_min)))
     rcfile_args = _coverage_rcfile_args(cfg)
@@ -84,4 +93,7 @@ def task_coverage(*, min_pct: int | None = None) -> Task:
 
 
 def cmd_coverage(*, min_pct: int | None = None) -> None:
-    run(task_coverage(min_pct=min_pct))
+    task = task_coverage(min_pct=min_pct)
+    if task is None:
+        return
+    run(task)

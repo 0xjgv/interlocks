@@ -11,7 +11,6 @@ from interlocks.acceptance_status import (
     classify_acceptance_with_details,
 )
 from interlocks.config import (
-    CREATE_PROJECT_ENV_HINT,
     InterlockConfig,
     load_config,
     project_env_ready,
@@ -95,21 +94,19 @@ def cmd_check() -> None:
 def _parallel_tasks(
     cfg: InterlockConfig, scope_ref: str | None, scoped_files: list[str] | None
 ) -> list[Task]:
-    if not project_env_ready(cfg):
-        warn_skip(
-            "typecheck, test: skipped — no project environment. Create one "
-            f"{CREATE_PROJECT_ENV_HINT}, then re-run — `interlocks doctor` has details."
-        )
-        return []
-    tasks = [task_typecheck(scoped_files)]
-    optional = (_test_task(scope_ref), _acceptance_task(cfg, scope_ref))
-    tasks.extend(t for t in optional if t is not None)
-    return tasks
+    optional = (
+        task_typecheck(scoped_files),
+        _test_task(scope_ref),
+        _acceptance_task(cfg, scope_ref),
+    )
+    return [t for t in optional if t is not None]
 
 
 def _test_task(scope_ref: str | None) -> Task | None:
     if scope_ref is not None:
         _skip_under_changed("test", "run `interlocks test` for full suite")
+        return None
+    if not project_env_ready(load_config()):
         return None
     test = task_test()
     if test is None:
@@ -118,6 +115,8 @@ def _test_task(scope_ref: str | None) -> Task | None:
 
 
 def _acceptance_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None:
+    if not project_env_ready(cfg):
+        return None
     if not cfg.run_acceptance_in_check:
         return None
     if scope_ref is not None:

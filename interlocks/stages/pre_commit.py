@@ -8,6 +8,7 @@ from interlocks import ui
 from interlocks.config import load_config
 from interlocks.git import stage, staged_py_files
 from interlocks.runner import (
+    Task,
     print_stage_verdict,
     reset_results,
     run_tasks,
@@ -39,12 +40,10 @@ def cmd_pre_commit() -> None:
             stage(files)
 
         src_prefix = f"{cfg.src_dir_arg}/"
-        tasks = [task_typecheck()]
+        candidates: list[Task | None] = [task_typecheck()]
         if any(f.startswith(src_prefix) for f in files):
-            test_task = task_test()
-            if test_task is not None:
-                tasks.append(test_task)
-        run_tasks(tasks)
+            candidates.append(task_test())
+        run_tasks([t for t in candidates if t is not None])
     finally:
         elapsed = time.monotonic() - start
         ui.stage_footer(elapsed)

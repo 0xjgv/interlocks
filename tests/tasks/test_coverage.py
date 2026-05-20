@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import stub_project_venv
+
 _MODULE_SRC = textwrap.dedent(
     """\
     def double(x):
@@ -54,6 +56,7 @@ def tmp_project(tmp_path: Path) -> Path:
     tests = tmp_path / "tests"
     tests.mkdir()
     (tests / "__init__.py").write_text("", encoding="utf-8")
+    stub_project_venv(tmp_path)
     return tmp_path
 
 
@@ -118,9 +121,11 @@ def test_coverage_injects_bundled_rcfile_in_bare_project(
     from interlocks.tasks.coverage import task_coverage
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
     task = task_coverage()
+    assert task is not None
     for cmd in (task.cmd, _coverage_run_cmd(task.pre_cmds)):
         flag = _rcfile_flag(cmd)
         assert flag is not None
@@ -136,6 +141,7 @@ def test_coverage_omits_rcfile_when_project_has_tool_coverage(
     monkeypatch.chdir(tmp_project)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
     task = task_coverage()
+    assert task is not None
     assert _rcfile_flag(task.cmd) is None
     assert _rcfile_flag(_coverage_run_cmd(task.pre_cmds)) is None
 
@@ -148,9 +154,11 @@ def test_coverage_omits_rcfile_with_coveragerc_sidecar(
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     (tmp_path / ".coveragerc").write_text("[run]\nbranch = True\n", encoding="utf-8")
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
     task = task_coverage()
+    assert task is not None
     assert _rcfile_flag(task.cmd) is None
     assert _rcfile_flag(_coverage_run_cmd(task.pre_cmds)) is None
 
@@ -169,6 +177,7 @@ def test_coverage_uv_injects_coverage_without_project_dependency(
 
     task = task_coverage()
 
+    assert task is not None
     spec = f"coverage=={default_pin('coverage')}"
     run_cmd = _coverage_run_cmd(task.pre_cmds)
     assert task.pre_cmds == (run_cmd,)
@@ -189,16 +198,19 @@ def test_coverage_uv_injects_coverage_without_project_dependency(
 def test_coverage_non_uv_preflights_target_coverage_import(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from interlocks.detect import expected_target_interpreter
     from interlocks.tasks.coverage import task_coverage
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
 
     task = task_coverage()
 
+    assert task is not None
     assert len(task.pre_cmds) == 2
-    assert task.pre_cmds[0][:2] == [sys.executable, "-c"]
+    assert task.pre_cmds[0][:2] == [str(expected_target_interpreter(tmp_path)), "-c"]
     assert "Coverage.py is not importable" in task.pre_cmds[0][2]
 
 
@@ -216,6 +228,7 @@ def test_coverage_emits_json_under_progressive_preset(
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
 
     task = task_coverage()
+    assert task is not None
     json_cmd = _coverage_json_cmd(task.pre_cmds)
     assert "json" in json_cmd
     assert str(tmp_path / ".interlocks" / "coverage.json") in json_cmd
@@ -228,9 +241,12 @@ def test_coverage_default_min_pct_uses_cfg(
     from interlocks.tasks.coverage import task_coverage
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
-    assert "--fail-under=80" in task_coverage().cmd
+    task = task_coverage()
+    assert task is not None
+    assert "--fail-under=80" in task.cmd
 
 
 def test_coverage_config_override_wires_through(
@@ -242,6 +258,54 @@ def test_coverage_config_override_wires_through(
     (tmp_path / "pyproject.toml").write_text(
         _BARE_PYPROJECT + "\n[tool.interlocks]\ncoverage_min = 95\n", encoding="utf-8"
     )
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
-    assert "--fail-under=95" in task_coverage().cmd
+    task = task_coverage()
+    assert task is not None
+    assert "--fail-under=95" in task.cmd
+
+
+# ─────────────── project-env guard ─────────────────────
+
+
+def test_task_coverage_returns_none_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Non-uv project, no .venv: task_coverage declines with a warn_skip."""
+    from interlocks.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+
+    assert task_coverage() is None
+    assert "no project environment" in capsys.readouterr().out
+
+
+def test_cmd_coverage_skips_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """cmd_coverage returns cleanly (no SystemExit) when the env is absent."""
+    from interlocks.tasks.coverage import cmd_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+
+    cmd_coverage()  # must not raise SystemExit
+    assert "coverage: skipped — no project environment" in capsys.readouterr().out
+
+
+def test_task_coverage_runs_for_uv_project_without_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """uv projects short-circuit project_env_ready — the guard never fires."""
+    from interlocks.tasks.coverage import task_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+
+    assert task_coverage() is not None

@@ -39,6 +39,7 @@ def tmp_project(tmp_path: Path) -> Path:
     pkg = tmp_path / "interlocks"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
+    _make_stub_venv_python(tmp_path)
     return tmp_path
 
 
@@ -90,8 +91,11 @@ def test_typecheck_injects_bundled_config_in_bare_project(
     pkg = tmp_path / "interlocks"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
+    _make_stub_venv_python(tmp_path)
     monkeypatch.chdir(tmp_path)
-    cmd = task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    cmd = task.cmd
     assert "--project" in cmd
     cfg_path = Path(cmd[cmd.index("--project") + 1])
     assert cfg_path.name == "pyrightconfig.json"
@@ -105,7 +109,9 @@ def test_typecheck_omits_config_when_project_has_tool_basedpyright(
     from interlocks.tasks.typecheck import task_typecheck
 
     monkeypatch.chdir(tmp_project)
-    assert "--project" not in task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    assert "--project" not in task.cmd
 
 
 def test_typecheck_omits_config_when_project_has_pyrightconfig_sidecar(
@@ -119,8 +125,11 @@ def test_typecheck_omits_config_when_project_has_pyrightconfig_sidecar(
     pkg = tmp_path / "interlocks"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
+    _make_stub_venv_python(tmp_path)
     monkeypatch.chdir(tmp_path)
-    assert "--project" not in task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    assert "--project" not in task.cmd
 
 
 # ─────────────── target venv pythonpath ─────────────────────
@@ -131,7 +140,7 @@ def _make_stub_venv_python(project_root: Path) -> Path:
     from interlocks.detect import expected_target_interpreter
 
     python = expected_target_interpreter(project_root)
-    python.parent.mkdir(parents=True)
+    python.parent.mkdir(parents=True, exist_ok=True)
     python.write_text("", encoding="utf-8")
     python.chmod(0o755)
     return python
@@ -156,7 +165,9 @@ def test_typecheck_uses_target_venv_pythonpath_for_non_uv_project(
     python = _make_stub_venv_python(tmp_project)
     monkeypatch.chdir(tmp_project)
 
-    cmd = task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    cmd = task.cmd
 
     assert "--pythonpath" in cmd
     assert cmd[cmd.index("--pythonpath") + 1] == str(python)
@@ -167,15 +178,20 @@ def test_typecheck_uses_target_venv_pythonpath_for_non_uv_project(
     assert "-m" not in cmd[:2]
 
 
-def test_typecheck_omits_pythonpath_when_no_target_venv(
-    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+def test_typecheck_skips_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """No concrete target interpreter: keep existing basedpyright command behavior."""
+    """Non-uv project, no .venv: task_typecheck declines with a warn_skip."""
     from interlocks.tasks.typecheck import task_typecheck
 
-    monkeypatch.chdir(tmp_project)
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    pkg = tmp_path / "interlocks"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
 
-    assert "--pythonpath" not in task_typecheck().cmd
+    assert task_typecheck() is None
+    assert "no project environment" in capsys.readouterr().out
 
 
 def test_typecheck_uv_project_omits_pythonpath_even_when_venv_exists(
@@ -188,7 +204,9 @@ def test_typecheck_uv_project_omits_pythonpath_even_when_venv_exists(
     (tmp_project / "uv.lock").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_project)
 
-    assert "--pythonpath" not in task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    assert "--pythonpath" not in task.cmd
 
 
 def test_typecheck_file_targets_follow_basedpyright_options(
@@ -200,7 +218,9 @@ def test_typecheck_file_targets_follow_basedpyright_options(
     python = _make_stub_venv_python(tmp_project)
     monkeypatch.chdir(tmp_project)
 
-    cmd = task_typecheck(files=["interlocks/mod.py"]).cmd
+    task = task_typecheck(files=["interlocks/mod.py"])
+    assert task is not None
+    cmd = task.cmd
 
     assert cmd[-1] == "interlocks/mod.py"
     assert cmd[cmd.index("--pythonpath") + 1] == str(python)
@@ -219,7 +239,9 @@ def test_typecheck_combines_bundled_config_and_target_pythonpath_in_bare_project
     python = _make_stub_venv_python(tmp_path)
     monkeypatch.chdir(tmp_path)
 
-    cmd = task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    cmd = task.cmd
 
     assert "--project" in cmd
     cfg_path = Path(cmd[cmd.index("--project") + 1])
@@ -237,7 +259,9 @@ def test_typecheck_project_tool_config_omits_project_but_keeps_pythonpath(
     python = _make_stub_venv_python(tmp_project)
     monkeypatch.chdir(tmp_project)
 
-    cmd = task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    cmd = task.cmd
 
     assert "--project" not in cmd
     assert cmd[cmd.index("--pythonpath") + 1] == str(python)
@@ -257,10 +281,47 @@ def test_typecheck_pyright_sidecar_omits_project_but_keeps_pythonpath(
     python = _make_stub_venv_python(tmp_path)
     monkeypatch.chdir(tmp_path)
 
-    cmd = task_typecheck().cmd
+    task = task_typecheck()
+    assert task is not None
+    cmd = task.cmd
 
     assert "--project" not in cmd
     assert cmd[cmd.index("--pythonpath") + 1] == str(python)
+
+
+# ─────────────── project-env guard ─────────────────────
+
+
+def test_cmd_typecheck_skips_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """cmd_typecheck returns cleanly (no SystemExit) when the env is absent."""
+    from interlocks.tasks.typecheck import cmd_typecheck
+
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    pkg = tmp_path / "interlocks"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    cmd_typecheck()  # must not raise SystemExit
+    assert "typecheck: skipped — no project environment" in capsys.readouterr().out
+
+
+def test_task_typecheck_runs_for_uv_project_without_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """uv projects short-circuit project_env_ready — the guard never fires."""
+    from interlocks.tasks.typecheck import task_typecheck
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    (tmp_path / "uv.lock").write_text("", encoding="utf-8")
+    pkg = tmp_path / "interlocks"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert task_typecheck() is not None
 
 
 @pytest.mark.slow

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import TmpProjectFactory
+from tests.conftest import TmpProjectFactory, stub_project_venv
 
 _PYPROJECT = textwrap.dedent(
     """\
@@ -260,6 +260,52 @@ def test_ci_skip_coverage_warns_and_skips_crap(
     assert "coverage was skipped" in out
 
 
+def test_ci_skips_typecheck_and_coverage_without_project_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Non-uv project, no .venv: ci skips typecheck/coverage, runs the rest, exits 0."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "ci-no-env"
+            version = "0.0.0"
+            requires-python = ">=3.11"
+            """
+        ),
+        encoding="utf-8",
+    )
+    # deliberately no stub_project_venv() and no uv.lock — cold-start state
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+
+    from interlocks.stages import ci as ci_mod
+
+    parallel: list[str] = []
+    monkeypatch.setattr(
+        ci_mod, "run_tasks", lambda tasks: parallel.extend(t.description for t in tasks)
+    )
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: None)
+    monkeypatch.setattr(ci_mod, "cmd_behavior_attribution", lambda refresh=False: None)
+    monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: None)
+
+    ci_mod.cmd_ci()  # must not raise SystemExit
+
+    assert "Type check" not in parallel
+    assert not any(d.startswith("Coverage >=") for d in parallel)
+    # env-independent gates still queued
+    assert "Format check" in parallel
+    assert "Lint check" in parallel
+    assert "Dep audit" in parallel
+    assert "Deps (deptry)" in parallel
+    out = capsys.readouterr().out
+    assert "typecheck: skipped — no project environment" in out
+    assert "coverage: skipped — no project environment" in out
+
+
 def test_ci_writes_failing_runtime_evidence(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -322,6 +368,7 @@ def test_ci_reports_sequential_gate_failure_in_verdict(
         ),
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
 
@@ -370,6 +417,7 @@ def test_ci_in_process_includes_mutation_when_enabled(
         ),
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
 
     from interlocks.stages import ci as ci_mod
@@ -406,6 +454,7 @@ def _write_mode_project(tmp_path: Path, table: str) -> None:
         ),
         encoding="utf-8",
     )
+    stub_project_venv(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -480,6 +529,8 @@ def _write_require_acceptance_project(tmp_path: Path, *, body: str = "") -> None
         ),
         encoding="utf-8",
     )
+    # env-ready: the acceptance gate is dependency-aware and skips without a venv
+    stub_project_venv(tmp_path)
 
 
 def _capture_ci_task_descriptions(monkeypatch: pytest.MonkeyPatch) -> list[str]:

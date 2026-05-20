@@ -666,6 +666,14 @@ def project_env_ready(cfg: InterlockConfig) -> bool:
     return detect_target_interpreter(cfg.project_root) is not None
 
 
+def project_env_skip_message(gate: str) -> str:
+    """Advisory shown when ``gate`` declines because no project environment exists."""
+    return (
+        f"{gate}: skipped — no project environment. Create one "
+        f"{CREATE_PROJECT_ENV_HINT}, then re-run — `interlocks doctor` has details."
+    )
+
+
 def invoker_prefix(cfg: InterlockConfig) -> list[str]:
     """Argv prefix for invoking a Python module in the target project."""
     return [*python_command_prefix(cfg), "-m"]

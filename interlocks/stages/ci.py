@@ -13,7 +13,12 @@ from interlocks.acceptance_status import (
     acceptance_failure_task,
     classify_acceptance_with_details,
 )
-from interlocks.config import InterlockConfig, MutationCIMode, load_config
+from interlocks.config import (
+    InterlockConfig,
+    MutationCIMode,
+    load_config,
+    project_env_ready,
+)
 from interlocks.runner import Task, print_stage_verdict, record_result, reset_results, run_tasks
 from interlocks.skip import (
     SkipPolicy,
@@ -77,19 +82,15 @@ def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:
     tasks: list[Task] = [task_format_check()]
     if cfg.preset != "progressive":
         tasks.append(task_lint())
-    tasks.extend([
-        task_complexity(),
-        task_audit(),
-        task_deps(),
-        task_typecheck(),
-        task_coverage(),
-    ])
-    optional = (task_arch(), _acceptance_task(cfg))
+    tasks.extend([task_complexity(), task_audit(), task_deps()])
+    optional = (task_typecheck(), task_coverage(), task_arch(), _acceptance_task(cfg))
     tasks.extend(t for t in optional if t is not None)
     return tasks
 
 
 def _acceptance_task(cfg: InterlockConfig) -> Task | None:
+    if not project_env_ready(cfg):
+        return None
     acceptance = classify_acceptance_with_details(cfg)
     if acceptance.is_required_failure:
         return acceptance_failure_task(acceptance)
@@ -99,7 +100,13 @@ def _acceptance_task(cfg: InterlockConfig) -> Task | None:
 
 
 def _post_coverage_gates(cfg: InterlockConfig, skip_policy: SkipPolicy) -> None:
-    if skip_policy.enabled("coverage"):
+    # CRAP/mutation run against the project under test. When a non-uv project
+    # has no environment, coverage (and the tests under it) did not run — CRAP
+    # has no coverage.xml to read and mutation would exercise the wrong
+    # interpreter, so both skip rather than hard-fail. Mirrors the existing
+    # ``skip_policy.enabled("coverage")`` short-circuit for CRAP.
+    no_env = not project_env_ready(cfg)
+    if skip_policy.enabled("coverage") or no_env:
         warn_skipped("crap", "coverage was skipped")
     else:
         _run_post_coverage_gate("crap", cmd_crap, skip_policy)
@@ -108,7 +115,7 @@ def _post_coverage_gates(cfg: InterlockConfig, skip_policy: SkipPolicy) -> None:
         lambda: cmd_behavior_attribution(refresh=False),
         skip_policy,
     )
-    if _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
+    if not no_env and _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
         _run_post_coverage_gate(
             "mutation",
             lambda: cmd_mutation(changed_only=cfg.mutation_ci_mode == "incremental"),

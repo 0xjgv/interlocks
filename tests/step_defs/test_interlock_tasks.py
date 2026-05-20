@@ -23,6 +23,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from interlocks.behavior_coverage import INTERLOCKS_REGISTRY
 from interlocks.config import clear_cache
 from interlocks.defaults.tools import default_pin
+from tests.conftest import stub_project_venv
 from tests.step_defs.conftest import run_interlock_in_cwd
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_tasks.feature"))
@@ -200,6 +201,9 @@ def _make_trivial_package(root: Path, pyproject: str) -> None:
     tests.mkdir()
     (tests / "__init__.py").write_text("", encoding="utf-8")
     (tests / "test_mod.py").write_text(_TRIVIAL_TEST, encoding="utf-8")
+    # env-ready: coverage/crap/mutation are dependency-aware gates that skip
+    # without an in-tree .venv — the layouts here assert a real verdict.
+    stub_project_venv(root)
 
 
 def _make_coverage(root: Path) -> None:
@@ -398,6 +402,10 @@ def _make_behavior_attribution_layout(
         _FEATURE_STEP_DEFS.replace("behavior.feature", "behavior_attribution.feature"),
         encoding="utf-8",
     )
+    # env-ready so `interlocks ci` runs the dependency-aware gates (coverage)
+    # instead of skipping them — the ci scenario asserts a behavior-attribution
+    # failure, which only surfaces once the gates ahead of it actually run.
+    stub_project_venv(root)
     _write_attribution_evidence(root, scenario_meta, omit_symbol_for=omit_symbol_for)
 
 
@@ -489,6 +497,7 @@ def _inspect_task(
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
     clear_cache()
     task = task_coverage()
+    assert task is not None  # scenario layouts are env-ready, so coverage runs
     return CoverageCommands(commands=(*task.pre_cmds, task.cmd))
 
 

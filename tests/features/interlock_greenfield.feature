@@ -61,3 +61,10 @@ Feature: interlocks unblock flow on a legacy greenfield project
     When I run "interlocks doctor" in the greenfield project
     Then the greenfield output contains "Setup Checklist"
     And the greenfield output names at least one missing adoption artifact
+
+  # req: ci-no-venv-skip
+  Scenario: `interlocks ci` skips dependency gates without a project environment
+    Given the greenfield project has no virtualenv
+    When I run "interlocks ci" in the greenfield project
+    Then the greenfield command exits 0
+    And the greenfield output contains "no project environment"

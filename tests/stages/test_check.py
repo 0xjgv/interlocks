@@ -397,7 +397,12 @@ def test_check_appends_required_failure_when_behavior_coverage_missing(
 def test_check_skips_dependency_gates_without_project_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Non-uv project, no .venv: typecheck + test skip with a nudge, not false negatives."""
+    """Non-uv project, no .venv: typecheck + test skip with a nudge, not false negatives.
+
+    The skip is now driven by the per-task builders (task_typecheck declines,
+    _test_task short-circuits) — the old stage-level guard in
+    check._parallel_tasks was deleted. The observable outcome is unchanged.
+    """
     (tmp_path / "tests").mkdir()
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "no-env"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
