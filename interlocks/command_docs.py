@@ -537,7 +537,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "invalid arguments"),
         ),
         flags=(
-            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON (config show)"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
             FlagSpec(
                 "--bundled-only",
                 "boolean",

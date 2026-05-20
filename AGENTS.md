@@ -22,6 +22,8 @@ Tests live in `tests/`, with focused task and stage coverage under `tests/tasks/
 - `uv run interlocks help` / `interlocks config` / `interlocks presets` - resolved thresholds, full config key list, preset selector.
 - `uv run pytest -q` - direct repository test run, including this repo's pytest-bdd acceptance tests.
 
+Agents driving these commands should pass `--json` to `interlocks {ci,check,evaluate,trust,doctor,config}` and consume the single stdout JSON object instead of scraping human text output. Exit codes are unchanged.
+
 ## Coding Style & Naming Conventions
 
 Target Python `3.11+`. Use 4-space indentation, explicit type hints in production code, and `snake_case` for modules, functions, and variables. Keep task commands named `cmd_<task>` to match CLI dispatch.

@@ -145,6 +145,15 @@ il acceptance
 
 Pass `--help` to any gate for available flags. `interlocks help` shows the common path, and `interlocks help --advanced` lists every subcommand.
 
+## Machine-Readable Output
+
+`interlocks {ci,check,evaluate,trust,doctor,config} --json` emits a single machine-readable JSON object on stdout (one object per invocation, all human chrome suppressed). Exit codes are unchanged, so scripts and agents can branch on both the structured payload and the process status. `--json` dominates `--verbose`.
+
+```bash
+interlocks check --json | python -m json.tool
+interlocks config --json | python -m json.tool
+```
+
 ## Advanced Evidence Gates
 
 For mature repositories and AI-authored code review, go beyond the local edit loop with `crap`, `mutation`, `trust`, and `evaluate`. Detailed flags are in the Tasks Reference.

@@ -12,7 +12,6 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -34,6 +33,8 @@ from interlocks.setup_state import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from interlocks.config import InterlockConfig
     from interlocks.runner import Task
     from interlocks.ui import State
@@ -62,12 +63,45 @@ class CheckRow:
     state: State
 
 
+@dataclass(frozen=True)
+class _DoctorReport:
+    """Computed doctor state, shared by every render path."""
+
+    project_root: Path
+    cfg: InterlockConfig | None
+    pyproject_path: Path
+    rows: list[CheckRow]
+    failures: list[str]
+    blockers: list[str]
+    warnings: list[str]
+    is_blocked: bool
+    gap_count: int
+
+
 def task_doctor() -> Task | None:
     """Doctor is CLI-only — never runs as a composable ``Task``."""
     return None
 
 
 def cmd_doctor() -> None:
+    report = _build_doctor_report()
+
+    if ui.is_json():
+        _render_doctor_json(report)
+    elif ui.is_verbose():
+        _render_doctor_verbose(report)
+    else:
+        status, _summary = _readiness(report.is_blocked, report.gap_count)
+        print(f"doctor: {status}")
+        for line in (*report.failures, *report.blockers):
+            print(f"  - {line}")
+
+    if report.failures:
+        sys.exit(1)
+
+
+def _build_doctor_report() -> _DoctorReport:
+    """Collect blockers, warnings, and setup rows into a single report value."""
     project_root = find_project_root()
     pyproject_path = project_root / "pyproject.toml"
 
@@ -82,41 +116,49 @@ def cmd_doctor() -> None:
     rows = _collect_setup_rows(project_root, cfg, pyproject_path)
     is_blocked = bool(blockers or failures or any(r.state == "fail" for r in rows))
     gap_count = sum(1 for r in rows if r.state == "warn")
+    return _DoctorReport(
+        project_root=project_root,
+        cfg=cfg,
+        pyproject_path=pyproject_path,
+        rows=rows,
+        failures=failures,
+        blockers=blockers,
+        warnings=warnings,
+        is_blocked=is_blocked,
+        gap_count=gap_count,
+    )
 
-    if ui.is_json():
-        status, _summary = _readiness(is_blocked, gap_count)
-        ui.print_json({
-            "command": "doctor",
-            "status": status,
-            "blockers": [{"message": m} for m in (*failures, *blockers)],
-            "warnings": [{"message": m} for m in warnings],
-            "detected": _detected_json(project_root, cfg, pyproject_path),
-            "setup_checklist": [{"name": r.label, "state": r.state} for r in rows],
-        })
-    elif ui.is_verbose():
-        ui.section("Readiness")
-        _print_readiness(is_blocked, gap_count)
-        ui.section("Detected Configuration")
-        _print_configuration(project_root, cfg, pyproject_path)
-        ui.section("Setup Checklist")
-        _render_setup_checklist(rows)
-        ui.section("Blockers")
-        ui.message_list([*failures, *blockers], empty="none")
-        ui.section("Warnings")
-        ui.message_list(warnings, empty="none")
-        ui.section("Next Steps")
-        ui.message_list(
-            _next_steps(rows, is_blocked),
-            empty="Run `interlocks check` locally.",
-        )
-    else:
-        status, _summary = _readiness(is_blocked, gap_count)
-        print(f"doctor: {status}")
-        for line in (*failures, *blockers):
-            print(f"  - {line}")
 
-    if failures:
-        sys.exit(1)
+def _render_doctor_json(report: _DoctorReport) -> None:
+    """Emit the doctor report as a single machine-readable JSON object."""
+    status, _summary = _readiness(report.is_blocked, report.gap_count)
+    ui.print_json({
+        "command": "doctor",
+        "status": status,
+        "blockers": [{"message": m} for m in (*report.failures, *report.blockers)],
+        "warnings": [{"message": m} for m in report.warnings],
+        "detected": _detected_json(report.project_root, report.cfg, report.pyproject_path),
+        "setup_checklist": [{"name": r.label, "state": r.state} for r in report.rows],
+    })
+
+
+def _render_doctor_verbose(report: _DoctorReport) -> None:
+    """Render the full sectioned doctor report (verbose mode)."""
+    ui.section("Readiness")
+    _print_readiness(report.is_blocked, report.gap_count)
+    ui.section("Detected Configuration")
+    _print_configuration(report.project_root, report.cfg, report.pyproject_path)
+    ui.section("Setup Checklist")
+    _render_setup_checklist(report.rows)
+    ui.section("Blockers")
+    ui.message_list([*report.failures, *report.blockers], empty="none")
+    ui.section("Warnings")
+    ui.message_list(report.warnings, empty="none")
+    ui.section("Next Steps")
+    ui.message_list(
+        _next_steps(report.rows, report.is_blocked),
+        empty="Run `interlocks check` locally.",
+    )
 
 
 def _print_readiness(is_blocked: bool, gap_count: int) -> None:
