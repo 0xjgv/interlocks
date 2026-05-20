@@ -14,6 +14,7 @@ from interlocks.runner import (
     _truncate_dump,
     generate_coverage_xml,
     print_stage_verdict,
+    record_result,
     reset_results,
     results_snapshot,
     run_tasks,
@@ -297,7 +298,9 @@ def test_minimal_default_suppresses_ok_rows_still_records_results(
     assert "[alpha]" not in out
     assert "[bravo]" not in out
     # Completion order is non-deterministic under parallel exec; compare as a set.
-    assert set(results_snapshot()) == {("alpha", True), ("bravo", True)}
+    snap = results_snapshot()
+    assert {(r.label, r.status) for r in snap} == {("alpha", "ok"), ("bravo", "ok")}
+    assert all(r.elapsed is not None and r.detail is None for r in snap)
 
 
 def test_minimal_default_still_shows_fail_rows(
@@ -315,7 +318,12 @@ def test_minimal_default_still_shows_fail_rows(
     assert "[good]" not in out
     assert "[bad]" in out
     assert "failed" in out
-    assert set(results_snapshot()) == {("good", True), ("bad", False)}
+    snap = results_snapshot()
+    assert {(r.label, r.status) for r in snap} == {("good", "ok"), ("bad", "fail")}
+    bad = next(r for r in snap if r.label == "bad")
+    assert bad.detail is not None and "exit 3" in bad.detail
+    good = next(r for r in snap if r.label == "good")
+    assert good.detail is None
 
 
 def test_print_stage_verdict_silent_under_json(
@@ -334,6 +342,17 @@ def test_print_stage_verdict_prints_when_not_json(
     reset_results()
     print_stage_verdict("ci", 1.0)
     assert capsys.readouterr().out.strip() == "ci: ok — 0 tasks, 1.0s"
+
+
+def test_print_stage_verdict_unchanged_with_gateresult(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+    reset_results()
+    record_result("lint", "lint", status="ok", elapsed=0.1, detail=None)
+    record_result("test", "test", status="fail", elapsed=0.2, detail="exit 1: pytest")
+    print_stage_verdict("ci", 1.5)
+    assert capsys.readouterr().out.strip() == "ci: FAILED — test (1 of 2) — 1.5s"
 
 
 def test_dump_failure_caps_long_stderr_in_run_tasks(

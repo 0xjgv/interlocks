@@ -61,9 +61,27 @@ _PYTEST_SUMMARY = re.compile(r"(\d+) passed[^\n]*?\s+in\s+([\d.]+)s")
 
 _PRINT_LOCK = threading.Lock()
 
+
+@dataclass(frozen=True)
+class GateResult:
+    """One stage-level gate verdict — the structured row `ci`/`check` JSON reads.
+
+    `name` and `label` both carry the row label for now (a stable `name` distinct
+    from the display label is a deliberate non-goal of this chunk). `elapsed` is the
+    measured wall time when known, else `None`. `detail` is best-effort: the failed
+    command line for a failing gate, `None` for an `ok`/`warn` gate.
+    """
+
+    name: str
+    label: str
+    status: ui.State
+    elapsed: float | None
+    detail: str | None
+
+
 # Per-stage accumulator — stages (e.g. `cmd_check`) read this to emit a
 # one-line verdict in quiet mode. Labels mirror the row tag `[label]`.
-_RESULTS: list[tuple[str, bool]] = []
+_RESULTS: list[GateResult] = []
 
 
 def reset_results() -> None:
@@ -71,13 +89,20 @@ def reset_results() -> None:
     _RESULTS.clear()
 
 
-def record_result(label: str, passed: bool) -> None:
-    """Record one stage-level verdict result."""
-    _RESULTS.append((label, passed))
+def record_result(
+    name: str,
+    label: str,
+    *,
+    status: ui.State,
+    elapsed: float | None,
+    detail: str | None,
+) -> None:
+    """Record one stage-level gate verdict."""
+    _RESULTS.append(GateResult(name, label, status, elapsed, detail))
 
 
-def results_snapshot() -> list[tuple[str, bool]]:
-    """Return `(label, passed)` pairs recorded since the last reset."""
+def results_snapshot() -> list[GateResult]:
+    """Return the `GateResult`s recorded since the last reset."""
     return list(_RESULTS)
 
 
@@ -94,7 +119,7 @@ def print_stage_verdict(stage_name: str, elapsed: float) -> None:
     if ui.is_json():
         return
     results = results_snapshot()
-    fails = [label for label, passed in results if not passed]
+    fails = [r.label for r in results if r.status != "ok"]
     if not fails:
         print(f"{stage_name}: ok — {len(results)} tasks, {elapsed:.1f}s")
         return
@@ -420,9 +445,27 @@ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     label = task.label or _default_label(task.description)
     command = task.display or _default_display(task.cmd)
     status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
-    record_result(label, state == "ok")
+    record_result(
+        label,
+        label,
+        status=state,
+        elapsed=result.elapsed,
+        detail=_failure_detail(result) if state == "fail" else None,
+    )
     with _PRINT_LOCK:
         ui.row(label, command, status, detail=detail, state=state)
+
+
+def _failure_detail(result: RunResult) -> str | None:
+    """Short failure detail for the JSON `gates[].detail` field.
+
+    Uses the failed command line (compact, stable). Captured stderr is intentionally
+    not embedded — it is multi-line and already surfaced by `_dump_failure`.
+    """
+    failed_cmd = result.failed_cmd or result.task.cmd
+    if not failed_cmd:
+        return None
+    return f"exit {result.returncode}: {' '.join(failed_cmd)}"
 
 
 def _status(result: RunResult, *, elapsed_suffix: bool) -> tuple[str, str | None, ui.State]:

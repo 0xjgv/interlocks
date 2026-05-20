@@ -129,12 +129,25 @@ def _run_post_coverage_gate(
     skip_policy: SkipPolicy,
 ) -> None:
     def record_gate_result() -> None:
+        start = time.monotonic()
         try:
             run()
         except SystemExit:
-            record_result(label, False)
+            record_result(
+                label,
+                label,
+                status="fail",
+                elapsed=time.monotonic() - start,
+                detail=None,
+            )
             raise
-        record_result(label, True)
+        record_result(
+            label,
+            label,
+            status="ok",
+            elapsed=time.monotonic() - start,
+            detail=None,
+        )
 
     run_unless_skipped(label, record_gate_result, skip_policy)
 
