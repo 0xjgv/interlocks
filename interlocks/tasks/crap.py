@@ -28,6 +28,8 @@ _CRAP_ADVISORY_LIMIT = 5
 
 
 def _print_offender(row: CrapRow) -> None:
+    if ui.is_json():
+        return
     print(
         f"    CRAP={row.crap:6.1f}  CCN={row.ccn:3d}  "
         f"cov={row.coverage * 100:5.1f}%  "
@@ -101,7 +103,7 @@ def cmd_crap_cached_advisory(changed: set[str] | None = None) -> None:
     )
     for row in offenders[:_CRAP_ADVISORY_LIMIT]:
         _print_offender(row)
-    if len(offenders) > _CRAP_ADVISORY_LIMIT:
+    if len(offenders) > _CRAP_ADVISORY_LIMIT and not ui.is_json():
         print(f"    … {len(offenders) - _CRAP_ADVISORY_LIMIT} more")
 
 

@@ -67,11 +67,11 @@ def cmd_check() -> None:
     ui.banner(cfg)
     if scope_ref is not None and not scoped_files:
         ui.section("Quality Checks")
-        if ui.is_verbose():
+        if ui.is_verbose() and not ui.is_json():
             print(f"  scope=changed vs {scope_ref} — no Python files changed; nothing to check")
         _print_footer(time.monotonic() - start)
         return
-    if scoped_files and ui.is_verbose():
+    if scoped_files and ui.is_verbose() and not ui.is_json():
         ui.section("Scope")
         print(f"  changed vs {scope_ref} — {len(scoped_files)} file(s)")
 

@@ -119,7 +119,8 @@ def _handle_attribution_result(
     status = "failed" if state == "fail" else "warn"
     detail = None if state == "fail" else warning_detail
     ui.row(_LABEL, _COMMAND, status, detail=detail, state=state)
-    print(format_attribution_failure(result))
+    if not ui.is_json():
+        print(format_attribution_failure(result))
     if state == "fail":
         sys.exit(1)
     if _below_min_coverage(cfg, result):

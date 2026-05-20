@@ -203,6 +203,55 @@ def test_ci_json_dominates_verbose(tmp_project: Path) -> None:
     assert json.loads(lines[0])["command"] == "ci"
 
 
+# A high-complexity, fully-uncovered function — CRAP = ccn^2 * (1-cov)^3 + ccn
+# is far above the default 30.0 ceiling, so the CRAP gate reaches `_print_offender`.
+_CRAP_OFFENDER_SRC = textwrap.dedent(
+    '''\
+    """Module with one gnarly uncovered function."""
+
+
+    def add(a: int, b: int) -> int:
+        return a + b
+
+
+    def gnarly(n: int) -> int:
+        total = 0
+        if n > 0:
+            total += 1
+        if n > 1:
+            total += 2
+        if n > 2:
+            total += 3
+        if n > 3:
+            total += 4
+        if n > 4:
+            total += 5
+        if n > 5:
+            total += 6
+        if n > 6:
+            total += 7
+        return total
+    '''
+)
+
+
+def test_ci_json_single_object_with_crap_offenders(tmp_project: Path) -> None:
+    """Regression: an offender in the CRAP gate must not leak `CRAP=` lines to stdout.
+
+    Before the fix, `_print_offender` printed raw text before the JSON object, so
+    `json.loads(stdout)` failed on any project with CRAP offenders.
+    """
+    (tmp_project / "interlocks" / "core.py").write_text(_CRAP_OFFENDER_SRC, encoding="utf-8")
+
+    result = _run_ci_json(tmp_project)
+
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 1, f"expected one JSON object, got {result.stdout!r}"
+    payload = json.loads(lines[0])
+    assert payload["command"] == "ci"
+    assert "CRAP=" not in result.stdout
+
+
 def test_ci_evidence_records_context_env(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

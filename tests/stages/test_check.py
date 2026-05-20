@@ -135,6 +135,96 @@ def test_check_json_dominates_verbose(tmp_project: Path) -> None:
     assert json.loads(lines[0])["command"] == "check"
 
 
+# A high-complexity, fully-uncovered function — CRAP is far above the 30.0 ceiling,
+# so the advisory CRAP gate reaches `_print_offender`.
+_CRAP_OFFENDER_SRC = textwrap.dedent(
+    '''\
+    """Module with one gnarly uncovered function."""
+
+
+    def add(a: int, b: int) -> int:
+        return a + b
+
+
+    def gnarly(n: int) -> int:
+        total = 0
+        if n > 0:
+            total += 1
+        if n > 1:
+            total += 2
+        if n > 2:
+            total += 3
+        if n > 3:
+            total += 4
+        if n > 4:
+            total += 5
+        if n > 5:
+            total += 6
+        if n > 6:
+            total += 7
+        return total
+    '''
+)
+
+
+def test_check_json_single_object_with_crap_offenders(tmp_project: Path) -> None:
+    """Regression: advisory CRAP must not leak `CRAP=` lines before the JSON object.
+
+    Before the fix, `cmd_crap_cached_advisory` printed raw offender text ahead of
+    the JSON object, so `json.loads(stdout)` failed on any project with offenders.
+    """
+    (tmp_project / "interlocks" / "core.py").write_text(_CRAP_OFFENDER_SRC, encoding="utf-8")
+    # Prime a fresh `.coverage` cache so the advisory CRAP gate runs (not skipped).
+    subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "ci"],
+        cwd=tmp_project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    result = _run_check_json(tmp_project)
+
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 1, f"expected one JSON object, got {result.stdout!r}"
+    payload = json.loads(lines[0])
+    assert payload["command"] == "check"
+    assert "CRAP=" not in result.stdout
+
+
+def test_check_json_verbose_changed_emits_single_object(tmp_project: Path) -> None:
+    """Regression: `check --json --verbose --changed` must not leak a `scope=` header.
+
+    The empty-changed-scope and scoped-files headers were gated only on `is_verbose()`;
+    under `--json` they printed raw text before the JSON object.
+    """
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_project, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=tmp_project, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_project, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=tmp_project, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=tmp_project, check=True)
+
+    # Empty changed scope: nothing changed vs HEAD.
+    empty = _run_check_json(tmp_project, "--verbose", "--changed")
+    empty_lines = [ln for ln in empty.stdout.splitlines() if ln.strip()]
+    assert len(empty_lines) == 1, f"expected one object, got {empty.stdout!r}"
+    assert json.loads(empty_lines[0])["command"] == "check"
+    assert "scope=" not in empty.stdout
+
+    # Non-empty changed scope: a touched file triggers the scoped-files header.
+    (tmp_project / "interlocks" / "core.py").write_text(
+        _CLEAN_SRC + "\n\ndef sub(a: int, b: int) -> int:\n    return a - b\n",
+        encoding="utf-8",
+    )
+    scoped = _run_check_json(tmp_project, "--verbose", "--changed")
+    scoped_lines = [ln for ln in scoped.stdout.splitlines() if ln.strip()]
+    assert len(scoped_lines) == 1, f"expected one object, got {scoped.stdout!r}"
+    assert json.loads(scoped_lines[0])["command"] == "check"
+    assert "changed vs" not in scoped.stdout
+
+
 def test_check_passes_on_clean_project_verbose(tmp_project: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-P", "-m", "interlocks.cli", "check", "--verbose"],
