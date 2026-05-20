@@ -684,6 +684,12 @@ _FLAG_SOURCE_MODULES: dict[str, tuple[str, ...]] = {
 # must not be counted as a declared task flag.
 _FLAG_SCAN_IGNORE: frozenset[str] = frozenset({"--quiet", "--verbose"})
 
+# `--json` is read centrally via `interlocks.ui.is_json()` (argv-derived, like
+# `is_verbose`), not from a per-task module — so it is declared as a FlagSpec for
+# dispatcher acceptance and `--help` rendering but never appears as a literal in a
+# task's own source. Excluded from both sides of the drift-guard comparison.
+_CENTRAL_FLAGS: frozenset[str] = frozenset({"--json"})
+
 # arg_value("--x=", ...)  |  arg_flag_value("--x", ...)  |  "--x" in <seq>
 #   plus the bare-equality forms: arg == "--check"  /  "--json" == arg
 # `<seq>` is `sys.argv` (stats.py) or a local flags list (baseline_cmd.py).
@@ -723,8 +729,12 @@ def test_declared_flags_match_task_source() -> None:
     the task runs; a declared-but-unread flag is dead doc. Both are bugs.
     """
     for command, modules in _FLAG_SOURCE_MODULES.items():
-        declared = {spec.name for spec in COMMAND_DOCS_BY_NAME[command].flags}
-        scanned = _scanned_flag_names(modules)
+        declared = {
+            spec.name
+            for spec in COMMAND_DOCS_BY_NAME[command].flags
+            if spec.name not in _CENTRAL_FLAGS
+        }
+        scanned = _scanned_flag_names(modules) - _CENTRAL_FLAGS
         assert declared == scanned, (
             f"{command}: declared {sorted(declared)} != source-read {sorted(scanned)}"
         )

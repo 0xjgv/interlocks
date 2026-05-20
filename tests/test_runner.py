@@ -13,6 +13,7 @@ from interlocks.runner import (
     Task,
     _truncate_dump,
     generate_coverage_xml,
+    print_stage_verdict,
     reset_results,
     results_snapshot,
     run_tasks,
@@ -315,6 +316,24 @@ def test_minimal_default_still_shows_fail_rows(
     assert "[bad]" in out
     assert "failed" in out
     assert set(results_snapshot()) == {("good", True), ("bad", False)}
+
+
+def test_print_stage_verdict_silent_under_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--json"])
+    reset_results()
+    print_stage_verdict("ci", 1.0)
+    assert capsys.readouterr().out == ""
+
+
+def test_print_stage_verdict_prints_when_not_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+    reset_results()
+    print_stage_verdict("ci", 1.0)
+    assert capsys.readouterr().out.strip() == "ci: ok — 0 tasks, 1.0s"
 
 
 def test_dump_failure_caps_long_stderr_in_run_tasks(

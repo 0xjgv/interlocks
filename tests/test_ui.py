@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -64,3 +66,49 @@ def test_failure_row_prints_in_minimal_mode(
 
 def test_plain_len_strips_ansi_escape_sequences() -> None:
     assert ui._plain_len("\x1b[31mx\x1b[0m") == 1
+
+
+def test_is_json_true_when_flag_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--json"])
+    assert ui.is_json() is True
+
+
+def test_is_json_false_when_flag_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+    assert ui.is_json() is False
+
+
+def test_print_json_single_line_compact_with_newline(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ui.print_json({"command": "ci", "passed": True, "gates": []})
+    out = capsys.readouterr().out
+    assert out.count("\n") == 1
+    assert out.endswith("\n")
+    assert ", " not in out and ": " not in out  # compact separators
+    assert json.loads(out) == {"command": "ci", "passed": True, "gates": []}
+
+
+def test_print_json_preserves_insertion_order(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ui.print_json({"command": "x", "zeta": 1, "alpha": 2})
+    out = capsys.readouterr().out.strip()
+    assert out.index('"command"') < out.index('"zeta"') < out.index('"alpha"')
+
+
+@pytest.mark.parametrize("extra", [[], ["--verbose"]])
+def test_chrome_primitives_silent_under_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    extra: list[str],
+) -> None:
+    # --json dominates --verbose: chrome stays silent even with --verbose present.
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--json", *extra])
+    ui.banner(_cfg(tmp_path))
+    ui.command_banner("ci", None)
+    ui.section("CI Checks")
+    ui.row("lint", "ruff check", "failed", state="fail")
+    ui.stage_footer(1.0)
+    assert capsys.readouterr().out == ""

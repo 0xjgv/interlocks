@@ -1,11 +1,13 @@
-"""Shared CLI render primitives: banner, sections, rows, kv blocks, footer.
+"""Shared CLI render primitives: banner, sections, rows, kv blocks, footer, and the
+machine-readable JSON writer.
 
-Single source of truth for `interlocks` stage output. Stdlib-only. Honors `$NO_COLOR`
-and isatty; emits no ANSI under pipes or with colors disabled.
+Single source of truth for `interlocks` stage and machine-readable output. Stdlib-only.
+Honors `$NO_COLOR` and isatty; emits no ANSI under pipes or with colors disabled.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -50,6 +52,27 @@ def is_verbose() -> bool:
     return "--verbose" in sys.argv
 
 
+def is_json() -> bool:
+    """True when `--json` requested.
+
+    Suppresses all human chrome and dominates `--verbose`: when this is true every
+    chrome primitive early-returns regardless of verbosity, so stdout is exactly one
+    JSON object. Argv-derived, mirroring `is_verbose()`; `--json` is boolean-only and
+    the dispatcher rejects it unless declared, so it only appears on opted-in commands.
+    """
+    return "--json" in sys.argv
+
+
+def print_json(obj: object) -> None:
+    """Write one compact JSON object + newline to stdout (machine-readable mode).
+
+    Single line, `(",", ":")` separators, `sort_keys=False` so insertion order is
+    preserved (`command` stays first). The six command schemas are the stable
+    contract — see the JSON output tests.
+    """
+    print(json.dumps(obj, separators=(",", ":"), sort_keys=False))
+
+
 def _term_width() -> int:
     """Terminal width clamped to [50, 65]."""
     cols = shutil.get_terminal_size(fallback=(80, 24)).columns
@@ -64,7 +87,7 @@ def _c(code: str, text: str) -> str:
 
 def banner(cfg: InterlockConfig) -> None:
     """One-line stage banner: `interlocks vX · preset=Y · runner=Z · invoker=W`."""
-    if not is_verbose():
+    if is_json() or not is_verbose():
         return
     preset = cfg.preset or "none"
     parts = [
@@ -78,7 +101,7 @@ def banner(cfg: InterlockConfig) -> None:
 
 def command_banner(command: str, cfg: InterlockConfig | None = None) -> None:
     """One-line command banner aligned with stage banners."""
-    if not is_verbose():
+    if is_json() or not is_verbose():
         return
     parts = [f"interlocks v{__version__}", f"command={command}"]
     if cfg is not None:
@@ -92,7 +115,7 @@ def command_banner(command: str, cfg: InterlockConfig | None = None) -> None:
 
 def section(name: str) -> None:
     """`── name ─────…` stage/sub-stage header, sized to the terminal."""
-    if not is_verbose():
+    if is_json() or not is_verbose():
         return
     width = _term_width()
     prefix = f"── {name} "
@@ -114,7 +137,7 @@ def row(
     Long `command` is truncated to fit the available width; status is right-aligned.
     Minimal-default mode suppresses ok/warn rows — only failures carry signal for agents.
     """
-    if not is_verbose() and state != "fail":
+    if is_json() or (not is_verbose() and state != "fail"):
         return
     width = _term_width()
     color = _STATE_COLORS[state]
@@ -157,7 +180,7 @@ def message_list(items: list[str], *, empty: str = "none", indent: str = "  ") -
 
 def stage_footer(elapsed_s: float) -> None:
     """`Completed in X.Ys` footer."""
-    if not is_verbose():
+    if is_json() or not is_verbose():
         return
     print(f"\n{_c(_DIM, f'Completed in {elapsed_s:.1f}s')}")
 

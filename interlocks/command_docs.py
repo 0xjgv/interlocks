@@ -402,6 +402,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             FlagSpec("--changed", "boolean", "cfg.changed_ref", "scope to git-changed files"),
             FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
             FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -434,6 +435,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "a gate failed"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "nightly",
@@ -497,6 +499,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--no-trend", "boolean", "off", "omit the historical trend section"),
             FlagSpec("--refresh", "boolean", "off", "recompute metrics instead of reading cache"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -507,6 +510,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=False,
         outputs=(),
         exit_codes=((0, "report rendered (advisory; never fails)"),),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "explain",
@@ -553,6 +557,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "no blockers"),
             (1, "blockers present"),
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "setup",

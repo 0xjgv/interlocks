@@ -84,10 +84,15 @@ def results_snapshot() -> list[tuple[str, bool]]:
 def print_stage_verdict(stage_name: str, elapsed: float) -> None:
     """One-line stage verdict — always prints, even in minimal-default mode.
 
+    Suppressed entirely under `--json`: the stage's JSON object is the only thing
+    on stdout in that mode.
+
     Green path: ``<stage>: ok — N tasks, X.Ys``.
     Red path:   ``<stage>: FAILED — <labels> (F of M) — X.Ys``.
     Reads :func:`results_snapshot`; safe to call from any stage's final block.
     """
+    if ui.is_json():
+        return
     results = results_snapshot()
     fails = [label for label, passed in results if not passed]
     if not fails:
@@ -171,12 +176,14 @@ def generate_coverage_xml() -> Path:
 
 def section(name: str) -> None:
     """Emit a stage or sub-stage header."""
+    if ui.is_json():
+        return
     ui.section(name)
 
 
 def ok(message: str) -> None:
     """Emit a success line; verbose-only (ok-rows carry the verdict otherwise)."""
-    if not ui.is_verbose():
+    if ui.is_json() or not ui.is_verbose():
         return
     print(f"  {_glyph('✓', GREEN)} {message}")
 
