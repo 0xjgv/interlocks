@@ -106,6 +106,16 @@ Feature: interlocks CLI surface area
     Given I run "interlocks trust --json" in a temp project
     Then stdout is a single JSON object with keys "command,error"
 
+  # req: cli-json-doctor
+  Scenario: doctor --json emits parseable JSON with status/blockers/warnings
+    Given I run "interlocks doctor --json" in a temp project
+    Then stdout is a single JSON object with keys "command,status,blockers,warnings,detected,setup_checklist"
+
+  # req: cli-json-config
+  Scenario: config --json emits parseable JSON with resolved key/value/source
+    Given I run "interlocks config --json" in a temp project
+    Then stdout is a single JSON object with keys "command,preset,pyproject_path,keys"
+
   # req: cli-explain-all
   Scenario: explain with no argument documents every command
     Given I run "interlocks explain"

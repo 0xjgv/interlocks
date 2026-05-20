@@ -617,6 +617,47 @@ def test_cmd_config_show_json_is_parseable(
     assert json.loads(capsys.readouterr().out)["tool"] == "coverage"
 
 
+def test_cmd_config_json_is_parseable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "--json"])
+
+    cmd_config()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "config"
+    assert "preset" in payload
+    assert "pyproject_path" in payload
+    assert isinstance(payload["keys"], list) and payload["keys"]
+    for entry in payload["keys"]:
+        assert {"key", "value", "source", "group"} == entry.keys()
+
+
+def test_cmd_config_json_falls_back_when_pyproject_malformed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("not = [valid toml\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "--json"])
+
+    cmd_config()  # must not raise
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "config"
+    assert payload["preset"] is None
+    assert payload["keys"]
+    for entry in payload["keys"]:
+        assert entry["value"] is None
+        assert entry["source"] == "unreadable"
+
+
 def test_cmd_config_falls_back_when_pyproject_malformed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

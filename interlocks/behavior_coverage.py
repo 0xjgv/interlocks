@@ -171,6 +171,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.stats:cmd_trust",
     ),
     Behavior(
+        "cli-json-doctor",
+        "doctor",
+        "doctor --json emits a parseable machine-readable object",
+        "interlocks.tasks.doctor:cmd_doctor",
+    ),
+    Behavior(
+        "cli-json-config",
+        "config",
+        "config --json emits a parseable machine-readable object",
+        "interlocks.tasks.config:cmd_config",
+    ),
+    Behavior(
         "cli-explain-all",
         "cli",
         "explain with no argument documents every command",

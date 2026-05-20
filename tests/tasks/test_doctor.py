@@ -36,6 +36,22 @@ def _run_doctor(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_doctor_json(cwd: Path) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{_INTERLOCK_PARENT}{os.pathsep}{existing}" if existing else _INTERLOCK_PARENT
+    )
+    return subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "doctor", "--json"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
 def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     result = _run_doctor(tmp_path)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -68,6 +84,53 @@ def test_doctor_tmpdir_verbose_full_report(tmp_path: Path) -> None:
     assert "── Blockers" in result.stdout
     assert "── Warnings" in result.stdout
     assert "── Next Steps" in result.stdout
+
+
+def test_doctor_json_is_parseable(tmp_path: Path) -> None:
+    # Missing pyproject → status "blocked", exit 0 (doctor exits 1 only on failures).
+    result = _run_doctor_json(tmp_path)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "doctor"
+    assert payload["status"] == "blocked"
+    assert isinstance(payload["blockers"], list)
+    assert isinstance(payload["warnings"], list)
+    assert {"project_root", "preset", "src_dir", "test_dir"} <= payload["detected"].keys()
+    assert isinstance(payload["setup_checklist"], list)
+    for entry in payload["setup_checklist"]:
+        assert {"name", "state"} == entry.keys()
+
+
+def test_doctor_json_well_formed_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A well-formed project yields a ready status with detected config populated."""
+    (tmp_path / "probe").mkdir()
+    (tmp_path / "probe" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
+        encoding="utf-8",
+    )
+    stub_project_venv(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "doctor", "--json"])
+
+    from interlocks.config import clear_cache
+    from interlocks.tasks.doctor import cmd_doctor
+
+    clear_cache()
+    try:
+        cmd_doctor()
+    finally:
+        clear_cache()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "doctor"
+    assert payload["status"].startswith("ready")
+    assert payload["detected"]["pyproject_path"] is not None
+    assert payload["detected"]["src_dir"] == "probe"
+    assert payload["detected"]["test_dir"] == "tests"
 
 
 def test_doctor_in_process_reports_sections(

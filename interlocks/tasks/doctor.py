@@ -12,6 +12,7 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -33,8 +34,6 @@ from interlocks.setup_state import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from interlocks.config import InterlockConfig
     from interlocks.runner import Task
     from interlocks.ui import State
@@ -84,7 +83,17 @@ def cmd_doctor() -> None:
     is_blocked = bool(blockers or failures or any(r.state == "fail" for r in rows))
     gap_count = sum(1 for r in rows if r.state == "warn")
 
-    if ui.is_verbose():
+    if ui.is_json():
+        status, _summary = _readiness(is_blocked, gap_count)
+        ui.print_json({
+            "command": "doctor",
+            "status": status,
+            "blockers": [{"message": m} for m in (*failures, *blockers)],
+            "warnings": [{"message": m} for m in warnings],
+            "detected": _detected_json(project_root, cfg, pyproject_path),
+            "setup_checklist": [{"name": r.label, "state": r.state} for r in rows],
+        })
+    elif ui.is_verbose():
         ui.section("Readiness")
         _print_readiness(is_blocked, gap_count)
         ui.section("Detected Configuration")
@@ -341,6 +350,25 @@ def _is_warn(by_label: dict[str, CheckRow], label: str) -> bool:
     """True when ``label`` row is an actionable gap (warn, excluding inert placeholders)."""
     row = by_label.get(label)
     return row is not None and row.state == "warn" and row.detail != _INERT_DETAIL
+
+
+def _detected_json(
+    project_root: Path, cfg: InterlockConfig | None, pyproject_path: Path
+) -> dict[str, object]:
+    """Detected-configuration values for the `doctor --json` `detected` object."""
+    detected: dict[str, object] = {
+        "project_root": str(project_root),
+        "pyproject_path": str(pyproject_path) if pyproject_path.is_file() else None,
+    }
+    if cfg is None:
+        detected.update({"preset": None, "src_dir": None, "test_dir": None})
+    else:
+        detected.update({
+            "preset": cfg.preset,
+            "src_dir": cfg.src_dir_arg,
+            "test_dir": cfg.test_dir_arg,
+        })
+    return detected
 
 
 def _print_configuration(

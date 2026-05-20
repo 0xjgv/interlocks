@@ -8,6 +8,7 @@ need a single command answering "what can I configure?".
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -29,7 +30,9 @@ if TYPE_CHECKING:
 
 
 def cmd_config() -> None:
-    args = subcommand_args("config")
+    # `--json` is a declared global output flag for `config`; consume it here so
+    # it never trips the positional-arg validation. Mode is read via `ui.is_json()`.
+    args = [arg for arg in subcommand_args("config") if arg != "--json"]
     if args and args[0] == "show":
         _cmd_config_show(args[1:])
         return
@@ -38,6 +41,10 @@ def cmd_config() -> None:
     project_root = find_project_root()
     pyproject = project_root / "pyproject.toml"
     cfg = load_optional_config()
+
+    if ui.is_json():
+        _print_config_json(cfg, pyproject)
+        return
 
     ui.section("Status")
     _print_status(cfg, pyproject_present=pyproject.is_file())
@@ -69,13 +76,10 @@ def _config_usage() -> str:
 
 
 def _cmd_config_show(args: list[str]) -> None:
-    json_output = False
     bundled_only = False
     positional: list[str] = []
     for arg in args:
-        if arg == "--json":
-            json_output = True
-        elif arg == "--bundled-only":
+        if arg == "--bundled-only":
             bundled_only = True
         elif arg.startswith("-"):
             fail_skip(_config_usage())
@@ -86,7 +90,7 @@ def _cmd_config_show(args: list[str]) -> None:
 
     cfg = load_config()
     source = tool_config_source(cfg, positional[0])
-    if json_output:
+    if ui.is_json():
         _print_tool_source_json(cfg, source, bundled_only=bundled_only)
         return
 
@@ -200,6 +204,49 @@ def _resolved_value(cfg: InterlockConfig, key: str) -> object:
     if renderer is not None:
         return renderer(cfg)
     return getattr(cfg, key)
+
+
+def _json_value(cfg: InterlockConfig, key: str) -> object:
+    """JSON-serialisable resolved value for one config key.
+
+    Prefers the raw ``getattr(cfg, key)``; coerces the few non-JSON-native types
+    (Path, frozenset, tuple) to JSON scalars. Unlike ``_resolved_value``, never
+    returns a human-display string like "(none)".
+    """
+    value = getattr(cfg, key)
+    if isinstance(value, frozenset | set):
+        return sorted(value)
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def _print_config_json(cfg: InterlockConfig | None, pyproject: Path) -> None:
+    """Emit the resolved-key listing as a single JSON object."""
+    keys: list[dict[str, object]] = []
+    for group in CONFIG_KEY_GROUP_ORDER:
+        for key_doc in (k for k in CONFIG_KEYS if k.group == group):
+            name = key_doc.name
+            if cfg is None:
+                value: object = None
+                source = "unreadable"
+            else:
+                value = _json_value(cfg, name)
+                source = cfg.value_sources.get(name, "unknown")
+            keys.append({
+                "key": name,
+                "value": value,
+                "source": source,
+                "group": group,
+            })
+    ui.print_json({
+        "command": "config",
+        "preset": cfg.preset if cfg is not None else None,
+        "pyproject_path": str(pyproject) if pyproject.is_file() else None,
+        "keys": keys,
+    })
 
 
 def _print_keys() -> None:
