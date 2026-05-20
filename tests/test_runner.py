@@ -349,8 +349,8 @@ def test_print_stage_verdict_unchanged_with_gateresult(
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
     reset_results()
-    record_result("lint", "lint", status="ok", elapsed=0.1, detail=None)
-    record_result("test", "test", status="fail", elapsed=0.2, detail="exit 1: pytest")
+    record_result("lint", status="ok", elapsed=0.1, detail=None)
+    record_result("test", status="fail", elapsed=0.2, detail="exit 1: pytest")
     print_stage_verdict("ci", 1.5)
     assert capsys.readouterr().out.strip() == "ci: FAILED — test (1 of 2) — 1.5s"
 

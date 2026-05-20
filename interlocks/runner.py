@@ -66,13 +66,11 @@ _PRINT_LOCK = threading.Lock()
 class GateResult:
     """One stage-level gate verdict — the structured row `ci`/`check` JSON reads.
 
-    `name` and `label` both carry the row label for now (a stable `name` distinct
-    from the display label is a deliberate non-goal of this chunk). `elapsed` is the
-    measured wall time when known, else `None`. `detail` is best-effort: the failed
-    command line for a failing gate, `None` for an `ok`/`warn` gate.
+    `elapsed` is the measured wall time when known, else `None`. `detail` is
+    best-effort: the failed command line for a failing gate, `None` for an
+    `ok`/`warn` gate.
     """
 
-    name: str
     label: str
     status: ui.State
     elapsed: float | None
@@ -105,7 +103,6 @@ def skips_snapshot() -> list[dict[str, str]]:
 
 
 def record_result(
-    name: str,
     label: str,
     *,
     status: ui.State,
@@ -113,7 +110,7 @@ def record_result(
     detail: str | None,
 ) -> None:
     """Record one stage-level gate verdict."""
-    _RESULTS.append(GateResult(name, label, status, elapsed, detail))
+    _RESULTS.append(GateResult(label, status, elapsed, detail))
 
 
 def results_snapshot() -> list[GateResult]:
@@ -152,13 +149,15 @@ def stage_json(
     """Build the `ci`/`check` `--json` object from the stage accumulators.
 
     `gates` maps each recorded `GateResult`; `detail` is omitted when `None`.
+    `name` mirrors `label` — a stable identifier distinct from the display label
+    is a deliberate non-goal — but both stay in the schema as the stable contract.
     `skipped` is the structured skip list. `evidence_path` is included only when
     given (`ci` passes it, `check` does not).
     """
     gates: list[dict[str, object]] = []
     for r in results_snapshot():
         entry: dict[str, object] = {
-            "name": r.name,
+            "name": r.label,
             "label": r.label,
             "status": r.status,
             "elapsed_seconds": round(r.elapsed, 3) if r.elapsed is not None else None,
@@ -505,7 +504,6 @@ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
     command = task.display or _default_display(task.cmd)
     status, detail, state = _status(result, elapsed_suffix=elapsed_suffix)
     record_result(
-        label,
         label,
         status=state,
         elapsed=result.elapsed,

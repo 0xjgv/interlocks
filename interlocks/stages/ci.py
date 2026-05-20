@@ -151,14 +151,12 @@ def _run_post_coverage_gate(
         except SystemExit:
             record_result(
                 label,
-                label,
                 status="fail",
                 elapsed=time.monotonic() - start,
                 detail=None,
             )
             raise
         record_result(
-            label,
             label,
             status="ok",
             elapsed=time.monotonic() - start,
