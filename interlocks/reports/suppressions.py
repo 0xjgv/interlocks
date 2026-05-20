@@ -61,7 +61,7 @@ def print_suppressions_report() -> None:
     Suppression counts are advisory background data, not blocking output. They
     don't belong on the agent-default surface; pass ``--verbose`` to see them.
     """
-    if not ui.is_verbose():
+    if ui.is_json() or not ui.is_verbose():
         return
     results = _scan_suppressions()
     total = sum(len(v) for v in results.values())

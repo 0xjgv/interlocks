@@ -86,6 +86,16 @@ Feature: interlocks CLI surface area
     Then the output contains "── Next Actions"
     And the output contains "Close with `"
 
+  # req: cli-json-ci
+  Scenario: ci --json emits parseable JSON with passed/gates/elapsed
+    Given I run "interlocks ci --json" in a temp project
+    Then stdout is a single JSON object with keys "command,passed,elapsed_seconds,gates,skipped"
+
+  # req: cli-json-check
+  Scenario: check --json emits parseable JSON with passed/gates
+    Given I run "interlocks check --json" in a temp project
+    Then stdout is a single JSON object with keys "command,passed,elapsed_seconds,gates"
+
   # req: cli-explain-all
   Scenario: explain with no argument documents every command
     Given I run "interlocks explain"

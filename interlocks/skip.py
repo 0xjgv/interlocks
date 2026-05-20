@@ -74,12 +74,13 @@ def run_unless_skipped(
 
 
 def warn_skipped(label: str, detail: str | None = None) -> None:
-    from interlocks.runner import warn_skip  # noqa: PLC0415  (breaks runner↔skip cycle)
+    from interlocks.runner import record_skip, warn_skip  # noqa: PLC0415  (breaks cycle)
 
     message = f"{label}: skipped by global skip policy"
     if detail:
         message = f"{message} — {detail}"
-    warn_skip(message)
+    record_skip(label, detail or "skipped by global skip policy")
+    warn_skip(message)  # self-gated under --json
 
 
 def validate_cli_skip() -> None:

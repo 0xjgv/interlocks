@@ -6,13 +6,14 @@ uses — so this acts as an end-to-end guardrail on the public command surface.
 
 from __future__ import annotations
 
+import json
 import textwrap
 from pathlib import Path
 
 from pytest_bdd import given, parsers, scenarios, then
 
 from interlocks.cli import TASKS
-from tests.step_defs.conftest import run_interlock_text
+from tests.step_defs.conftest import make_tmp_project, run_interlock_in_cwd, run_interlock_text
 
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_cli.feature"))
 
@@ -53,6 +54,24 @@ def _write_traceability_gap_project(root: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+@given(
+    parsers.parse('I run "interlocks {subcmd}" in a temp project'),
+    target_fixture="cli_json_stdout",
+)
+def _run_interlock_json_temp(subcmd: str, tmp_path: Path) -> str:
+    # `make_tmp_project` scaffolds a minimal clean project; `run_interlock_in_cwd`
+    # injects `--verbose`, so this also exercises `--json` dominating `--verbose`.
+    project = make_tmp_project(tmp_path)
+    return run_interlock_in_cwd(project, *subcmd.split()).stdout
+
+
+@then(parsers.parse('stdout is a single JSON object with keys "{keys}"'))
+def _stdout_is_json_object(cli_json_stdout: str, keys: str) -> None:
+    payload = json.loads(cli_json_stdout)
+    for key in keys.split(","):
+        assert key in payload, f"missing key {key!r} in JSON: {payload!r}"
 
 
 @then(parsers.parse('the output lists the command "{name}"'))

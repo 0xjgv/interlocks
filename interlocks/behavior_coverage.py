@@ -271,6 +271,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     ),
     Behavior("stage-ci", "stage", "ci runs PR-grade verification", "interlocks.stages.ci:cmd_ci"),
     Behavior(
+        "cli-json-ci",
+        "stage",
+        "ci --json emits a parseable machine-readable object",
+        "interlocks.stages.ci:cmd_ci",
+    ),
+    Behavior(
+        "cli-json-check",
+        "stage",
+        "check --json emits a parseable machine-readable object",
+        "interlocks.stages.check:cmd_check",
+    ),
+    Behavior(
         "ci-no-venv-skip",
         "stage",
         "ci skips typecheck/coverage when the project has no environment",

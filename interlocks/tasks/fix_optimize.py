@@ -260,6 +260,10 @@ def _print_summary(
     out_rel: str,
     stats_source: str | None = None,
 ) -> None:
+    # Suppressed under `--json`: when `fix-optimize` runs inside a `--json` stage
+    # (e.g. `check`'s budgeted mutation) this human summary would pollute stdout.
+    if ui.is_json():
+        return
     stats_pairs = [("stats", stats_source)] if stats_source is not None else []
     ui.section(f"fix-optimize ({opts.base}, budget={opts.budget_name})")
     if not plan.candidates:

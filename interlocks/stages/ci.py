@@ -19,7 +19,14 @@ from interlocks.config import (
     load_config,
     project_env_ready,
 )
-from interlocks.runner import Task, print_stage_verdict, record_result, reset_results, run_tasks
+from interlocks.runner import (
+    Task,
+    print_stage_verdict,
+    record_result,
+    reset_results,
+    run_tasks,
+    stage_json,
+)
 from interlocks.skip import (
     SkipPolicy,
     current_skip_policy,
@@ -76,6 +83,15 @@ def cmd_ci() -> None:
         run_summary.flush(cfg)
         ui.stage_footer(elapsed)
         print_stage_verdict("ci", elapsed)
+        if ui.is_json():
+            ui.print_json(
+                stage_json(
+                    "ci",
+                    passed=exit_code == 0,
+                    elapsed=elapsed,
+                    evidence_path=str(cfg.ci_evidence_path),
+                )
+            )
 
 
 def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:

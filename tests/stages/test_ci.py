@@ -166,6 +166,43 @@ def test_ci_writes_runtime_evidence(tmp_project: Path) -> None:
     assert data["elapsed_seconds"] > 0
 
 
+def _run_ci_json(cwd: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "ci", "--json", *extra],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_ci_json_is_parseable(tmp_project: Path) -> None:
+    result = _run_ci_json(tmp_project)
+
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "ci"
+    assert isinstance(payload["passed"], bool)
+    assert isinstance(payload["elapsed_seconds"], (int, float))
+    assert isinstance(payload["gates"], list)
+    for gate in payload["gates"]:
+        assert {"name", "label", "status", "elapsed_seconds"} <= gate.keys()
+    assert isinstance(payload["skipped"], list)
+    assert payload["evidence_path"].endswith("ci.json")
+
+
+def test_ci_json_exit_code_matches_human_mode(tmp_project: Path) -> None:
+    # Exit-code parity: --json is a rendering mode, never a verdict change.
+    assert _run_ci(tmp_project).returncode == _run_ci_json(tmp_project).returncode
+
+
+def test_ci_json_dominates_verbose(tmp_project: Path) -> None:
+    # --json --verbose emits exactly one JSON object — no chrome, no streamed rows.
+    result = _run_ci_json(tmp_project, "--verbose")
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 1, f"expected one object, got {result.stdout!r}"
+    assert json.loads(lines[0])["command"] == "ci"
+
+
 def test_ci_evidence_records_context_env(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

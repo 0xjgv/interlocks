@@ -83,10 +83,25 @@ class GateResult:
 # one-line verdict in quiet mode. Labels mirror the row tag `[label]`.
 _RESULTS: list[GateResult] = []
 
+# Per-stage skip accumulator — gates skipped by SkipPolicy. Parallel to _RESULTS;
+# `ci`/`check` JSON read this for the `skipped` array.
+_SKIPS: list[dict[str, str]] = []
+
 
 def reset_results() -> None:
-    """Clear the stage-level task-result accumulator."""
+    """Clear the stage-level task-result and skip accumulators."""
     _RESULTS.clear()
+    _SKIPS.clear()
+
+
+def record_skip(name: str, reason: str) -> None:
+    """Record one skipped gate for the stage JSON `skipped` array."""
+    _SKIPS.append({"name": name, "reason": reason})
+
+
+def skips_snapshot() -> list[dict[str, str]]:
+    """Return the skip records since the last reset."""
+    return list(_SKIPS)
 
 
 def record_result(
@@ -125,6 +140,42 @@ def print_stage_verdict(stage_name: str, elapsed: float) -> None:
         return
     detail = ", ".join(fails)
     print(f"{stage_name}: FAILED — {detail} ({len(fails)} of {len(results)}) — {elapsed:.1f}s")
+
+
+def stage_json(
+    command: str,
+    *,
+    passed: bool,
+    elapsed: float,
+    evidence_path: str | None = None,
+) -> dict[str, object]:
+    """Build the `ci`/`check` `--json` object from the stage accumulators.
+
+    `gates` maps each recorded `GateResult`; `detail` is omitted when `None`.
+    `skipped` is the structured skip list. `evidence_path` is included only when
+    given (`ci` passes it, `check` does not).
+    """
+    gates: list[dict[str, object]] = []
+    for r in results_snapshot():
+        entry: dict[str, object] = {
+            "name": r.name,
+            "label": r.label,
+            "status": r.status,
+            "elapsed_seconds": round(r.elapsed, 3) if r.elapsed is not None else None,
+        }
+        if r.detail is not None:
+            entry["detail"] = r.detail
+        gates.append(entry)
+    obj: dict[str, object] = {
+        "command": command,
+        "passed": passed,
+        "elapsed_seconds": round(elapsed, 3),
+        "gates": gates,
+        "skipped": skips_snapshot(),
+    }
+    if evidence_path is not None:
+        obj["evidence_path"] = evidence_path
+    return obj
 
 
 def tool(name: str, *args: str) -> list[str]:
@@ -219,7 +270,13 @@ def fail(message: str) -> None:
 
 
 def warn_skip(message: str) -> None:
-    """Emit a 'skipped' status line for optional/absent gates."""
+    """Emit a 'skipped' status line for optional/absent gates.
+
+    Suppressed under `--json`: skips surface through the structured `skipped`
+    array, so stdout stays exactly one JSON object.
+    """
+    if ui.is_json():
+        return
     print(f"  {_glyph('⚠', YELLOW)} {message}")
 
 
@@ -391,7 +448,9 @@ def _execute(task: Task) -> RunResult:
 def _run_one(
     cmd: list[str], tag: str, *, env: tuple[tuple[str, str], ...] = ()
 ) -> tuple[int, str, str]:
-    if VERBOSE:
+    # `--json` dominates `--verbose`: never stream live subprocess output in JSON
+    # mode, so stdout stays exactly one JSON object.
+    if VERBOSE and not ui.is_json():
         return _run_one_streamed(cmd, tag, env=env)
     result = capture(cmd, env=env)
     return result.returncode, result.stdout, result.stderr
@@ -506,6 +565,8 @@ def _default_display(cmd: list[str]) -> str:
 def _dump_failure(result: RunResult, *, titled: bool) -> None:
     if VERBOSE:
         return  # already streamed while running
+    if ui.is_json():
+        return  # failure detail is carried structurally in the gate's `detail` field
     task = result.task
     with _PRINT_LOCK:
         if titled:

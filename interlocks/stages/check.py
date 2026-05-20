@@ -21,9 +21,12 @@ from interlocks.runner import (
     Task,
     arg_flag_value,
     print_stage_verdict,
+    record_skip,
     reset_results,
+    results_snapshot,
     run,
     run_tasks,
+    stage_json,
     warn_skip,
 )
 from interlocks.skip import (
@@ -110,6 +113,7 @@ def _test_task(scope_ref: str | None) -> Task | None:
         return None
     test = task_test()
     if test is None:
+        record_skip("test", "no test dir detected — run `interlocks init` to scaffold tests/")
         warn_skip("test: no test dir detected — run `interlocks init` to scaffold tests/")
     return test
 
@@ -149,6 +153,7 @@ def _run_advisory(
 
 
 def _skip_under_changed(label: str, reason: str) -> None:
+    record_skip(label, f"skipped under --changed — {reason}")
     warn_skip(f"{label}: skipped under --changed — {reason}")
 
 
@@ -160,3 +165,10 @@ def _print_footer(elapsed: float) -> None:
     """Always emit the one-line verdict; verbose adds the chrome footer."""
     ui.stage_footer(elapsed)
     print_stage_verdict("check", elapsed)
+    if ui.is_json():
+        ui.print_json(stage_json("check", passed=_check_passed(), elapsed=elapsed))
+
+
+def _check_passed() -> bool:
+    """True when no recorded gate failed — mirrors the human verdict's pass test."""
+    return all(r.status == "ok" for r in results_snapshot())

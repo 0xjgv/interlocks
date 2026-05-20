@@ -87,6 +87,16 @@ def _run_check(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_check_json(cwd: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "check", "--json", *extra],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def test_check_passes_on_clean_project(tmp_project: Path) -> None:
     result = _run_check(tmp_project)
 
@@ -98,6 +108,31 @@ def test_check_passes_on_clean_project(tmp_project: Path) -> None:
     assert "Suppressions" not in out
     assert "Completed in" not in out
     assert out.strip().splitlines()[-1].startswith("check: ok — ")
+
+
+def test_check_json_is_parseable(tmp_project: Path) -> None:
+    result = _run_check_json(tmp_project)
+
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "check"
+    assert isinstance(payload["passed"], bool)
+    assert isinstance(payload["elapsed_seconds"], (int, float))
+    assert isinstance(payload["gates"], list)
+    for gate in payload["gates"]:
+        assert {"name", "label", "status", "elapsed_seconds"} <= gate.keys()
+    assert isinstance(payload["skipped"], list)
+    assert "evidence_path" not in payload
+
+
+def test_check_json_exit_code_matches_human_mode(tmp_project: Path) -> None:
+    assert _run_check(tmp_project).returncode == _run_check_json(tmp_project).returncode
+
+
+def test_check_json_dominates_verbose(tmp_project: Path) -> None:
+    result = _run_check_json(tmp_project, "--verbose")
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert len(lines) == 1, f"expected one object, got {result.stdout!r}"
+    assert json.loads(lines[0])["command"] == "check"
 
 
 def test_check_passes_on_clean_project_verbose(tmp_project: Path) -> None:
