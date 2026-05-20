@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 from tests.step_defs.conftest import (
     interlocks_pythonpath_env,
     make_legacy_greenfield_project,
+    make_non_git_project,
     run_interlock_in_cwd,
 )
 
@@ -37,6 +39,50 @@ _WATCHED_SOURCES: tuple[str, ...] = ("src/legacy/views.py", "src/legacy/admin.py
 )
 def _greenfield_project(tmp_path: Path) -> Path:
     return make_legacy_greenfield_project(tmp_path)
+
+
+@given(
+    "a project directory that is not a git repo",
+    target_fixture="non_git_project",
+)
+def _non_git_project(tmp_path: Path) -> Path:
+    return make_non_git_project(tmp_path)
+
+
+@when(
+    parsers.parse('I run "interlocks {subcmd}" in the non-git project'),
+    target_fixture="greenfield_result",
+)
+def _run_in_non_git(non_git_project: Path, subcmd: str) -> subprocess.CompletedProcess[str]:
+    return run_interlock_in_cwd(
+        non_git_project, *shlex.split(subcmd), env=interlocks_pythonpath_env()
+    )
+
+
+@then("no .git directory was created in the non-git project")
+def _no_git_dir(non_git_project: Path) -> None:
+    assert not (non_git_project / ".git").exists(), (
+        f".git/ was created at {non_git_project / '.git'}"
+    )
+
+
+@when(
+    parsers.parse('I run "interlocks {subcmd}" in the greenfield project in default mode'),
+    target_fixture="greenfield_result",
+)
+def _run_in_greenfield_default_mode(
+    greenfield_project: Path, subcmd: str
+) -> subprocess.CompletedProcess[str]:
+    # Not run_interlock_in_cwd: that injects --verbose, which would mask the
+    # minimal-default polarity this scenario exists to assert.
+    return subprocess.run(
+        [sys.executable, "-m", "interlocks.cli", *shlex.split(subcmd)],
+        cwd=greenfield_project,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=interlocks_pythonpath_env(),
+    )
 
 
 @given("the greenfield project has no virtualenv")

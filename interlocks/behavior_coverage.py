@@ -493,6 +493,24 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.setup:cmd_setup",
     ),
     Behavior(
+        "setup-refuses-non-git",
+        "task",
+        "setup exits non-zero in a non-git directory without creating .git/",
+        "interlocks.tasks.setup:cmd_setup",
+    ),
+    Behavior(
+        "setup-default-summary",
+        "task",
+        "setup prints a one-line-per-artifact status block on success in default mode",
+        "interlocks.tasks.setup:cmd_setup",
+    ),
+    Behavior(
+        "setup-check-full-rows",
+        "task",
+        "setup --check prints every artifact row regardless of pass/fail mix",
+        "interlocks.tasks.setup:cmd_setup",
+    ),
+    Behavior(
         "greenfield-doctor",
         "doctor",
         "doctor flags missing adoption steps on an unadopted project",

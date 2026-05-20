@@ -226,6 +226,32 @@ def commit_legacy_dirty_state(project: Path, message: str = "introduce violation
     )
 
 
+_NON_GIT_PYPROJECT = textwrap.dedent(
+    """\
+    [project]
+    name = "no-repo"
+    version = "0"
+    requires-python = ">=3.11"
+    """
+)
+
+
+def make_non_git_project(tmp_path: Path) -> Path:
+    """Materialize a minimal project that is NOT a git repo.
+
+    Used by the setup-refusal scenario: a directory with a valid
+    ``pyproject.toml`` but no ``.git/`` — the phantom-hook footgun input.
+
+    Lands in a dedicated ``no-repo/`` subdir so the feature's ``Background``
+    (which ``git init``s ``tmp_path`` itself for ``greenfield_project``)
+    cannot leak a ``.git/`` into this project.
+    """
+    project = tmp_path / "no-repo"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(_NON_GIT_PYPROJECT, encoding="utf-8")
+    return project
+
+
 def make_tmp_project(tmp_path: Path) -> Path:
     """Materialize a minimal clean project under ``tmp_path``.
 

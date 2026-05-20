@@ -29,6 +29,7 @@ from interlocks.setup_state import (
     acceptance_scaffold_present,
     ci_workflow_present,
     interlock_config_block_present,
+    is_git_repo,
     setup_artifact_statuses,
 )
 
@@ -301,7 +302,7 @@ def _local_integration_rows(project_root: Path) -> list[CheckRow]:
 
 def _is_inert_setup_artifact(project_root: Path, label: str) -> bool:
     if label == "git hook":
-        return not (project_root / ".git").exists()
+        return not is_git_repo(project_root)
     if label == "claude hook":
         claude_dir = project_root / ".claude"
         return not claude_dir.is_dir() and not (claude_dir / "settings.json").is_file()

@@ -56,6 +56,30 @@ Feature: interlocks unblock flow on a legacy greenfield project
     Then the greenfield command exits non-zero
     And the greenfield output contains "missing/stale"
 
+  # req: setup-refuses-non-git
+  Scenario: `interlocks setup` refuses a directory that is not a git repository
+    Given a project directory that is not a git repo
+    When I run "interlocks setup" in the non-git project
+    Then the greenfield command exits non-zero
+    And no .git directory was created in the non-git project
+    And the greenfield output contains "git init"
+
+  # req: setup-default-summary
+  Scenario: `interlocks setup` prints a per-artifact summary on success in default mode
+    When I run "interlocks setup" in the greenfield project in default mode
+    Then the greenfield command exits 0
+    And the greenfield output contains "[git hook]"
+    And the greenfield output contains "[claude skill]"
+    And the greenfield output contains "installed"
+
+  # req: setup-check-full-rows
+  Scenario: `interlocks setup --check` prints every artifact row in default mode
+    Given I have run "interlocks setup" in the greenfield project
+    When I run "interlocks setup --check" in the greenfield project in default mode
+    Then the greenfield command exits 0
+    And the greenfield output contains "[git hook]"
+    And the greenfield output contains "installed"
+
   # req: greenfield-doctor
   Scenario: `interlocks doctor` flags the unadopted project
     When I run "interlocks doctor" in the greenfield project

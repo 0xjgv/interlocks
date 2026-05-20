@@ -75,6 +75,11 @@ def is_post_edit_command(command: object) -> bool:
     )
 
 
+def is_git_repo(project_root: Path) -> bool:
+    """True when ``project_root`` is a git repo or worktree (``.git`` dir or file present)."""
+    return (project_root / ".git").exists()
+
+
 def pre_commit_hook_installed(project_root: Path) -> bool:
     """True when ``.git/hooks/pre-commit`` exists and invokes ``interlocks pre-commit``."""
     hook = project_root / ".git" / "hooks" / "pre-commit"

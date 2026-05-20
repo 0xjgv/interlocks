@@ -19,6 +19,7 @@ from interlocks.setup_state import (
     advance_workflow_present,
     ci_artifact_statuses,
     ci_workflow_present,
+    is_git_repo,
     setup_artifact_statuses,
 )
 from interlocks.tasks.agents import install_agent_docs
@@ -73,6 +74,8 @@ def _parse_args() -> _SetupArgs:
 
 
 def _cmd_setup_install(project_root: Path) -> None:
+    if not is_git_repo(project_root):
+        fail_skip("setup: not a git repository — run `git init` first, then `interlocks setup`")
     ui.section("Setup")
     install_hooks(project_root)
     install_agent_docs(project_root)
@@ -209,4 +212,5 @@ def _render_status(statuses: list[SetupArtifactStatus]) -> None:
             status.target,
             "installed" if status.installed else "missing/stale",
             state=state,
+            force=True,
         )

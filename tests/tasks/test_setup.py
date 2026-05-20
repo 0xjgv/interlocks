@@ -4,17 +4,29 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+_PYPROJECT_BODY = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
+
+
+def _git_init(project: Path) -> None:
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main"], cwd=project, check=True, capture_output=True
+    )
+
+
+def _write_pyproject_no_git(project: Path) -> None:
+    """Materialize a project pyproject without a ``.git/`` — the non-git refusal input."""
+    (project / "pyproject.toml").write_text(_PYPROJECT_BODY, encoding="utf-8")
+
 
 def _write_pyproject(project: Path) -> None:
-    (project / "pyproject.toml").write_text(
-        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
-        encoding="utf-8",
-    )
+    _write_pyproject_no_git(project)
+    _git_init(project)
 
 
 def _run_setup(monkeypatch: pytest.MonkeyPatch, project: Path, *args: str) -> None:
@@ -53,6 +65,74 @@ def test_setup_check_fails_when_artifacts_missing(
     assert exc.value.code == 1
     assert "missing/stale" in out
     assert "Run `interlocks setup`" in out
+
+
+def test_setup_refuses_non_git_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_no_git(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path)
+
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "not a git repository" in out
+    assert "git init" in out
+    assert not (tmp_path / ".git").exists()
+
+
+def test_setup_default_mode_prints_per_artifact_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    _run_setup(monkeypatch, tmp_path)
+
+    out = capsys.readouterr().out
+    from interlocks.setup_state import SETUP_ARTIFACTS
+
+    for artifact in SETUP_ARTIFACTS:
+        assert f"[{artifact.label}]" in out, f"missing summary row for {artifact.label}"
+    # A fresh install reports every artifact as installed.
+    assert "installed" in out
+    assert "missing/stale" not in out
+
+
+def test_setup_check_prints_full_rows_on_mixed_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+    _run_setup(monkeypatch, tmp_path)  # install all artifacts
+    capsys.readouterr()  # drop install output
+
+    # Remove one artifact so the check sees a mixed pass/fail state.
+    (tmp_path / ".git" / "hooks" / "pre-commit").unlink()
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--check")
+
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "installed" in out  # an OK row is now visible
+    assert "missing/stale" in out  # the removed artifact's row
+
+
+def test_setup_check_prints_full_rows_when_all_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+    _run_setup(monkeypatch, tmp_path)
+    capsys.readouterr()
+
+    _run_setup(monkeypatch, tmp_path, "--check")  # exits 0, no SystemExit
+
+    out = capsys.readouterr().out
+    from interlocks.setup_state import SETUP_ARTIFACTS
+
+    for artifact in SETUP_ARTIFACTS:
+        assert f"[{artifact.label}]" in out
+    assert "missing/stale" not in out
 
 
 def test_setup_installs_hooks_agent_docs_and_skill(
@@ -216,10 +296,11 @@ def test_setup_check_succeeds_after_setup(
 
 
 def _write_pyproject_with_preset(project: Path, preset: str | None) -> None:
-    body = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
+    body = _PYPROJECT_BODY
     if preset is not None:
         body += f'\n[tool.interlocks]\npreset = "{preset}"\n'
     (project / "pyproject.toml").write_text(body, encoding="utf-8")
+    _git_init(project)
 
 
 def test_setup_check_recommends_progressive_when_unset(

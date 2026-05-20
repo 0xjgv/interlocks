@@ -130,14 +130,17 @@ def row(
     *,
     detail: str | None = None,
     state: State = "ok",
+    force: bool = False,
 ) -> None:
     """Three-column task row: `  [label]   command…   status`.
 
     `detail` (e.g., `"2 files reformatted"`) follows the status after ` · `.
     Long `command` is truncated to fit the available width; status is right-aligned.
     Minimal-default mode suppresses ok/warn rows — only failures carry signal for agents.
+    `force=True` bypasses the minimal-mode suppression (used by `setup`'s status
+    block so a successful install is not silent); `is_json()` still dominates.
     """
-    if is_json() or (not is_verbose() and state != "fail"):
+    if is_json() or (not force and not is_verbose() and state != "fail"):
         return
     width = _term_width()
     color = _STATE_COLORS[state]
