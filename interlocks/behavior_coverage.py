@@ -159,6 +159,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.evaluate:cmd_evaluate",
     ),
     Behavior(
+        "cli-json-evaluate",
+        "evaluate",
+        "evaluate --json emits a parseable machine-readable object",
+        "interlocks.tasks.evaluate:cmd_evaluate",
+    ),
+    Behavior(
+        "cli-json-trust",
+        "task",
+        "trust --json emits a parseable machine-readable object",
+        "interlocks.tasks.stats:cmd_trust",
+    ),
+    Behavior(
         "cli-explain-all",
         "cli",
         "explain with no argument documents every command",

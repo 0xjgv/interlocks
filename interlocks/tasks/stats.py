@@ -449,13 +449,11 @@ def cmd_trust() -> None:
         cmd_coverage(min_pct=0)
 
     if not Path(".coverage").exists():
-        warn_skip("trust: no coverage data — run `interlocks coverage` first")
-        ui.command_footer(start)
+        _trust_unavailable("no coverage data — run `interlocks coverage` first", start)
         return
     cov_file = generate_coverage_xml()
     if not cov_file.exists():
-        warn_skip("trust: coverage.xml not generated — run `interlocks coverage` first")
-        ui.command_footer(start)
+        _trust_unavailable("coverage.xml not generated — run `interlocks coverage` first", start)
         return
 
     cov_map = parse_coverage(cov_file)
@@ -490,11 +488,54 @@ def cmd_trust() -> None:
         diff_changed=diff_changed,
         diff_new_crap=[r for r in crap_rows if r.path in diff_changed],
     )
+    if ui.is_json():
+        ui.print_json(_trust_json(report))
+        if not no_trend:
+            _write_trust(cache, score)
+        return
     _render(report, verbose=VERBOSE)
 
     if not no_trend:
         _write_trust(cache, score)
     ui.command_footer(start)
+
+
+def _trust_unavailable(reason: str, start: float) -> None:
+    """Emit the trust-unavailable result in the active output mode."""
+    if ui.is_json():
+        ui.print_json({"command": "trust", "error": reason})
+        return
+    warn_skip(f"trust: {reason}")
+    ui.command_footer(start)
+
+
+def _trust_json(report: TrustReport) -> dict[str, object]:
+    """Serialise a TrustReport to the `trust --json` schema."""
+    _, _, _, verdict = _tier(report.score)
+    return {
+        "command": "trust",
+        "score": {"earned": round(report.score), "max": 100},
+        "verdict": verdict,
+        "coverage_pct": (round(report.coverage_pct) if report.coverage_pct is not None else None),
+        "crap_offenders": [
+            {
+                "symbol": f"{r.path}::{r.name}",
+                "ccn": r.ccn,
+                "coverage_pct": round(r.coverage * 100),
+                "crap": round(r.crap, 1),
+            }
+            for r in report.crap_rows
+        ],
+        "suspicious_tests": [
+            {
+                "path": t.file,
+                "loc": t.loc,
+                "asserts": t.assert_count,
+                "reason": ("no asserts" if t.assert_count == 0 else "assertion-light"),
+            }
+            for t in report.suspicious
+        ],
+    }
 
 
 def _coverage_pct(cov_map: dict[str, dict[int, int]]) -> float | None:

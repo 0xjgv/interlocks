@@ -96,6 +96,16 @@ Feature: interlocks CLI surface area
     Given I run "interlocks check --json" in a temp project
     Then stdout is a single JSON object with keys "command,passed,elapsed_seconds,gates"
 
+  # req: cli-json-evaluate
+  Scenario: evaluate --json emits parseable JSON with score/checks
+    Given I run "interlocks evaluate --json" in a temp project
+    Then stdout is a single JSON object with keys "command,score,verdict,checks"
+
+  # req: cli-json-trust
+  Scenario: trust --json emits parseable JSON in a coverage-less project
+    Given I run "interlocks trust --json" in a temp project
+    Then stdout is a single JSON object with keys "command,error"
+
   # req: cli-explain-all
   Scenario: explain with no argument documents every command
     Given I run "interlocks explain"

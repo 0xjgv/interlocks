@@ -87,9 +87,32 @@ def cmd_evaluate() -> None:
     start = time.monotonic()
     cfg = load_optional_config()
     if cfg is None:
-        _print_unreadable_config_report(start)
+        if ui.is_json():
+            ui.print_json({
+                "command": "evaluate",
+                "error": "pyproject.toml unreadable — cannot evaluate local checklist",
+            })
+        else:
+            _print_unreadable_config_report(start)
         return
     report = evaluate(cfg)
+
+    if ui.is_json():
+        ui.print_json({
+            "command": "evaluate",
+            "score": {"earned": report.total, "max": report.max_total},
+            "verdict": report.verdict,
+            "checks": [
+                {
+                    "name": item.category,
+                    "earned": item.score,
+                    "max": item.max_score,
+                    "rationale": item.detail,
+                }
+                for item in report.items
+            ],
+        })
+        return
 
     ui.command_banner("evaluate", cfg)
     ui.section("Checklist")

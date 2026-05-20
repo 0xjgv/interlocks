@@ -404,6 +404,37 @@ def test_cmd_trust_prints_report(
     assert "── Next Actions" in captured.out
 
 
+def test_trust_json_is_parseable(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "trust", "--json", "--no-trend"])
+    cmd_trust()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "trust"
+    assert set(payload["score"]) == {"earned", "max"}
+    assert payload["verdict"] in {"HEALTHY", "CAUTION", "RISKY"}
+    assert "coverage_pct" in payload
+    assert isinstance(payload["crap_offenders"], list)
+    assert isinstance(payload["suspicious_tests"], list)
+
+
+def test_trust_json_error_when_no_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    clear_cache()
+    monkeypatch.setattr(sys, "argv", ["interlocks", "trust", "--json"])
+    cmd_trust()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "trust"
+    assert "error" in payload
+
+
 def test_cmd_trust_writes_trend_file(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,

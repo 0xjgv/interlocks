@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import textwrap
 import time
 from pathlib import Path
@@ -11,7 +12,7 @@ import pytest
 
 from interlocks.config import InterlockConfig, load_config
 from interlocks.tasks import evaluate as evaluate_mod
-from interlocks.tasks.evaluate import EvaluationItem, cmd_evaluate, evaluate
+from interlocks.tasks.evaluate import _ITEM_COUNT, EvaluationItem, cmd_evaluate, evaluate
 from tests.conftest import TmpProjectFactory
 
 
@@ -868,3 +869,39 @@ def test_cmd_evaluate_exits_zero_even_for_low_score(
     monkeypatch.chdir(project)
 
     cmd_evaluate()
+
+
+def test_evaluate_json_is_parseable(
+    make_tmp_project: TmpProjectFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = _project(make_tmp_project, feature=None, workflow=None)
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "evaluate", "--json"])
+
+    cmd_evaluate()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "evaluate"
+    assert set(payload["score"]) == {"earned", "max"}
+    assert payload["verdict"] in {"HEALTHY", "GAPS", "NEEDS WORK"}
+    assert len(payload["checks"]) == _ITEM_COUNT
+    for check in payload["checks"]:
+        assert set(check.keys()) == {"name", "earned", "max", "rationale"}
+
+
+def test_evaluate_json_error_when_pyproject_unreadable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text("not = [valid\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "evaluate", "--json"])
+
+    cmd_evaluate()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "evaluate"
+    assert "error" in payload
