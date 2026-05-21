@@ -86,6 +86,23 @@ Feature: interlocks unblock flow on a legacy greenfield project
     Then the greenfield output contains "Setup Checklist"
     And the greenfield output names at least one missing adoption artifact
 
+  # req: doctor-default-shows-gaps
+  Scenario: `interlocks doctor` names its gaps in default mode
+    When I run "interlocks doctor" in the greenfield project in default mode
+    Then the greenfield command exits 0
+    And the greenfield output names at least one missing adoption gap inline
+
+  # req: doctor-strict-exit
+  Scenario: `interlocks doctor --strict` exits non-zero when blocked
+    Given the greenfield project has no virtualenv
+    When I run "interlocks doctor --strict" in the greenfield project
+    Then the greenfield command exits non-zero
+
+  # req: doctor-no-uvx-path-warn
+  Scenario: `interlocks doctor --verbose` does not warn that uvx tools are off PATH
+    When I run "interlocks doctor" in the greenfield project
+    Then the greenfield output does not contain "tool not found on PATH: ruff"
+
   # req: ci-no-venv-skip
   Scenario: `interlocks ci` skips dependency gates without a project environment
     Given the greenfield project has no virtualenv

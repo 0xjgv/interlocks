@@ -52,6 +52,22 @@ def _run_doctor_json(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_doctor_strict(cwd: Path) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{_INTERLOCK_PARENT}{os.pathsep}{existing}" if existing else _INTERLOCK_PARENT
+    )
+    return subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "doctor", "--strict"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
 def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     result = _run_doctor(tmp_path)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -301,6 +317,161 @@ def _run_cmd_doctor(
     finally:
         clear_cache()
     return capsys.readouterr().out
+
+
+def _run_cmd_doctor_default_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> str:
+    """Run ``cmd_doctor`` in *default* (non-verbose) mode.
+
+    The autouse ``_isolate_test_env`` fixture forces ``ui.is_verbose`` to return
+    True so chrome assertions keep working; default-mode render tests re-patch it
+    back to False to exercise the ``else`` branch of ``cmd_doctor``.
+    """
+    from interlocks import ui as interlock_ui
+
+    monkeypatch.setattr(interlock_ui, "is_verbose", lambda: False)
+    return _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+
+
+def test_doctor_default_mode_names_warn_gaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Default mode names the warn-row gaps inline, not just the gap count."""
+    _write_probe_project(tmp_path)  # no preset, no CI workflow -> warn rows
+    stub_project_venv(tmp_path)
+
+    out = _run_cmd_doctor_default_mode(tmp_path, monkeypatch, capsys)
+    # Verdict line still present...
+    assert out.startswith("doctor: ready (")
+    # ...and the warn-row gaps are now named inline (no --verbose needed).
+    # The bare probe project's first warn rows are preset + interlocks cfg.
+    assert "preset: using dataclass defaults" in out
+    assert "interlocks cfg: defaults apply" in out
+
+
+def test_doctor_default_mode_caps_gaps_at_three(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With more than 3 warn rows, default mode prints 3 bullets + an overflow bullet."""
+    _write_probe_project(tmp_path)  # bare probe project: many warn rows, no fails
+    stub_project_venv(tmp_path)
+
+    out = _run_cmd_doctor_default_mode(tmp_path, monkeypatch, capsys)
+    gap_bullets = [
+        line
+        for line in out.splitlines()
+        if line.startswith("  - ") and "more, run --verbose" not in line
+    ]
+    # 3 capped gap bullets (the bare probe project has >3 warn rows).
+    assert len(gap_bullets) == 3, out
+    assert "more, run --verbose for the full list" in out
+
+
+def test_doctor_default_mode_blockers_uncapped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """failures + blockers print uncapped even when there are more than 3."""
+    # Missing pyproject + src + test + project env yields >=3 blockers.
+    (tmp_path / "pyproject.toml").write_text(
+        "\n".join([
+            "[project]",
+            'name = "probe"',
+            'version = "0.0.0"',
+            "",
+            "[tool.interlocks]",
+            'src_dir = "src"',
+            'test_dir = "tests"',
+        ]),
+        encoding="utf-8",
+    )
+    out = _run_cmd_doctor_default_mode(tmp_path, monkeypatch, capsys)
+    assert out.startswith("doctor: blocked")
+    assert "missing source path" in out
+    assert "missing test path" in out
+    assert "no project environment" in out
+    # No blocker is hidden behind an overflow line.
+    assert "more, run --verbose" not in out.split("\n", 1)[1] or all(
+        b in out for b in ("missing source path", "missing test path")
+    )
+
+
+def test_doctor_strict_exits_two_when_blocked(tmp_path: Path) -> None:
+    """--strict + a blocked verdict (no pyproject) exits code 2."""
+    result = _run_doctor_strict(tmp_path)
+    assert result.returncode == 2, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert result.stdout.startswith("doctor: blocked")
+
+
+def test_doctor_strict_exits_zero_when_ready(tmp_path: Path) -> None:
+    """--strict on a healthy project stays exit 0 — strict only escalates `blocked`."""
+    (tmp_path / "probe").mkdir()
+    (tmp_path / "probe" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n',
+        encoding="utf-8",
+    )
+    stub_project_venv(tmp_path)
+    result = _run_doctor_strict(tmp_path)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+
+
+def test_doctor_without_strict_exits_zero_when_blocked(tmp_path: Path) -> None:
+    """Plain doctor stays advisory: a blocked verdict still exits 0."""
+    result = _run_doctor(tmp_path)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert result.stdout.startswith("doctor: blocked")
+
+
+def test_doctor_strict_in_process_raises_system_exit_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """In-process: --strict argv + blocked state raises SystemExit(2)."""
+    monkeypatch.chdir(tmp_path)  # no pyproject -> blocked
+    monkeypatch.setattr(sys, "argv", ["interlocks", "doctor", "--strict"])
+
+    from interlocks.config import clear_cache
+    from interlocks.tasks.doctor import cmd_doctor
+
+    clear_cache()
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            cmd_doctor()
+    finally:
+        clear_cache()
+    assert excinfo.value.code == 2
+    _ = capsys.readouterr()  # drain captured output
+
+
+def test_doctor_strict_unreadable_pyproject_still_exits_one(tmp_path: Path) -> None:
+    """failures-path precedence: an unreadable pyproject exits 1 even with --strict."""
+    # Invalid TOML -> tomllib.TOMLDecodeError -> failures populated -> sys.exit(1) first.
+    (tmp_path / "pyproject.toml").write_text("this is not = valid = toml", encoding="utf-8")
+    result = _run_doctor_strict(tmp_path)
+    assert result.returncode == 1, f"stdout={result.stdout}\nstderr={result.stderr}"
+
+
+def test_doctor_verbose_omits_uvx_path_warnings(tmp_path: Path) -> None:
+    """doctor --verbose no longer warns that uvx-dispatched tools are off PATH."""
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{_INTERLOCK_PARENT}{os.pathsep}{existing}" if existing else _INTERLOCK_PARENT
+    )
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "doctor", "--verbose"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    # The false uvx-tool PATH warnings are gone...
+    assert "tool not found on PATH" not in result.stdout
+    # ...but the real, unconditional mutation-budget warning survives.
+    assert "default check mutation is budgeted by author diff" in result.stdout
 
 
 def test_doctor_detects_git_pre_commit_hook(

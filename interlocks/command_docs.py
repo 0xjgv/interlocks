@@ -554,10 +554,14 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=False,
         outputs=(),
         exit_codes=(
-            (0, "no blockers"),
-            (1, "blockers present"),
+            (0, "advisory — no blockers, or blocked without --strict"),
+            (1, "pyproject.toml unreadable"),
+            (2, "blocked, with --strict"),
         ),
-        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        flags=(
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            FlagSpec("--strict", "boolean", "off", "exit non-zero when blocked"),
+        ),
     ),
     CommandDoc(
         "setup",

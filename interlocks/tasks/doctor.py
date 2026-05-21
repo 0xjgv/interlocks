@@ -40,17 +40,6 @@ if TYPE_CHECKING:
     from interlocks.runner import Task
     from interlocks.ui import State
 
-_BUNDLED_TOOLS = (
-    "ruff",
-    "basedpyright",
-    "coverage",
-    "mutmut",
-    "pytest",
-    "pip-audit",
-    "deptry",
-    "import-linter",
-    "lizard",
-)
 _INERT_DETAIL = "not applicable"
 
 
@@ -96,9 +85,12 @@ def cmd_doctor() -> None:
         print(f"doctor: {status}")
         for line in (*report.failures, *report.blockers):
             print(f"  - {line}")
+        _print_capped(_gap_lines(report.rows), limit=3)
 
     if report.failures:
         sys.exit(1)
+    if report.is_blocked and "--strict" in sys.argv:
+        sys.exit(2)
 
 
 def _build_doctor_report() -> _DoctorReport:
@@ -177,6 +169,29 @@ def _readiness(is_blocked: bool, gap_count: int) -> tuple[str, str]:
     return "ready", "ready to try `interlocks check`"
 
 
+def _print_capped(items: list[str], limit: int = 3) -> None:
+    """Print up to ``limit`` bullets, then a single overflow bullet if truncated.
+
+    Mirrors ``ui.message_list``'s two-space indent and ``- `` bullet so default-mode
+    output aligns visually with the verbose Blockers/Warnings sections. The overflow
+    line is itself a bullet.
+    """
+    for line in items[:limit]:
+        print(f"  - {line}")
+    if len(items) > limit:
+        print(f"  - …{len(items) - limit} more, run --verbose for the full list")
+
+
+def _gap_lines(rows: list[CheckRow]) -> list[str]:
+    """One formatted line per ``warn``-state ``CheckRow``, in row order.
+
+    These are the advisory gaps the ``ready (N gap[s])`` count is built from
+    (``gap_count = sum(1 for r in rows if r.state == "warn")``), so the printed
+    detail and the verdict count always agree.
+    """
+    return [f"{row.label}: {row.detail}" for row in rows if row.state == "warn"]
+
+
 def _safe_load_config(pyproject_path: Path, failures: list[str]) -> InterlockConfig | None:
     """Load config, recording a failure when ``pyproject.toml`` is unreadable."""
     try:
@@ -217,10 +232,6 @@ def _collect_tool_warnings(
     )
     if cfg is not None and cfg.test_invoker == "uv" and shutil.which("uv") is None:
         blockers.append("test_invoker is `uv`, but `uv` was not found on PATH")
-
-    for name in _BUNDLED_TOOLS:
-        if shutil.which(name) is None:
-            warnings.append(f"tool not found on PATH: {name}")
 
 
 def _collect_setup_rows(

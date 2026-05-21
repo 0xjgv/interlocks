@@ -213,5 +213,33 @@ def _doctor_names_gap(greenfield_result: subprocess.CompletedProcess[str]) -> No
     )
 
 
+@then("the greenfield output names at least one missing adoption gap inline")
+def _doctor_names_gap_inline(greenfield_result: subprocess.CompletedProcess[str]) -> None:
+    """Default-mode doctor must print the gap detail, not just `ready (N gap)`.
+
+    The greenfield project has no preset, no [tool.interlocks] block, no git/claude
+    hooks, no CI workflow, and no acceptance scaffold — so at least one `warn`-row
+    gap line is emitted by the default render's `_print_capped(_gap_lines(...))`.
+    """
+    combined = greenfield_result.stdout + greenfield_result.stderr
+    needles = (
+        "ci workflow: not detected",
+        "preset: using dataclass defaults",
+        "interlocks cfg: defaults apply",
+        "acceptance: not wired",
+        "run `interlocks setup`",
+    )
+    assert any(n in combined for n in needles), (
+        f"expected an inline gap line (one of {needles!r}) in default-mode doctor "
+        f"output; got:\n{combined}"
+    )
+
+
+@then(parsers.parse('the greenfield output does not contain "{needle}"'))
+def _output_not_contains(greenfield_result: subprocess.CompletedProcess[str], needle: str) -> None:
+    combined = greenfield_result.stdout + greenfield_result.stderr
+    assert needle not in combined, f"expected {needle!r} absent, but found it in:\n{combined}"
+
+
 def _detail(result: subprocess.CompletedProcess[str]) -> str:
     return f"exit={result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"

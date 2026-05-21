@@ -213,6 +213,24 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.doctor:cmd_doctor",
     ),
     Behavior(
+        "doctor-default-shows-gaps",
+        "doctor",
+        "doctor names its gaps in default-mode output",
+        "interlocks.tasks.doctor:cmd_doctor",
+    ),
+    Behavior(
+        "doctor-strict-exit",
+        "doctor",
+        "doctor --strict exits non-zero when blocked",
+        "interlocks.tasks.doctor:cmd_doctor",
+    ),
+    Behavior(
+        "doctor-no-uvx-path-warn",
+        "doctor",
+        "doctor does not warn that uvx-dispatched tools are off PATH",
+        "interlocks.tasks.doctor:cmd_doctor",
+    ),
+    Behavior(
         "init-empty-dir",
         "init",
         "init scaffolds an empty project",
