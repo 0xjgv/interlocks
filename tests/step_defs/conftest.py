@@ -290,11 +290,15 @@ def run_interlock_in_cwd(
 
     Injects ``--verbose`` so chrome-asserting Gherkin scenarios keep working
     under the new minimal-default polarity (rows/sections/footers). Scenarios
-    that explicitly need to assert minimal output overwrite ``args`` themselves.
+    that need to assert true minimal-default output pass the harness-only
+    ``--default-mode`` sentinel: it suppresses the ``--verbose`` injection and is
+    stripped before the CLI sees it (``--quiet`` was removed from the CLI).
     """
-    extra = ("--verbose",) if "--verbose" not in args and "--quiet" not in args else ()
+    cli_args = tuple(a for a in args if a != "--default-mode")
+    inject_verbose = "--verbose" not in cli_args and len(cli_args) == len(args)
+    extra = ("--verbose",) if inject_verbose else ()
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", *args, *extra],
+        [sys.executable, "-m", "interlocks.cli", *cli_args, *extra],
         cwd=cwd,
         capture_output=True,
         text=True,

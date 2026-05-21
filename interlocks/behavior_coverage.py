@@ -306,6 +306,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.stages.check:cmd_check",
     ),
     Behavior(
+        "check-default-gate-rows",
+        "stage",
+        "check prints per-gate rows in default mode",
+        "interlocks.stages.check:cmd_check",
+    ),
+    Behavior(
         "stage-pre-commit",
         "stage",
         "pre-commit checks staged Python files",

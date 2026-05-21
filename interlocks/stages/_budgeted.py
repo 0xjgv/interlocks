@@ -30,7 +30,7 @@ def run_budgeted_mutation(*, base: str, emit_legacy_rows: bool) -> None:
         verify_cmd=("python", "-c", "pass"),
     )
     if emit_legacy_rows:
-        ui.row("fix", "budgeted ruff lint/format mutation", "ok")
-        ui.row("format", "budgeted ruff lint/format mutation", "ok")
+        ui.gate_row("fix", "budgeted ruff lint/format mutation", "ok")
+        ui.gate_row("format", "budgeted ruff lint/format mutation", "ok")
         record_result("fix", status="ok", elapsed=None, detail=None)
         record_result("format", status="ok", elapsed=None, detail=None)

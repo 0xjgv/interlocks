@@ -163,6 +163,24 @@ def row(
     print(f"{prefix}{trimmed}{padding}{suffix}")
 
 
+def gate_row(
+    label: str,
+    command: str,
+    status: str,
+    *,
+    detail: str | None = None,
+    state: State = "ok",
+) -> None:
+    """Stage gate row — always shown in default mode; `is_json()` still dominates.
+
+    Unlike `row`, an `ok`/`warn` `gate_row` is *not* verbose-gated: stage gates
+    (`check`/`ci`/`pre-commit`/`nightly`) emit one row per gate so a slow run
+    shows progress instead of looking hung. Delegates to `row(..., force=True)`,
+    reusing its column/truncation/color logic; `is_json()` still suppresses it.
+    """
+    row(label, command, status, detail=detail, state=state, force=True)
+
+
 def kv_block(pairs: list[tuple[str, str]], *, indent: str = "  ", gap: int = 1) -> None:
     """Aligned `key    value` block. Empty `pairs` is a no-op."""
     if not pairs:

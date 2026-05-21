@@ -14,6 +14,17 @@ Feature: interlocks stage commands on a minimal inline project
     And the stage output contains "[fix]"
     And the stage output contains "[test]"
 
+  # req: check-default-gate-rows
+  Scenario: `interlocks check` prints a per-gate row table in default mode
+    Given a minimal tmp project
+    When I run "interlocks check --default-mode" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "[fix]"
+    And the stage output contains "[format]"
+    And the stage output contains "[test]"
+    And the stage output does not contain "plan .lintfix/optimize.json"
+    And the stage output does not contain "Quality Checks"
+
   # req: stage-pre-commit
   Scenario: `interlocks pre-commit` no-ops when nothing is staged
     Given a minimal tmp project

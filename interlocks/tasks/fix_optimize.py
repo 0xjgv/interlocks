@@ -268,7 +268,14 @@ def _print_summary(
     ui.section(f"fix-optimize ({opts.base}, budget={opts.budget_name})")
     if not plan.candidates:
         ui.row("fix-optimize", "(no candidates)", "ok", state="ok")
-        ui.kv_block([("plan", out_rel), *stats_pairs])
+        return
+
+    # One default-mode gate row joins the stage table; the rich SELECTED /
+    # NOT SELECTED / plan kv_blocks below stay verbose-only for debugging.
+    # `ui.kv_block` is ungated, so the rich blocks need an explicit verbose
+    # guard or they would leak into default-mode stdout.
+    ui.gate_row("fix-optimize", f"plan written → {out_rel}", "ok", state="ok")
+    if not ui.is_verbose():
         return
 
     if selection.selected:

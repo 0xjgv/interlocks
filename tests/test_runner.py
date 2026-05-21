@@ -284,7 +284,7 @@ def test_truncate_dump_env_escape_disables_cap(monkeypatch: pytest.MonkeyPatch) 
     assert _truncate_dump(text) == text
 
 
-def test_minimal_default_suppresses_ok_rows_still_records_results(
+def test_minimal_default_shows_ok_gate_rows_and_records_results(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Override conftest's verbose-on default to exercise minimal-default polarity.
@@ -295,8 +295,9 @@ def test_minimal_default_suppresses_ok_rows_still_records_results(
         _python_task("Bravo", "print('b')"),
     ])
     out = _strip(capsys.readouterr().out)
-    assert "[alpha]" not in out
-    assert "[bravo]" not in out
+    # gate_row prints one row per running gate even in minimal-default mode.
+    assert "[alpha]" in out
+    assert "[bravo]" in out
     # Completion order is non-deterministic under parallel exec; compare as a set.
     snap = results_snapshot()
     assert {(r.label, r.status) for r in snap} == {("alpha", "ok"), ("bravo", "ok")}
@@ -315,7 +316,7 @@ def test_minimal_default_still_shows_fail_rows(
     with pytest.raises(SystemExit):
         run_tasks(tasks)
     out = _strip(capsys.readouterr().out)
-    assert "[good]" not in out
+    assert "[good]" in out
     assert "[bad]" in out
     assert "failed" in out
     snap = results_snapshot()

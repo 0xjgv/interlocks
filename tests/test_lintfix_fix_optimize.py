@@ -466,6 +466,38 @@ def test_print_summary_candidates_but_nothing_selected(
     assert "(none)" in out
 
 
+@pytest.fixture
+def default_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No --verbose: exercises true default-mode output. The autouse
+    # `_isolate_test_env` fixture forces `ui.is_verbose` True for in-process
+    # tests; minimal-mode tests re-patch it to False themselves.
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize"])
+    monkeypatch.setattr(fix_optimize_mod.ui, "is_verbose", lambda: False)
+
+
+def test_print_summary_no_candidates_silent_in_default_mode(
+    default_mode: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fix_optimize_mod._print_summary(_plan(), _selection(), _opts(), ".lintfix/optimize.json")
+    out = capsys.readouterr().out
+    # Empty plan: no orphaned `plan` kv_block line leaks into default-mode stdout.
+    assert "plan" not in out
+    assert ".lintfix/optimize.json" not in out
+
+
+def test_print_summary_candidates_emit_gate_row_in_default_mode(
+    default_mode: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plan = _plan(candidates=(_planned_candidate(rule="I001"),))
+    fix_optimize_mod._print_summary(plan, _selection(), _opts(), ".lintfix/optimize.json")
+    out = capsys.readouterr().out
+    # Populated plan: exactly one labelled gate row, no orphaned kv_block keys.
+    assert "[fix-optimize]" in out
+    assert "plan written → .lintfix/optimize.json" in out
+    assert "author cost" not in out
+    assert "total value" not in out
+
+
 # --- _apply_selection -----------------------------------------------------
 
 

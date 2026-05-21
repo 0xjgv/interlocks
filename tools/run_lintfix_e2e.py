@@ -159,7 +159,9 @@ def scenario_fix_plan_preview(context: ScenarioContext) -> None:
 
 def scenario_fix_optimize_preview(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-optimize-preview")
-    result = run_cli(repo, "fix-optimize", "--base=HEAD", repo_root=context.repo_root)
+    # --verbose: the rich SELECTED / NOT SELECTED summary (asserted below) is
+    # verbose-gated; default mode emits only the one-line gate row.
+    result = run_cli(repo, "fix-optimize", "--base=HEAD", "--verbose", repo_root=context.repo_root)
     _expect_success(result)
     _expect_output(result, "I001", "W292", "F401", "policy mode is escrow")
 

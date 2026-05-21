@@ -64,6 +64,34 @@ def test_failure_row_prints_in_minimal_mode(
     assert "failed" in out
 
 
+def test_gate_row_prints_ok_in_minimal_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A plain `ok` row is verbose-gated; `gate_row` is not — stage gates always show.
+    monkeypatch.setattr(ui, "is_verbose", lambda: False)
+
+    ui.row("lint", "ruff check", "ok", state="ok")
+    assert capsys.readouterr().out == ""
+
+    ui.gate_row("lint", "ruff check", "ok", state="ok")
+    out = capsys.readouterr().out
+    assert "[lint]" in out
+    assert "ok" in out
+
+
+def test_gate_row_silent_under_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # --json dominates: gate_row stays silent so stdout is exactly one JSON object.
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--json"])
+
+    ui.gate_row("lint", "ruff check", "ok", state="ok")
+
+    assert capsys.readouterr().out == ""
+
+
 def test_plain_len_strips_ansi_escape_sequences() -> None:
     assert ui._plain_len("\x1b[31mx\x1b[0m") == 1
 

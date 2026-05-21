@@ -510,7 +510,7 @@ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
         detail=_failure_detail(result) if state == "fail" else None,
     )
     with _PRINT_LOCK:
-        ui.row(label, command, status, detail=detail, state=state)
+        ui.gate_row(label, command, status, detail=detail, state=state)
 
 
 def _failure_detail(result: RunResult) -> str | None:

@@ -175,3 +175,11 @@ def _stage_exits(stage_result: subprocess.CompletedProcess[str], code: int) -> N
 def _stage_output_contains(stage_result: subprocess.CompletedProcess[str], fragment: str) -> None:
     combined = stage_result.stdout + stage_result.stderr
     assert fragment in combined, f"expected {fragment!r} in stage output; got:\n{combined}"
+
+
+@then(parsers.parse('the stage output does not contain "{fragment}"'))
+def _stage_output_excludes(stage_result: subprocess.CompletedProcess[str], fragment: str) -> None:
+    combined = stage_result.stdout + stage_result.stderr
+    assert fragment not in combined, (
+        f"expected {fragment!r} absent from stage output; got:\n{combined}"
+    )

@@ -102,11 +102,21 @@ def test_check_passes_on_clean_project(tmp_project: Path) -> None:
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     out = result.stdout
-    # Minimal-default: green check emits a single verdict line, no chrome.
+    # Minimal-default: no chrome, but each running gate now emits one row.
     assert "Quality Checks" not in out
     assert "Parallel" not in out
     assert "Suppressions" not in out
     assert "Completed in" not in out
+    # Per-gate rows print in default mode (no more near-silent run).
+    assert "[fix]" in out
+    assert "[format]" in out
+    assert "[test]" in out
+    # The fix-optimize summary leak is gone: no bare `plan` line, no orphaned
+    # kv_block keys from the verbose-only SELECTED / plan blocks.
+    assert "plan .lintfix/optimize.json" not in out
+    assert "author cost" not in out
+    assert "total value" not in out
+    assert "total cost" not in out
     assert out.strip().splitlines()[-1].startswith("check: ok — ")
 
 
