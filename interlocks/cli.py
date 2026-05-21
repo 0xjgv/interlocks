@@ -82,15 +82,14 @@ def cmd_help(*, advanced: bool = False) -> None:
         ui.section("Commands")
         width = max(len(name) for name in TASKS) + 2
         for group_name, group in TASK_GROUPS:
-            print()
-            print(f"{group_name}:")
+            ui.group_header(group_name)
             for name, (_, description) in group.items():
                 _print_command_row(name, description, width)
     else:
         names = _help_group_command_names()
         width = max(len(name) for name in names) + 2
         for group_name, group_names in _HELP_GROUPS:
-            ui.section(group_name)
+            ui.group_header(group_name)
             for name in group_names:
                 _, description = TASKS[name]
                 _print_command_row(name, description, width)

@@ -92,6 +92,34 @@ def test_gate_row_silent_under_json(
     assert capsys.readouterr().out == ""
 
 
+def test_group_header_prints_in_minimal_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A `section` header is verbose-gated; `group_header` is not — first-touch
+    # navigation labels must render at default verbosity.
+    monkeypatch.setattr(ui, "is_verbose", lambda: False)
+
+    ui.section("Start here")
+    assert capsys.readouterr().out == ""
+
+    ui.group_header("Start here")
+    out = capsys.readouterr().out
+    assert out == "\nStart here:\n"
+
+
+def test_group_header_silent_under_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # --json dominates: group_header stays silent so stdout is exactly one JSON object.
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "--json"])
+
+    ui.group_header("Start here")
+
+    assert capsys.readouterr().out == ""
+
+
 def test_plain_len_strips_ansi_escape_sequences() -> None:
     assert ui._plain_len("\x1b[31mx\x1b[0m") == 1
 

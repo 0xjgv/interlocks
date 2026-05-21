@@ -98,7 +98,9 @@ def test_cmd_help_prints_usage_and_groups(capsys: pytest.CaptureFixture[str]) ->
     assert "── More" in out
     assert "help --advanced" in out
     for group_name, names in _DEFAULT_HELP_GROUPS:
-        assert f"── {group_name}" in out
+        # Group labels route through the always-print `group_header`, not the
+        # verbose-gated `section` — so they render at default verbosity.
+        assert f"{group_name}:" in out
         for name in names:
             assert f"[{name}]" in out
     assert "[evaluate]" not in out
