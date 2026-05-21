@@ -153,6 +153,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.cli:main",
     ),
     Behavior(
+        "cli-help-groups-default",
+        "cli",
+        "default-mode help shows curated group headers",
+        "interlocks.cli:main",
+    ),
+    Behavior(
+        "cli-help-detected-summary",
+        "cli",
+        "default-mode help shows a one-line Detected summary",
+        "interlocks.cli:main",
+    ),
+    Behavior(
         "cli-evaluate-guidance",
         "evaluate",
         "evaluate prints actionable closure guidance",
@@ -185,13 +197,19 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     Behavior(
         "cli-explain-all",
         "cli",
-        "explain with no argument documents every command",
+        "explain --all documents every command",
         "interlocks.tasks.explain:cmd_explain",
     ),
     Behavior(
         "cli-explain-one",
         "cli",
         "explain a single command prints just that command's prose",
+        "interlocks.tasks.explain:cmd_explain",
+    ),
+    Behavior(
+        "cli-explain-default-is-index",
+        "cli",
+        "explain with no argument prints a grouped command index",
         "interlocks.tasks.explain:cmd_explain",
     ),
     Behavior(

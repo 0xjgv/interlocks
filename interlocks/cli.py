@@ -285,9 +285,29 @@ def _print_command_row(name: str, description: str, width: int) -> None:
     print(f"  {tag:<{width}}  {description}{alias_suffix(name)}")
 
 
+def _detected_summary_line(cfg: InterlockConfig) -> str:
+    """One-line `Detected:` summary for default-mode `help`.
+
+    Four fields — preset, src, tests, runner — kept naturally short because
+    `src_dir_arg` / `test_dir_arg` are project-root-relative (typically one
+    segment). "Under 80 columns" is documented intent, not an enforced invariant.
+    """
+    return (
+        f"Detected: preset={cfg.preset or '(none)'}, "
+        f"src={cfg.src_dir_arg}, "
+        f"tests={cfg.test_dir_arg}, "
+        f"runner={cfg.test_runner}"
+    )
+
+
 def _print_detected_block(cfg: InterlockConfig | None) -> None:
-    if cfg is None:
+    # `load_optional_config` returns `None` only on a malformed/unreadable
+    # pyproject.toml; a *missing* one still yields a fallback config rooted at
+    # CWD, so the "no pyproject.toml" signal is the on-disk file check.
+    if cfg is None or not (cfg.project_root / "pyproject.toml").is_file():
+        print("Detected: (no pyproject.toml)")
         return
+    print(_detected_summary_line(cfg))
     if not ui.is_verbose():
         return
     ui.section("Detected")

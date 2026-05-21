@@ -523,6 +523,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "explanation printed"),
             (1, "unknown command or unexpected option"),
         ),
+        flags=(FlagSpec("--all", "boolean", "off", "render every command's full prose block"),),
     ),
     # ── Utility ──────────────────────────────────────────────────────────
     CommandDoc(

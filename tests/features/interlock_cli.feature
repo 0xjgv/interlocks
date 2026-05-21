@@ -26,6 +26,15 @@ Feature: interlocks CLI surface area
     And the output lists the command "version"
     And the output contains "help --advanced"
 
+  # req: cli-help-groups-default
+  # req: cli-help-detected-summary
+  Scenario: default-mode help shows group headers and a one-line Detected summary
+    Given I run "interlocks help --default-mode"
+    Then the output contains "Start here:"
+    And the output contains "Common gates:"
+    And the output contains "Detected:"
+    And the output does not contain "── Thresholds"
+
   # req: cli-commands-advanced
   Scenario: Advanced help lists every command including internal and alias commands
     Given I run "interlocks help --advanced"
@@ -117,8 +126,8 @@ Feature: interlocks CLI surface area
     Then stdout is a single JSON object with keys "command,preset,pyproject_path,keys"
 
   # req: cli-explain-all
-  Scenario: explain with no argument documents every command
-    Given I run "interlocks explain"
+  Scenario: explain --all documents every command
+    Given I run "interlocks explain --all"
     Then the output lists every registered command
     And the output contains "When to use"
     And the output contains "Mutates"
@@ -129,3 +138,10 @@ Feature: interlocks CLI surface area
     Given I run "interlocks explain coverage"
     Then the output contains "When to use"
     And the output does not contain "[fix]"
+
+  # req: cli-explain-default-is-index
+  Scenario: explain with no argument prints a grouped command index
+    Given I run "interlocks explain"
+    Then the output lists every registered command
+    And the output contains "interlocks explain --all"
+    And the output does not contain "When to use"

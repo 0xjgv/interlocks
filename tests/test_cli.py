@@ -136,6 +136,42 @@ def test_cmd_help_prints_active_preset_and_resolved_values(
     assert _row("run_mutation_in_ci", "True").search(out), out
 
 
+def test_cmd_help_prints_detected_summary_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    """Default-mode help emits a one-line `Detected:` summary with the key fields."""
+    _setup_project_with_interlocks(tmp_path, monkeypatch, 'preset = "strict"')
+
+    cmd_help()
+
+    out = capsys.readouterr().out
+    detected = next((line for line in out.splitlines() if line.startswith("Detected:")), None)
+    assert detected is not None, out
+    assert "preset=strict" in detected
+    assert "src=" in detected
+    assert "tests=" in detected
+    assert "runner=" in detected
+    assert "(no pyproject.toml)" not in detected
+
+
+def test_cmd_help_detected_summary_no_pyproject(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    """With no pyproject.toml, the Detected line degrades to a clear placeholder."""
+    monkeypatch.chdir(tmp_path)
+
+    cmd_help()
+
+    out = capsys.readouterr().out
+    assert "Detected: (no pyproject.toml)" in out
+
+
 def test_cmd_presets_prints_options_and_copyable_config(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -801,10 +837,28 @@ def test_flag_spec_is_frozen() -> None:
         spec.name = "--max="  # type: ignore[misc]
 
 
-def test_cmd_explain_all(
+def test_cmd_explain_default_is_index(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """No-arg `explain` prints the grouped index — every command, no prose detail."""
     monkeypatch.setattr(sys, "argv", ["interlocks", "explain"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    for name in TASKS:
+        assert f"  [{name}]  " in out
+    assert "interlocks explain --all" in out
+    # The index is the header line only — the 5-line prose detail is suppressed.
+    assert "When to use:" not in out
+    assert "Exit codes:" not in out
+
+
+def test_cmd_explain_all_dumps_every_command(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`explain --all` reproduces the full per-command prose dump."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "--all"])
 
     cmd_explain()
 
