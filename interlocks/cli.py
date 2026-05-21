@@ -286,12 +286,7 @@ def _print_command_row(name: str, description: str, width: int) -> None:
 
 
 def _detected_summary_line(cfg: InterlockConfig) -> str:
-    """One-line `Detected:` summary for default-mode `help`.
-
-    Four fields — preset, src, tests, runner — kept naturally short because
-    `src_dir_arg` / `test_dir_arg` are project-root-relative (typically one
-    segment). "Under 80 columns" is documented intent, not an enforced invariant.
-    """
+    """One-line `Detected:` summary for default-mode `help`."""
     return (
         f"Detected: preset={cfg.preset or '(none)'}, "
         f"src={cfg.src_dir_arg}, "

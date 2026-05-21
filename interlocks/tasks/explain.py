@@ -9,9 +9,14 @@ rendering lives here, data lives there.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from interlocks import ui
 from interlocks.command_docs import ALIASES, COMMAND_DOCS_BY_NAME, CommandDoc, alias_suffix
 from interlocks.runner import fail_skip, subcommand_args
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 def cmd_explain() -> None:
@@ -36,26 +41,30 @@ def cmd_explain() -> None:
         print(line)
 
 
-def _explain_index() -> None:
-    """Grouped one-row-per-command index — the default-mode `explain` surface.
+def _command_docs_by_group() -> Iterator[tuple[str, str, CommandDoc | None]]:
+    """Yield `(group_name, command_name, doc)` over the full `TASK_GROUPS` catalog.
 
-    Walks the full `TASK_GROUPS` catalog (same lazy import as `_explain_all` to
-    avoid the import cycle), emits an always-print group header per group, and
-    one `[name]  summary` row per command — `render_command_doc(doc)[0]`, the
-    header line only. Ends with a pointer to the per-command and `--all` paths.
+    `doc` is `None` only if the registry drifted out of sync with `TASK_GROUPS`
+    — the drift guard keeps that unreachable, but callers degrade gracefully.
     """
     # Lazy import — `cli` imports this module, so a top-level import would cycle.
     from interlocks.cli import TASK_GROUPS  # noqa: PLC0415
 
     for group_name, group in TASK_GROUPS:
-        ui.group_header(group_name)
         for name in group:
-            doc = COMMAND_DOCS_BY_NAME.get(name)
-            if doc is None:
-                # Should be unreachable — the drift guard keeps the registry
-                # complete — but degrade gracefully rather than KeyError.
-                print(f"  [{name}]  (no explanation registered)")
-                continue
+            yield group_name, name, COMMAND_DOCS_BY_NAME.get(name)
+
+
+def _explain_index() -> None:
+    """Grouped one-row-per-command index — the default-mode `explain` surface."""
+    last_group = None
+    for group_name, name, doc in _command_docs_by_group():
+        if group_name != last_group:
+            ui.group_header(group_name)
+            last_group = group_name
+        if doc is None:
+            print(f"  [{name}]  (no explanation registered)")
+        else:
             print(render_command_doc(doc)[0])
     print()
     print(
@@ -65,24 +74,21 @@ def _explain_index() -> None:
 
 
 def _explain_all() -> None:
-    # Lazy import — `cli` imports this module, so a top-level import would cycle.
-    from interlocks.cli import TASK_GROUPS  # noqa: PLC0415
-
+    """Full per-command prose dump grouped by `section` header — the `--all` surface."""
+    last_group = None
     first = True
-    for group_name, group in TASK_GROUPS:
-        ui.section(group_name)
-        for name in group:
-            doc = COMMAND_DOCS_BY_NAME.get(name)
-            if doc is None:
-                # Should be unreachable — the drift guard keeps the registry
-                # complete — but degrade gracefully rather than KeyError.
-                print(f"  [{name}]  (no explanation registered)")
-                continue
-            if not first:
-                print()
-            first = False
-            for line in render_command_doc(doc):
-                print(line)
+    for group_name, name, doc in _command_docs_by_group():
+        if group_name != last_group:
+            ui.section(group_name)
+            last_group = group_name
+        if doc is None:
+            print(f"  [{name}]  (no explanation registered)")
+            continue
+        if not first:
+            print()
+        first = False
+        for line in render_command_doc(doc):
+            print(line)
 
 
 def render_command_doc(doc: CommandDoc) -> list[str]:

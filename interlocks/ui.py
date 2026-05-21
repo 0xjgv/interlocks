@@ -202,10 +202,9 @@ def message_list(items: list[str], *, empty: str = "none", indent: str = "  ") -
 def group_header(name: str) -> None:
     """`name:` group label — always shown in default mode; `is_json()` dominates.
 
-    Joins the always-print tier (like `kv_block` / `message_list`): unlike the
-    verbose-gated `section`, a group label carries first-touch navigation signal,
-    so it must render at default verbosity. `is_json()` still suppresses it so
-    JSON-mode stdout stays exactly one object.
+    Unlike the verbose-gated `section`, a group label carries first-touch
+    navigation signal, so it renders at default verbosity. `is_json()` still
+    suppresses it so JSON-mode stdout stays exactly one object.
     """
     if is_json():
         return
