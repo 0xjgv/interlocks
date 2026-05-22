@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from typing import Literal
 
 from interlocks import run_summary, ui
 from interlocks.acceptance_status import (
@@ -110,21 +111,33 @@ def _handle_attribution_result(
 ) -> None:
     _record_coverage(result)
     if result.is_complete and not result.has_warnings:
-        if _below_min_coverage(cfg, result):
-            _fail_below_floor(cfg, result)
-        ui.row(_LABEL, _COMMAND, "ok", state="ok")
+        _handle_complete_result(cfg, result)
         return
 
     state = "fail" if cfg.enforce_behavior_attribution and not result.is_complete else "warn"
+    _report_attribution_issue(state, result, warning_detail)
+    if state == "fail":
+        sys.exit(1)
+    if _below_min_coverage(cfg, result):
+        _fail_below_floor(cfg, result)
+
+
+def _handle_complete_result(cfg: InterlockConfig, result: AttributionResult) -> None:
+    if _below_min_coverage(cfg, result):
+        _fail_below_floor(cfg, result)
+    ui.row(_LABEL, _COMMAND, "ok", state="ok")
+
+
+def _report_attribution_issue(
+    state: Literal["fail", "warn"],
+    result: AttributionResult,
+    warning_detail: str | None,
+) -> None:
     status = "failed" if state == "fail" else "warn"
     detail = None if state == "fail" else warning_detail
     ui.row(_LABEL, _COMMAND, status, detail=detail, state=state)
     if not ui.is_json():
         print(format_attribution_failure(result))
-    if state == "fail":
-        sys.exit(1)
-    if _below_min_coverage(cfg, result):
-        _fail_below_floor(cfg, result)
 
 
 def _record_coverage(result: AttributionResult) -> None:

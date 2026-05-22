@@ -65,25 +65,14 @@ def cmd_check() -> None:
     scoped_files = sorted(changed_py_files_vs(scope_ref)) if scope_ref else None
 
     ui.banner(cfg)
-    if scope_ref is not None and not scoped_files:
-        ui.section("Quality Checks")
-        if ui.is_verbose() and not ui.is_json():
-            print(f"  scope=changed vs {scope_ref} — no Python files changed; nothing to check")
-        _print_footer(time.monotonic() - start)
+    if _exit_if_changed_scope_empty(scope_ref, scoped_files, start):
         return
-    if scoped_files and ui.is_verbose() and not ui.is_json():
-        ui.section("Scope")
-        print(f"  changed vs {scope_ref} — {len(scoped_files)} file(s)")
-
+    _print_scope(scope_ref, scoped_files)
     maybe_print_skip_banner(skip_policy)
 
     try:
         ui.section("Quality Checks")
-        run_unless_skipped(
-            "fix",
-            lambda: _run_budgeted_mutation(base=scope_ref or "HEAD"),
-            skip_policy,
-        )
+        _run_budgeted_mutation(base=scope_ref or "HEAD", skip_policy=skip_policy)
         ui.section("Parallel")
         run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
         ui.section("Advisory")
@@ -92,6 +81,26 @@ def cmd_check() -> None:
         print_suppressions_report()
         run_summary.flush(cfg)
         _print_footer(time.monotonic() - start)
+
+
+def _exit_if_changed_scope_empty(
+    scope_ref: str | None,
+    scoped_files: list[str] | None,
+    start: float,
+) -> bool:
+    if scope_ref is None or scoped_files:
+        return False
+    ui.section("Quality Checks")
+    if ui.is_verbose() and not ui.is_json():
+        print(f"  scope=changed vs {scope_ref} — no Python files changed; nothing to check")
+    _print_footer(time.monotonic() - start)
+    return True
+
+
+def _print_scope(scope_ref: str | None, scoped_files: list[str] | None) -> None:
+    if scoped_files and ui.is_verbose() and not ui.is_json():
+        ui.section("Scope")
+        print(f"  changed vs {scope_ref} — {len(scoped_files)} file(s)")
 
 
 def _parallel_tasks(
@@ -157,8 +166,8 @@ def _skip_under_changed(label: str, reason: str) -> None:
     warn_skip(f"{label}: skipped under --changed — {reason}")
 
 
-def _run_budgeted_mutation(*, base: str) -> None:
-    run_budgeted_mutation(base=base, emit_legacy_rows=True)
+def _run_budgeted_mutation(*, base: str, skip_policy: SkipPolicy) -> None:
+    run_budgeted_mutation(base=base, emit_legacy_rows=True, skip_policy=skip_policy)
 
 
 def _print_footer(elapsed: float) -> None:

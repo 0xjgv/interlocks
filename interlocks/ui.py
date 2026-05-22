@@ -12,7 +12,7 @@ import os
 import shutil
 import sys
 import time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from interlocks import __version__
 
@@ -127,10 +127,7 @@ def row(
     label: str,
     command: str,
     status: str,
-    *,
-    detail: str | None = None,
-    state: State = "ok",
-    force: bool = False,
+    **options: object,
 ) -> None:
     """Three-column task row: `  [label]   command…   status`.
 
@@ -140,23 +137,49 @@ def row(
     `force=True` bypasses the minimal-mode suppression (used by `setup`'s status
     block so a successful install is not silent); `is_json()` still dominates.
     """
-    if is_json() or (not force and not is_verbose() and state != "fail"):
+    detail, state, force = _row_options(options)
+    if _suppress_row(force=force, state=state):
         return
     width = _term_width()
-    color = _STATE_COLORS[state]
     label_tag = f"[{label}]"
-    status_txt = _c(color, status)
-    detail_txt = _c(_DIM, detail) if detail else ""
-    # Status pinned right; detail (if any) sits left of it with a one-space gap.
-    suffix = f"{detail_txt} {status_txt}" if detail_txt else status_txt
-    suffix_len = _plain_len(suffix)
+    suffix = _row_suffix(status, detail, state)
     prefix = f"  {label_tag:<{LABEL_WIDTH}} "
+    suffix_len = _plain_len(suffix)
     used = len(prefix) + len(command) + 1 + suffix_len
     if used <= width:
         padding = " " * (width - len(prefix) - len(command) - suffix_len)
         print(f"{prefix}{command}{padding}{suffix}")
         return
-    # Truncate command to fit
+    _print_trimmed_row(prefix, command, suffix, suffix_len, width)
+
+
+def _row_options(options: dict[str, object]) -> tuple[str | None, State, bool]:
+    detail = options.get("detail")
+    state = options.get("state", "ok")
+    return (
+        detail if isinstance(detail, str) else None,
+        cast("State", state) if state in _STATE_COLORS else "ok",
+        options.get("force") is True,
+    )
+
+
+def _suppress_row(*, force: bool, state: State) -> bool:
+    return is_json() or (not force and not is_verbose() and state != "fail")
+
+
+def _row_suffix(status: str, detail: str | None, state: State) -> str:
+    status_txt = _c(_STATE_COLORS[state], status)
+    detail_txt = _c(_DIM, detail) if detail else ""
+    return f"{detail_txt} {status_txt}" if detail_txt else status_txt
+
+
+def _print_trimmed_row(
+    prefix: str,
+    command: str,
+    suffix: str,
+    suffix_len: int,
+    width: int,
+) -> None:
     max_cmd = max(10, width - len(prefix) - suffix_len - 2)
     trimmed = command[: max_cmd - 1] + "…" if len(command) > max_cmd else command
     padding = " " * max(1, width - len(prefix) - len(trimmed) - suffix_len)

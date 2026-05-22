@@ -46,18 +46,18 @@ and run the same CLI path a project uses. They are not mock-only tests.
 Imagine this file already exists on `main` with old formatting debt:
 
 ```python
-def alpha()->int:
+def alpha() -> int:
     return 1
 
 
-def beta()->int:
+def beta() -> int:
     return 2
 ```
 
 You only change the behavior of `beta`:
 
 ```python
-def beta()->int:
+def beta() -> int:
     return 22
 ```
 

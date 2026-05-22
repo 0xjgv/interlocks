@@ -253,22 +253,27 @@ def _dominates(a: _Plan, b: _Plan) -> bool:
         return False  # same plan; let the caller keep one of them
     if a.value < b.value:
         return False
-    cost_le = (
-        a.cost.outside_diff <= b.cost.outside_diff
-        and a.cost.changed_lines <= b.cost.changed_lines
-        and a.cost.files <= b.cost.files
-        and a.cost.risk <= b.cost.risk
-    )
-    if not cost_le:
+    if not _cost_less_or_equal(a.cost, b.cost):
         return False
-    strictly_better_value = a.value > b.value
-    strictly_better_cost = (
-        a.cost.outside_diff < b.cost.outside_diff
-        or a.cost.changed_lines < b.cost.changed_lines
-        or a.cost.files < b.cost.files
-        or a.cost.risk < b.cost.risk
+    return a.value > b.value or _cost_strictly_better(a.cost, b.cost)
+
+
+def _cost_less_or_equal(a: CostVector, b: CostVector) -> bool:
+    return (
+        a.outside_diff <= b.outside_diff
+        and a.changed_lines <= b.changed_lines
+        and a.files <= b.files
+        and a.risk <= b.risk
     )
-    return strictly_better_value or strictly_better_cost
+
+
+def _cost_strictly_better(a: CostVector, b: CostVector) -> bool:
+    return (
+        a.outside_diff < b.outside_diff
+        or a.changed_lines < b.changed_lines
+        or a.files < b.files
+        or a.risk < b.risk
+    )
 
 
 # --- Selection assembly ---------------------------------------------------

@@ -148,33 +148,32 @@ def stage_json(
 ) -> dict[str, object]:
     """Build the `ci`/`check` `--json` object from the stage accumulators.
 
-    `gates` maps each recorded `GateResult`; `detail` is omitted when `None`.
-    `name` mirrors `label` — a stable identifier distinct from the display label
-    is a deliberate non-goal — but both stay in the schema as the stable contract.
-    `skipped` is the structured skip list. `evidence_path` is included only when
-    given (`ci` passes it, `check` does not).
+    `gates` maps each recorded `GateResult`; each gate carries `name` (the
+    stable identifier) and `detail` is omitted when `None`. `skipped` is the
+    structured skip list. `evidence_path` is included only when given (`ci`
+    passes it, `check` does not).
     """
-    gates: list[dict[str, object]] = []
-    for r in results_snapshot():
-        entry: dict[str, object] = {
-            "name": r.label,
-            "label": r.label,
-            "status": r.status,
-            "elapsed_seconds": round(r.elapsed, 3) if r.elapsed is not None else None,
-        }
-        if r.detail is not None:
-            entry["detail"] = r.detail
-        gates.append(entry)
     obj: dict[str, object] = {
         "command": command,
         "passed": passed,
         "elapsed_seconds": round(elapsed, 3),
-        "gates": gates,
+        "gates": [_gate_json_entry(result) for result in results_snapshot()],
         "skipped": skips_snapshot(),
     }
     if evidence_path is not None:
         obj["evidence_path"] = evidence_path
     return obj
+
+
+def _gate_json_entry(result: GateResult) -> dict[str, object]:
+    entry: dict[str, object] = {
+        "name": result.label,
+        "status": result.status,
+        "elapsed_seconds": round(result.elapsed, 3) if result.elapsed is not None else None,
+    }
+    if result.detail is not None:
+        entry["detail"] = result.detail
+    return entry
 
 
 def tool(name: str, *args: str) -> list[str]:
@@ -546,18 +545,24 @@ def _default_display(cmd: list[str]) -> str:
     """Compact one-line rendering of ``cmd``: basename + key flags, no absolute paths."""
     if not cmd:
         return ""
-    head = Path(cmd[0]).name or cmd[0]
-    python_names = {"python", "python3", Path(sys.executable).name}
-    if head in python_names and len(cmd) >= 3 and cmd[1] == "-m":
-        head = f"python -m {cmd[2]}"
-        rest = cmd[3:]
-    else:
-        rest = cmd[1:]
+    head, rest = _display_head_and_rest(cmd)
     # Drop config-path flags that carry absolute paths — noise in the demo row.
     cleaned = [a for a in rest if not a.startswith(("--config=", "--project=", "--rcfile="))]
     # Collapse whitespace so inline scripts and embedded newlines don't tear the row.
     joined = " ".join([head, *cleaned]).strip()
     return re.sub(r"\s+", " ", joined)
+
+
+def _display_head_and_rest(cmd: list[str]) -> tuple[str, list[str]]:
+    head = Path(cmd[0]).name or cmd[0]
+    if _is_python_module_invocation(head, cmd):
+        return f"python -m {cmd[2]}", cmd[3:]
+    return head, cmd[1:]
+
+
+def _is_python_module_invocation(head: str, cmd: list[str]) -> bool:
+    python_names = {"python", "python3", Path(sys.executable).name}
+    return head in python_names and len(cmd) >= 3 and cmd[1] == "-m"
 
 
 def _dump_failure(result: RunResult, *, titled: bool) -> None:

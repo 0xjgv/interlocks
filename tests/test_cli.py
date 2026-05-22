@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
-from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME, FlagSpec
+from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME, COMMAND_GROUPS, FlagSpec
 from interlocks.config import (
     CONFIG_KEY_GROUP_ORDER,
     CONFIG_KEYS,
@@ -434,7 +434,8 @@ def test_main_rejects_unknown_skip_label(
     with pytest.raises(SystemExit) as exc:
         main()
 
-    assert exc.value.code == 2
+    # Bad `--skip` usage is a usage error → exit 1; exit 2 is missing-pyproject.
+    assert exc.value.code == 1
     assert "unknown skip label" in capsys.readouterr().err
 
 
@@ -588,6 +589,7 @@ def test_cmd_config_lists_all_keys(
     for group in CONFIG_KEY_GROUP_ORDER:
         if any(k.group == group for k in CONFIG_KEYS):
             assert group in default_out
+    assert re.search(r"coverage_min\s+int\s+80\s+70\s+preset-derived", default_out)
     assert "── Resolved values" not in default_out
     assert "(preset-derived)" not in default_out
 
@@ -758,6 +760,12 @@ def test_command_docs_summary_matches_task_description() -> None:
     """``CommandDoc.summary`` is canonical — the bare ``TASKS`` string must match it."""
     for doc in COMMAND_DOCS:
         assert doc.summary == TASKS[doc.name][1], doc.name
+
+
+def test_command_groups_match_task_groups() -> None:
+    """The pure command-doc grouping mirrors the dispatcher grouping."""
+    expected = tuple((group, tuple(commands)) for group, commands in TASK_GROUPS)
+    assert expected == COMMAND_GROUPS
 
 
 # Maps each command to the module(s) whose source declares its flag reads.

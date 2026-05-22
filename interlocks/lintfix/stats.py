@@ -180,34 +180,49 @@ def _recommend(stats: RuleStats, *, on_frontier: bool) -> tuple[Mode | str, str]
     """
     exact = stats.rule in known_rules()
     floor = _MIN_OBS_EXACT if exact else _MIN_OBS_PREFIX
-    p95 = stats.p95_outside_diff_lines
-
-    decision: tuple[Mode | str, str] = (stats.current_mode, "stays at current mode")
-
     if stats.unsafe_seen:
-        decision = ("skip", "unsafe candidate observed during replay")
-    elif stats.prs_with_candidate < floor:
-        decision = ("needs_data", f"only {stats.prs_with_candidate} observations (floor={floor})")
-    elif stats.revert_signal > 0 and stats.current_mode == "auto":
-        decision = ("escrow", f"{stats.revert_signal} reverted PR(s) — demote from auto")
-    elif p95 > _DEMOTE_OUTSIDE_DIFF_MIN:
-        if stats.current_mode == "auto":
-            decision = (
-                "escrow",
-                f"p95 outside-diff={p95:g} > {_DEMOTE_OUTSIDE_DIFF_MIN} — demote",
-            )
-        else:
-            decision = (stats.current_mode, f"churn too high (p95 outside-diff={p95:g})")
-    elif (
+        return ("skip", "unsafe candidate observed during replay")
+    if stats.prs_with_candidate < floor:
+        return ("needs_data", f"only {stats.prs_with_candidate} observations (floor={floor})")
+    if stats.revert_signal > 0 and stats.current_mode == "auto":
+        return ("escrow", f"{stats.revert_signal} reverted PR(s) — demote from auto")
+    churn = _churn_decision(stats)
+    if churn is not None:
+        return churn
+    promotion = _promotion_decision(stats, exact=exact, on_frontier=on_frontier)
+    return promotion or (stats.current_mode, "stays at current mode")
+
+
+def _churn_decision(stats: RuleStats) -> tuple[Mode | str, str] | None:
+    p95 = stats.p95_outside_diff_lines
+    if p95 <= _DEMOTE_OUTSIDE_DIFF_MIN:
+        return None
+    if stats.current_mode == "auto":
+        return (
+            "escrow",
+            f"p95 outside-diff={p95:g} > {_DEMOTE_OUTSIDE_DIFF_MIN} — demote",
+        )
+    return stats.current_mode, f"churn too high (p95 outside-diff={p95:g})"
+
+
+def _promotion_decision(
+    stats: RuleStats,
+    *,
+    exact: bool,
+    on_frontier: bool,
+) -> tuple[Mode | str, str] | None:
+    p95 = stats.p95_outside_diff_lines
+    if not _promotion_eligible(stats, on_frontier=on_frontier):
+        return None
+    if exact:
+        return "auto", f"on frontier; p95 outside-diff={p95:g} ≤ {_PROMOTE_OUTSIDE_DIFF_MAX}"
+    return "escrow", "prefix-fallback rule: needs explicit catalog entry before promotion"
+
+
+def _promotion_eligible(stats: RuleStats, *, on_frontier: bool) -> bool:
+    return (
         on_frontier
-        and p95 <= _PROMOTE_OUTSIDE_DIFF_MAX
+        and stats.p95_outside_diff_lines <= _PROMOTE_OUTSIDE_DIFF_MAX
         and stats.revert_signal == 0
         and stats.current_mode == "escrow"
-    ):
-        decision = (
-            ("auto", f"on frontier; p95 outside-diff={p95:g} ≤ {_PROMOTE_OUTSIDE_DIFF_MAX}")
-            if exact
-            else ("escrow", "prefix-fallback rule: needs explicit catalog entry before promotion")
-        )
-
-    return decision
+    )

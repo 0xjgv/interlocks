@@ -86,23 +86,36 @@ def parse_diagnostics(raw: str) -> tuple[RuleCandidate, ...]:
 
     by_rule: dict[str, _RuleBucket] = {}
     for diag in diagnostics:
-        if not isinstance(diag, dict):
-            continue
-        code = diag.get("code")
-        fix = diag.get("fix")
-        if not isinstance(code, str) or not isinstance(fix, dict):
-            continue
-        filename = diag.get("filename")
-        applicability = fix.get("applicability")
-        bucket = by_rule.setdefault(code, _RuleBucket())
-        bucket.count += 1
-        if isinstance(filename, str):
-            bucket.files.add(filename)
-        if applicability == "safe":
-            bucket.has_safe = True
-        elif applicability == "unsafe":
-            bucket.has_unsafe = True
+        _bucket_diagnostic(by_rule, diag)
+    return _candidates_from_buckets(by_rule)
 
+
+def _bucket_diagnostic(by_rule: dict[str, _RuleBucket], diag: object) -> None:
+    if not isinstance(diag, dict):
+        return
+    code = diag.get("code")
+    fix = diag.get("fix")
+    if not isinstance(code, str) or not isinstance(fix, dict):
+        return
+    bucket = by_rule.setdefault(code, _RuleBucket())
+    bucket.count += 1
+    _record_filename(bucket, diag.get("filename"))
+    _record_applicability(bucket, fix.get("applicability"))
+
+
+def _record_filename(bucket: _RuleBucket, filename: object) -> None:
+    if isinstance(filename, str):
+        bucket.files.add(filename)
+
+
+def _record_applicability(bucket: _RuleBucket, applicability: object) -> None:
+    if applicability == "safe":
+        bucket.has_safe = True
+    elif applicability == "unsafe":
+        bucket.has_unsafe = True
+
+
+def _candidates_from_buckets(by_rule: dict[str, _RuleBucket]) -> tuple[RuleCandidate, ...]:
     return tuple(
         RuleCandidate(
             rule=code,

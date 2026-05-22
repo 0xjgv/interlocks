@@ -7,6 +7,8 @@ decision, a recommendation transition). No real git/ruff is involved.
 
 from __future__ import annotations
 
+from typing import Any
+
 from interlocks.lintfix.stats import (
     CandidateSample,
     aggregate,
@@ -17,24 +19,18 @@ from interlocks.lintfix.stats import (
 def _sample(
     *,
     rule: str,
-    classification: str = "auto",
-    outside: int = 0,
-    total: int = 1,
-    unsafe: bool = False,
-    commit: str = "deadbeef",
-    reverted_in: str | None = None,
-    mutation_class: str = "import_sort",
+    **overrides: Any,
 ) -> CandidateSample:
     return CandidateSample(
         rule=rule,
-        mutation_class=mutation_class,
-        classification=classification,  # type: ignore[arg-type]
-        changed_lines_total=total,
-        changed_lines_outside_diff=outside,
+        mutation_class=overrides.get("mutation_class", "import_sort"),
+        classification=overrides.get("classification", "auto"),
+        changed_lines_total=overrides.get("total", 1),
+        changed_lines_outside_diff=overrides.get("outside", 0),
         risk=0,
-        unsafe=unsafe,
-        commit=commit,
-        reverted_in=reverted_in,
+        unsafe=overrides.get("unsafe", False),
+        commit=overrides.get("commit", "deadbeef"),
+        reverted_in=overrides.get("reverted_in"),
     )
 
 

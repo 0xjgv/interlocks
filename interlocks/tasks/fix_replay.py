@@ -116,25 +116,42 @@ def _print_summary(
     ])
 
     if not rule_stats:
-        ui.row("fix-replay", "(no candidates observed)", "ok", state="ok")
-        ui.kv_block([("plan", plan_rel)])
+        _print_empty_summary(plan_rel)
         return
 
-    groups: dict[str, list[stats_module.RuleStats]] = {
-        "PROMOTE": [],
-        "DEMOTE": [],
-        "KEEP": [],
-        "NEEDS DATA": [],
-    }
-    for s in sorted(rule_stats, key=_rule_sort_key):
-        groups[_bucket(s)].append(s)
+    _print_rule_groups(rule_stats)
+    _print_replay_footer(rule_stats, plan_rel)
 
+
+def _print_empty_summary(plan_rel: str) -> None:
+    ui.row("fix-replay", "(no candidates observed)", "ok", state="ok")
+    ui.kv_block([("plan", plan_rel)])
+
+
+def _print_rule_groups(rule_stats: tuple[stats_module.RuleStats, ...]) -> None:
+    groups = _group_rule_stats(rule_stats)
     for label, bucket in groups.items():
         if not bucket:
             continue
         ui.section(label)
         ui.kv_block([(s.rule, _summary_line(s)) for s in bucket], indent="  ")
 
+
+def _group_rule_stats(
+    rule_stats: tuple[stats_module.RuleStats, ...],
+) -> dict[str, list[stats_module.RuleStats]]:
+    groups: dict[str, list[stats_module.RuleStats]] = {
+        "PROMOTE": [],
+        "DEMOTE": [],
+        "KEEP": [],
+        "NEEDS DATA": [],
+    }
+    for stat in sorted(rule_stats, key=_rule_sort_key):
+        groups[_bucket(stat)].append(stat)
+    return groups
+
+
+def _print_replay_footer(rule_stats: tuple[stats_module.RuleStats, ...], plan_rel: str) -> None:
     frontier = [s.rule for s in rule_stats if s.on_pareto_frontier]
     ui.section("pareto frontier")
     ui.kv_block([("rules", ", ".join(sorted(frontier)) or "(empty)")])

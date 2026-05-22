@@ -7,6 +7,8 @@ or git is involved.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from interlocks.lintfix import optimize
 from interlocks.lintfix.budgets import UNBLOCK, Budget, CandidateCost
 from interlocks.lintfix.classify import CandidateMetrics, Classification
@@ -63,32 +65,24 @@ def _candidate(
     rule: str,
     *,
     value: int,
-    outside: int = 0,
-    lines: int = 1,
-    files_count: int = 1,
-    risk: int = 0,
-    files: tuple[str, ...] | None = None,
-    selectable: bool = True,
-    policy_mode: str = "auto",
-    unsafe: bool = False,
-    kind: str = "lint",
-    changed_ranges: dict[str, tuple[Hunk, ...]] | None = None,
+    **overrides: Any,
 ) -> optimize.Candidate:
+    files = cast(tuple[str, ...] | None, overrides.get("files"))
     return optimize.Candidate(
         rule=rule,
         value=value,
         cost=optimize.CostVector(
-            outside_diff=outside,
-            changed_lines=lines,
-            files=files_count,
-            risk=risk,
+            outside_diff=overrides.get("outside", 0),
+            changed_lines=overrides.get("lines", 1),
+            files=overrides.get("files_count", 1),
+            risk=overrides.get("risk", 0),
         ),
         files=files if files is not None else (f"{rule.lower()}.py",),
-        selectable=selectable,
-        policy_mode=policy_mode,
-        unsafe=unsafe,
-        kind=kind,
-        changed_ranges=changed_ranges,
+        selectable=overrides.get("selectable", True),
+        policy_mode=overrides.get("policy_mode", "auto"),
+        unsafe=overrides.get("unsafe", False),
+        kind=overrides.get("kind", "lint"),
+        changed_ranges=cast(dict[str, tuple[Hunk, ...]] | None, overrides.get("changed_ranges")),
     )
 
 

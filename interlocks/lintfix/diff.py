@@ -56,6 +56,22 @@ class AuthorEditCost:
         return self.additions + self.deletions + self.replacement_pairs
 
 
+@dataclass
+class _AuthorEditTotals:
+    additions: int = 0
+    deletions: int = 0
+    replacement_pairs: int = 0
+    deleted_file_lines: int = 0
+
+    def as_cost(self) -> AuthorEditCost:
+        return AuthorEditCost(
+            self.additions,
+            self.deletions,
+            self.replacement_pairs,
+            self.deleted_file_lines,
+        )
+
+
 def resolve_base(base: str) -> str:
     """Return ``merge-base(base, HEAD)`` or empty string when ``base`` is unknown."""
     return capture(["git", "merge-base", base, "HEAD"]).stdout.strip()
@@ -97,29 +113,41 @@ def author_edit_cost(base: str, files: tuple[str, ...] | None = None) -> AuthorE
     if files:
         args.extend(["--", *files])
     result = capture(args)
-    additions = deletions = replacements = deleted_lines = 0
     deleted = set(deleted_files(base))
+    totals = _AuthorEditTotals()
     for line in result.stdout.splitlines():
-        parts = line.split("\t")
-        if len(parts) < 3 or parts[0] == "-" or parts[1] == "-":
-            continue
-        added = int(parts[0])
-        removed = int(parts[1])
-        path = parts[-1]
-        additions += added
-        deletions += removed
-        replacements += min(added, removed)
-        if path in deleted:
-            deleted_lines += removed
+        _add_numstat_line(totals, line, deleted)
     if files:
-        deleted_result = capture(["git", "diff", "--numstat", "--diff-filter=D", base])
-        for line in deleted_result.stdout.splitlines():
-            parts = line.split("\t")
-            if len(parts) >= 3 and parts[1] != "-" and parts[-1].endswith(".py"):
-                removed = int(parts[1])
-                deletions += removed
-                deleted_lines += removed
-    return AuthorEditCost(additions, deletions, replacements, deleted_lines)
+        _add_scoped_deleted_lines(totals, base)
+    return totals.as_cost()
+
+
+def _add_numstat_line(totals: _AuthorEditTotals, line: str, deleted: set[str]) -> None:
+    parts = line.split("\t")
+    if len(parts) < 3 or parts[0] == "-" or parts[1] == "-":
+        return
+    added = int(parts[0])
+    removed = int(parts[1])
+    totals.additions += added
+    totals.deletions += removed
+    totals.replacement_pairs += min(added, removed)
+    if parts[-1] in deleted:
+        totals.deleted_file_lines += removed
+
+
+def _add_scoped_deleted_lines(totals: _AuthorEditTotals, base: str) -> None:
+    deleted_result = capture(["git", "diff", "--numstat", "--diff-filter=D", base])
+    for line in deleted_result.stdout.splitlines():
+        removed = _deleted_numstat_removed(line)
+        totals.deletions += removed
+        totals.deleted_file_lines += removed
+
+
+def _deleted_numstat_removed(line: str) -> int:
+    parts = line.split("\t")
+    if len(parts) < 3 or parts[1] == "-" or not parts[-1].endswith(".py"):
+        return 0
+    return int(parts[1])
 
 
 def changed_hunks(base: str, files: tuple[str, ...]) -> dict[str, FileHunks]:
@@ -170,7 +198,9 @@ def changed_line_ranges_from_patch(text: str) -> dict[str, tuple[Hunk, ...]]:
         m_file = _DIFF_FILE.match(line)
         if m_file:
             captured = m_file.group(1)
-            if captured is None:
+            # The widened `_DIFF_FILE` regex also matches a deletion hunk's
+            # `+++ /dev/null` line — it claims no post-image lines.
+            if captured is None or captured == "/dev/null":
                 continue
             current_path = captured
             by_file.setdefault(captured, [])

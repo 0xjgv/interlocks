@@ -130,14 +130,25 @@ def apply_many_candidates_with_verify(
     """Apply selected lint/format candidates in order; verify once; restore on failure."""
     if not candidates:
         return BatchVerifyResult(True, 0, "", "", restored=False, applied_rules=())
-    all_files = tuple({f for _, _, files in candidates for f in files})
-    snapshot = _snapshot(all_files)
+    snapshot = _snapshot(_candidate_files(candidates))
     applied: list[str] = []
+    failed = _apply_candidate_batch(candidates, applied, snapshot)
+    if failed is not None:
+        return failed
+    return _verify_candidate_batch(verify_cmd, applied, snapshot)
+
+
+def _candidate_files(candidates: Sequence[tuple[str, str, tuple[str, ...]]]) -> tuple[str, ...]:
+    return tuple({f for _, _, files in candidates for f in files})
+
+
+def _apply_candidate_batch(
+    candidates: Sequence[tuple[str, str, tuple[str, ...]]],
+    applied: list[str],
+    snapshot: dict[str, bytes],
+) -> BatchVerifyResult | None:
     for kind, rule, files in candidates:
-        if kind == "format":
-            result = apply_format(files[0])
-        else:
-            result = apply_rule(rule, files)
+        result = apply_format(files[0]) if kind == "format" else apply_rule(rule, files)
         if result.returncode >= 2:
             _restore(snapshot)
             return BatchVerifyResult(
@@ -150,6 +161,14 @@ def apply_many_candidates_with_verify(
                 failed_rule=rule,
             )
         applied.append(rule)
+    return None
+
+
+def _verify_candidate_batch(
+    verify_cmd: Sequence[str],
+    applied: list[str],
+    snapshot: dict[str, bytes],
+) -> BatchVerifyResult:
     result = capture(list(verify_cmd))
     if result.returncode == 0:
         return BatchVerifyResult(

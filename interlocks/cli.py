@@ -39,6 +39,7 @@ from interlocks.tasks.arch import cmd_arch
 from interlocks.tasks.audit import cmd_audit
 from interlocks.tasks.baseline_cmd import cmd_baseline
 from interlocks.tasks.behavior_attribution import cmd_behavior_attribution
+from interlocks.tasks.complexity import cmd_complexity
 from interlocks.tasks.config import cmd_config
 from interlocks.tasks.coverage import cmd_coverage
 from interlocks.tasks.crap import cmd_crap
@@ -313,6 +314,10 @@ def _print_detected_block(cfg: InterlockConfig | None) -> None:
     print(_detected_summary_line(cfg))
     if not ui.is_verbose():
         return
+    _print_verbose_detected_block(cfg)
+
+
+def _print_verbose_detected_block(cfg: InterlockConfig) -> None:
     ui.section("Detected")
     detected: list[tuple[str, str]] = [
         ("preset", cfg.preset or "(none)"),
@@ -395,6 +400,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 "Scaffold tests/features + tests/step_defs (pytest-bdd layout)",
             ),
             "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
+            "complexity": (cmd_complexity, "Complexity gate via lizard"),
             "crap": (cmd_crap, "CRAP complexity x coverage gate"),
             "mutation": (
                 cmd_mutation,
@@ -436,7 +442,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
         {
             "config": (
                 cmd_config,
-                "Show all [tool.interlocks] keys with defaults and current values",
+                "Show all [tool.interlocks] keys with defaults, current values, and sources",
             ),
             "doctor": (cmd_doctor, "Preflight diagnostic: paths, tools, venv"),
             "setup": (cmd_setup, "Install/check hooks, agent docs, and Claude skill"),

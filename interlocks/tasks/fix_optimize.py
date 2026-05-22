@@ -165,11 +165,20 @@ def _apply_selection(
     if not selection.selected:
         ui.row("fix-optimize", "(nothing to apply)", "ok", state="ok")
         return
-    rules_and_files = tuple(
-        (s.candidate.rule, plan_by_rule[s.candidate.rule].classification.metrics.files_touched)
-        for s in selection.selected
-    )
-    candidates = tuple(
+    candidates = _selected_candidates(plan_by_rule, selection)
+    result = _apply_candidates(candidates, verify_cmd)
+    if result.applied:
+        _report_applied(result)
+        return
+    _write_failed_patch_if_any(project_root, plan_by_rule, candidates)
+    _fail_apply(result)
+
+
+def _selected_candidates(
+    plan_by_rule: dict[str, plan_module.PlannedCandidate],
+    selection: optimize_mod.Selection,
+) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
+    return tuple(
         (
             plan_by_rule[s.candidate.rule].kind,
             s.candidate.rule,
@@ -177,27 +186,46 @@ def _apply_selection(
         )
         for s in selection.selected
     )
+
+
+def _apply_candidates(
+    candidates: tuple[tuple[str, str, tuple[str, ...]], ...],
+    verify_cmd: tuple[str, ...],
+) -> verify.BatchVerifyResult:
     if all(kind == "lint" for kind, _, _ in candidates):
-        result = verify.apply_many_with_verify(
+        # `rules_and_files` is the lint-only apply path's argument shape; the
+        # mixed-candidate path below consumes `candidates` directly.
+        rules_and_files = tuple((rule, files) for _, rule, files in candidates)
+        return verify.apply_many_with_verify(
             rules_and_files=rules_and_files,
             verify_cmd=verify_cmd,
         )
-    else:
-        result = verify.apply_many_candidates_with_verify(
-            candidates=candidates,
-            verify_cmd=verify_cmd,
-        )
-    if result.applied:
-        rules = ", ".join(result.applied_rules)
-        ui.row("fix-optimize", rules or "(none)", "applied + verified", state="ok")
-        return
+    return verify.apply_many_candidates_with_verify(
+        candidates=candidates,
+        verify_cmd=verify_cmd,
+    )
+
+
+def _report_applied(result: verify.BatchVerifyResult) -> None:
+    rules = ", ".join(result.applied_rules)
+    ui.row("fix-optimize", rules or "(none)", "applied + verified", state="ok")
+
+
+def _write_failed_patch_if_any(
+    project_root: Path,
+    plan_by_rule: dict[str, plan_module.PlannedCandidate],
+    candidates: tuple[tuple[str, str, tuple[str, ...]], ...],
+) -> None:
     failed_patches = "\n".join(
         plan_by_rule[rule].diff_text
-        for rule, _ in rules_and_files
+        for _, rule, _ in candidates
         if plan_by_rule[rule].diff_text.strip()
     )
     if failed_patches:
         escrow.write_failed_patch(project_root, failed_patches)
+
+
+def _fail_apply(result: verify.BatchVerifyResult) -> None:
     detail = f"rule={result.failed_rule}" if result.failed_rule else "verify failed; tree restored"
     ui.row("fix-optimize", "apply", detail, state="fail")
     sys.exit(result.returncode or 1)

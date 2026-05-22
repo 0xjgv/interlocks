@@ -38,6 +38,18 @@ _RISKY_PATHS: tuple[tuple[str, int], ...] = (
 _TEST_PATHS: tuple[str, ...] = ("tests/**", "test/**", "**/tests/**", "**/test_*.py")
 
 
+@dataclass
+class _MeasureState:
+    files: list[str]
+    total: int = 0
+    inside: int = 0
+    outside: int = 0
+    comment_deletes: int = 0
+    control_flow_edits: int = 0
+    current_path: str | None = None
+    old_line: int = 0
+
+
 @dataclass(frozen=True)
 class CandidateMetrics:
     """Measured properties of a candidate patch."""
@@ -154,56 +166,83 @@ def _measure(patch_text: str, hunks: dict[str, FileHunks]) -> CandidateMetrics:
     before) and ``-`` deletions (at the OLD line they remove) against the same
     range. ``+`` does NOT advance the OLD pointer; ``-`` and `` `` do.
     """
-    files: list[str] = []
-    total = inside = outside = 0
-    comment_del = ctrl = 0
-    current_path: str | None = None
-    old_line = 0
+    state = _MeasureState(files=[])
     for line in patch_text.splitlines():
-        m_file = _DIFF_FILE.match(line)
-        if m_file:
-            captured = m_file.group(1)
-            if captured is None:
-                continue
-            current_path = captured
-            files.append(captured)
-            continue
-        m_hunk = _HUNK_HEADER.match(line)
-        if m_hunk:
-            old_line = int(m_hunk.group(1))
-            continue
-        if not line or current_path is None or line.startswith(("---", "+++", "diff ")):
-            continue
-        prefix = line[0]
-        body = line[1:]
-        if prefix == "+":
-            total += 1
-            if _line_inside(current_path, old_line, hunks):
-                inside += 1
-            else:
-                outside += 1
-            if _CONTROL_FLOW.match(body):
-                ctrl += 1
-        elif prefix == "-":
-            total += 1
-            if _line_inside(current_path, old_line, hunks):
-                inside += 1
-            else:
-                outside += 1
-            if _COMMENT_DELETE.match(body):
-                comment_del += 1
-            if _CONTROL_FLOW.match(body):
-                ctrl += 1
-            old_line += 1
-        elif prefix == " ":
-            old_line += 1
+        _measure_line(state, line, hunks)
+    return _metrics_from_state(state)
+
+
+def _measure_line(state: _MeasureState, line: str, hunks: dict[str, FileHunks]) -> None:
+    if _capture_file(state, line):
+        return
+    if _capture_hunk_start(state, line):
+        return
+    if _skip_diff_line(state, line):
+        return
+    _measure_body_line(state, line, hunks)
+
+
+def _capture_file(state: _MeasureState, line: str) -> bool:
+    match = _DIFF_FILE.match(line)
+    if match is None:
+        return False
+    captured = match.group(1)
+    if captured is not None:
+        state.current_path = captured
+        state.files.append(captured)
+    return True
+
+
+def _capture_hunk_start(state: _MeasureState, line: str) -> bool:
+    match = _HUNK_HEADER.match(line)
+    if match is None:
+        return False
+    state.old_line = int(match.group(1))
+    return True
+
+
+def _skip_diff_line(state: _MeasureState, line: str) -> bool:
+    return not line or state.current_path is None or line.startswith(("---", "+++", "diff "))
+
+
+def _measure_body_line(state: _MeasureState, line: str, hunks: dict[str, FileHunks]) -> None:
+    prefix = line[0]
+    body = line[1:]
+    if prefix == "+":
+        _record_changed_line(state, body, hunks, deleted=False)
+    elif prefix == "-":
+        _record_changed_line(state, body, hunks, deleted=True)
+        state.old_line += 1
+    elif prefix == " ":
+        state.old_line += 1
+
+
+def _record_changed_line(
+    state: _MeasureState,
+    body: str,
+    hunks: dict[str, FileHunks],
+    *,
+    deleted: bool,
+) -> None:
+    state.total += 1
+    if _line_inside(state.current_path or "", state.old_line, hunks):
+        state.inside += 1
+    else:
+        state.outside += 1
+    if deleted and _COMMENT_DELETE.match(body):
+        state.comment_deletes += 1
+    if _CONTROL_FLOW.match(body):
+        state.control_flow_edits += 1
+
+
+def _metrics_from_state(state: _MeasureState) -> CandidateMetrics:
     return CandidateMetrics(
-        files_touched=tuple(sorted(set(files))),
-        changed_lines_total=total,
-        changed_lines_inside_diff=inside,
-        changed_lines_outside_diff=outside,
-        comment_deletes=comment_del,
-        control_flow_edits=ctrl,
+        files_touched=tuple(sorted(set(state.files))),
+        changed_lines_total=state.total,
+        changed_lines_inside_diff=state.inside,
+        changed_lines_outside_diff=state.outside,
+        comment_deletes=state.comment_deletes,
+        control_flow_edits=state.control_flow_edits,
     )
 
 

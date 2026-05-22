@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -17,12 +18,9 @@ def _plan_candidate(
     rule: str,
     classification: str,
     files: list[str],
-    *,
-    outside: int = 0,
-    lines: int = 1,
-    risk: int = 0,
-    patch_path: str | None = None,
+    **overrides: Any,
 ) -> dict[str, object]:
+    lines = overrides.get("lines", 1)
     return {
         "id": f"{rule}:{':'.join(files)}",
         "rule": rule,
@@ -33,11 +31,11 @@ def _plan_candidate(
         "files": files,
         "changed_lines_total": lines,
         "changed_lines_inside_diff": lines,
-        "changed_lines_outside_diff": outside,
-        "risk": risk,
+        "changed_lines_outside_diff": overrides.get("outside", 0),
+        "risk": overrides.get("risk", 0),
         "diagnostic_count": 1,
         "unsafe": False,
-        "patch_path": patch_path,
+        "patch_path": overrides.get("patch_path"),
         "reason": None,
     }
 

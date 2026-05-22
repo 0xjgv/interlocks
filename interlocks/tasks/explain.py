@@ -12,7 +12,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from interlocks import ui
-from interlocks.command_docs import ALIASES, COMMAND_DOCS_BY_NAME, CommandDoc, alias_suffix
+from interlocks.command_docs import (
+    ALIASES,
+    COMMAND_DOCS_BY_NAME,
+    COMMAND_GROUPS,
+    CommandDoc,
+    alias_suffix,
+)
 from interlocks.runner import fail_skip, subcommand_args
 
 if TYPE_CHECKING:
@@ -20,38 +26,44 @@ if TYPE_CHECKING:
 
 
 def cmd_explain() -> None:
+    want_all, positional = _parse_explain_args()
+    if not positional:
+        _explain_all() if want_all else _explain_index()
+        return
+    doc = _resolve_doc(positional[0])
+    for line in render_command_doc(doc):
+        print(line)
+
+
+def _parse_explain_args() -> tuple[bool, list[str]]:
     args = subcommand_args("explain")
     flags = [arg for arg in args if arg.startswith("-")]
     bad = [arg for arg in flags if arg != "--all"]
     if bad:
         fail_skip(f"explain: unexpected option: {bad[0]}")
-    want_all = "--all" in flags
     positional = [arg for arg in args if not arg.startswith("-")]
     if len(positional) > 1:
         fail_skip("explain: accepts at most one command name")
-    if not positional:
-        _explain_all() if want_all else _explain_index()
-        return
-    requested = positional[0]
+    return "--all" in flags, positional
+
+
+def _resolve_doc(requested: str) -> CommandDoc:
     name = ALIASES.get(requested, requested)
     doc = COMMAND_DOCS_BY_NAME.get(name)
     if doc is None:
         fail_skip(f"explain: unknown command: {requested}")
-    for line in render_command_doc(doc):
-        print(line)
+    return doc
 
 
 def _command_docs_by_group() -> Iterator[tuple[str, str, CommandDoc | None]]:
-    """Yield `(group_name, command_name, doc)` over the full `TASK_GROUPS` catalog.
+    """Yield `(group_name, command_name, doc)` over the full command catalog.
 
-    `doc` is `None` only if the registry drifted out of sync with `TASK_GROUPS`
-    — the drift guard keeps that unreachable, but callers degrade gracefully.
+    `doc` is `None` only if the registry drifted out of sync with
+    `COMMAND_GROUPS` — the drift guard keeps that unreachable, but callers
+    degrade gracefully.
     """
-    # Lazy import — `cli` imports this module, so a top-level import would cycle.
-    from interlocks.cli import TASK_GROUPS  # noqa: PLC0415
-
-    for group_name, group in TASK_GROUPS:
-        for name in group:
+    for group_name, names in COMMAND_GROUPS:
+        for name in names:
             yield group_name, name, COMMAND_DOCS_BY_NAME.get(name)
 
 

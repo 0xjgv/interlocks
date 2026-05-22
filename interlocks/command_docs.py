@@ -341,6 +341,18 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(FlagSpec("--min=", "value", "cfg.coverage_min", "coverage fail-under percentage"),),
     ),
     CommandDoc(
+        "complexity",
+        "Complexity gate via lizard",
+        "Run the same static complexity threshold check used by `interlocks ci`.",
+        mutates=False,
+        outputs=(),
+        exit_codes=(
+            (0, "all functions are within configured complexity thresholds"),
+            (1, "one or more functions exceeded a complexity threshold"),
+            _NO_PYPROJECT,
+        ),
+    ),
+    CommandDoc(
         "crap",
         "CRAP complexity x coverage gate",
         "Catch complex code shipped without matching tests; blocking depends on `enforce_crap`.",
@@ -528,9 +540,9 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     # ── Utility ──────────────────────────────────────────────────────────
     CommandDoc(
         "config",
-        "Show all [tool.interlocks] keys with defaults and current values",
+        "Show all [tool.interlocks] keys with defaults, current values, and sources",
         "The single source of truth for agents driving setup — lists every "
-        "[tool.interlocks] key with type, default, description, and resolved value.",
+        "[tool.interlocks] key with type, default, current value, source, and description.",
         mutates=False,
         outputs=(),
         exit_codes=(
@@ -676,6 +688,57 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
 
 COMMAND_DOCS_BY_NAME: dict[str, CommandDoc] = {doc.name: doc for doc in COMMAND_DOCS}
 
+COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Tasks",
+        (
+            "fix",
+            "fix-rule",
+            "fix-plan",
+            "fix-replay",
+            "fix-optimize",
+            "fix-annotate",
+            "fix-metrics",
+            "format",
+            "lint",
+            "typecheck",
+            "test",
+            "audit",
+            "deps",
+            "deps-freshness",
+            "arch",
+            "acceptance",
+            "behavior-attribution",
+            "init-acceptance",
+            "coverage",
+            "complexity",
+            "crap",
+            "mutation",
+        ),
+    ),
+    (
+        "Stages",
+        ("check", "pre-commit", "ci", "nightly", "post-edit", "setup-hooks", "clean"),
+    ),
+    ("Reports", ("trust", "evaluate", "explain")),
+    (
+        "Utility",
+        (
+            "config",
+            "doctor",
+            "setup",
+            "init",
+            "agents",
+            "setup-skill",
+            "presets",
+            "baseline",
+            "version",
+            "warm",
+        ),
+    ),
+    ("Other", ("help",)),
+)
+
 
 # Dispatcher-level tokens that are valid on every command and must never be
 # matched against a task's declared FlagSpec set. `--skip` carries a value and
@@ -700,16 +763,23 @@ def unknown_task_flags(task_name: str, raw_args: list[str]) -> list[str]:
     boolean_names = frozenset(spec.name for spec in declared if not spec.name.endswith("="))
     bad: list[str] = []
     for arg in raw_args:
-        if not arg.startswith("-"):
-            continue
-        if arg in GLOBAL_FLAGS:
-            continue
-        if arg == "--skip" or arg.startswith("--skip="):
-            continue
-        # Boolean flags match the bare token or its `--flag=value` form.
-        if arg.split("=", 1)[0] in boolean_names:
-            continue
-        if any(arg.startswith(prefix) for prefix in value_prefixes):
-            continue
-        bad.append(arg)
+        if _unknown_flag(arg, boolean_names, value_prefixes):
+            bad.append(arg)
     return bad
+
+
+def _unknown_flag(
+    arg: str,
+    boolean_names: frozenset[str],
+    value_prefixes: tuple[str, ...],
+) -> bool:
+    if not arg.startswith("-"):
+        return False
+    if arg in GLOBAL_FLAGS:
+        return False
+    if arg == "--skip" or arg.startswith("--skip="):
+        return False
+    # Boolean flags match the bare token or its `--flag=value` form.
+    if arg.split("=", 1)[0] in boolean_names:
+        return False
+    return not any(arg.startswith(prefix) for prefix in value_prefixes)

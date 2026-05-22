@@ -59,6 +59,14 @@ class Plan:
     author_cost: int = 0
 
 
+@dataclass(frozen=True)
+class _PlanMeta:
+    base: str
+    head: str
+    budget_name: str
+    ruff_version: str
+
+
 def build_plan(*, base: str, budget_name: str) -> Plan:
     """Run the full plan pipeline and return the result.
 
@@ -70,22 +78,20 @@ def build_plan(*, base: str, budget_name: str) -> Plan:
     cfg = load_config()
     ruff_version = cfg.tool_version("ruff")
     head = diff.head_sha()
+    meta = _PlanMeta(base, head, budget_name, ruff_version)
     base_sha = diff.resolve_base(base)
     if not base_sha:
-        return _empty_plan(base, head, budget_name, ruff_version)
+        return _empty_plan(meta)
 
     files = diff.changed_files(base_sha)
     author_cost = diff.author_edit_cost(base_sha).total
     if not files:
-        return _empty_plan(base, head, budget_name, ruff_version, author_cost=author_cost)
+        return _empty_plan(meta, author_cost=author_cost)
 
     discovery = discover.discover_fixable_rules(files)
     if discovery.returncode >= 2:
         return _empty_plan(
-            base,
-            head,
-            budget_name,
-            ruff_version,
+            meta,
             error=DiscoveryError(discovery.returncode, discovery.stderr),
             author_cost=author_cost,
         )
@@ -108,15 +114,20 @@ def build_plan(*, base: str, budget_name: str) -> Plan:
 
 
 def _empty_plan(
-    base: str,
-    head: str,
-    budget_name: str,
-    ruff_version: str,
+    meta: _PlanMeta,
     *,
     error: DiscoveryError | None = None,
     author_cost: int = 0,
 ) -> Plan:
-    return Plan(base, head, budget_name, ruff_version, (), error, author_cost)
+    return Plan(
+        meta.base,
+        meta.head,
+        meta.budget_name,
+        meta.ruff_version,
+        (),
+        error,
+        author_cost,
+    )
 
 
 def _candidate_for(

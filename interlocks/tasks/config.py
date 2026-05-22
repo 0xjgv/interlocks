@@ -1,13 +1,14 @@
 """`interlocks config` — print the full `[tool.interlocks]` reference.
 
 Read-only. One screen of output that lists every key with its type, default,
-description, and current resolved value. Designed for agents driving setup who
-need a single command answering "what can I configure?".
+current resolved value, source, and description. Designed for agents driving
+setup who need a single command answering "what can I configure?".
 """
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,6 +28,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from interlocks.config import ConfigKeyDoc, InterlockConfig
+
+
+@dataclass(frozen=True)
+class _KeyWidths:
+    name: int
+    type: int
+    default: int
+    current: int
+    source: int
 
 
 def cmd_config() -> None:
@@ -50,7 +60,7 @@ def cmd_config() -> None:
     _print_status(cfg, pyproject_present=pyproject.is_file())
 
     ui.section("Config keys")
-    _print_keys()
+    _print_keys(cfg)
 
     if not ui.is_verbose():
         return
@@ -249,28 +259,73 @@ def _print_config_json(cfg: InterlockConfig | None, pyproject: Path) -> None:
     })
 
 
-def _print_keys() -> None:
-    name_width = max(len(k.name) for k in CONFIG_KEYS)
-    type_width = max(len(k.type) for k in CONFIG_KEYS)
-    default_width = max(len(k.default) for k in CONFIG_KEYS)
+def _print_keys(cfg: InterlockConfig | None) -> None:
+    widths = _key_widths(cfg)
+    _print_key_header(widths)
     for group in CONFIG_KEY_GROUP_ORDER:
-        keys = [k for k in CONFIG_KEYS if k.group == group]
-        if not keys:
-            continue
-        print(f"  {group}")
-        for key in keys:
-            print(_format_key_row(key, name_width, type_width, default_width))
+        _print_key_group(group, cfg, widths)
+
+
+def _key_widths(cfg: InterlockConfig | None) -> _KeyWidths:
+    return _KeyWidths(
+        name=max(len(k.name) for k in CONFIG_KEYS),
+        type=max(len(k.type) for k in CONFIG_KEYS),
+        default=max(len(k.default) for k in CONFIG_KEYS),
+        current=max(len(_current_label(cfg, k.name)) for k in CONFIG_KEYS),
+        source=max(len(_source_label(cfg, k.name)) for k in CONFIG_KEYS),
+    )
+
+
+def _print_key_header(widths: _KeyWidths) -> None:
+    print(
+        f"  {'key':<{widths.name}} "
+        f"{'type':<{widths.type}} "
+        f"{'default':<{widths.default}} "
+        f"{'current':<{widths.current}} "
+        f"{'source':<{widths.source}} "
+        "description"
+    )
+
+
+def _print_key_group(group: str, cfg: InterlockConfig | None, widths: _KeyWidths) -> None:
+    keys = [k for k in CONFIG_KEYS if k.group == group]
+    if not keys:
+        return
+    print(f"  {group}")
+    for key in keys:
+        print(_format_key_row(key, cfg, widths))
 
 
 def _format_key_row(
-    key: ConfigKeyDoc, name_width: int, type_width: int, default_width: int
+    key: ConfigKeyDoc,
+    cfg: InterlockConfig | None,
+    widths: _KeyWidths,
 ) -> str:
     return (
-        f"    {key.name:<{name_width}} "
-        f"{key.type:<{type_width}} "
-        f"{key.default:<{default_width}} "
+        f"    {key.name:<{widths.name}} "
+        f"{key.type:<{widths.type}} "
+        f"{key.default:<{widths.default}} "
+        f"{_current_label(cfg, key.name):<{widths.current}} "
+        f"{_source_label(cfg, key.name):<{widths.source}} "
         f"{key.description}"
     )
+
+
+def _current_label(cfg: InterlockConfig | None, key: str) -> str:
+    if cfg is None:
+        return "(unreadable)"
+    value = _resolved_value(cfg, key)
+    if value is None:
+        return "(none)"
+    if isinstance(value, list | tuple | frozenset | set):
+        return "[" + ", ".join(str(item) for item in value) + "]"
+    return str(value)
+
+
+def _source_label(cfg: InterlockConfig | None, key: str) -> str:
+    if cfg is None:
+        return "unreadable"
+    return cfg.value_sources.get(key, "unknown")
 
 
 _PRECEDENCE_LINES: tuple[str, ...] = (
