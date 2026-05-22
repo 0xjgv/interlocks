@@ -49,14 +49,14 @@ def cmd_config() -> None:
     ui.section("Status")
     _print_status(cfg, pyproject_present=pyproject.is_file())
 
-    ui.section("Resolved values")
-    _print_resolved(cfg)
-
     ui.section("Config keys")
     _print_keys()
 
     if not ui.is_verbose():
         return
+
+    ui.section("Resolved values")
+    _print_resolved(cfg)
 
     ui.section("Precedence")
     for line in _PRECEDENCE_LINES:

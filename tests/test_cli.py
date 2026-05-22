@@ -17,6 +17,7 @@ import pytest
 from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
 from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME, FlagSpec
 from interlocks.config import (
+    CONFIG_KEY_GROUP_ORDER,
     CONFIG_KEYS,
     InterlockConfig,
     clear_cache,
@@ -174,6 +175,7 @@ def test_cmd_help_detected_summary_no_pyproject(
 
 def test_cmd_presets_prints_options_and_copyable_config(
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cmd_presets()
     out = capsys.readouterr().out
@@ -195,6 +197,13 @@ def test_cmd_presets_prints_options_and_copyable_config(
     assert '[tool.interlocks]\n    preset = "baseline"' in out
     assert "manually override any threshold" in out
     assert "pyproject.toml" in out
+
+    # Default mode keeps the one-line footer; the "Next Steps" block is verbose-only.
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
+    cmd_presets()
+    default_out = capsys.readouterr().out
+    assert "Switch with: interlocks presets set" in default_out
+    assert "── Next Steps" not in default_out
 
 
 def test_cmd_presets_prints_active_preset(
@@ -568,6 +577,19 @@ def test_cmd_config_lists_all_keys(
         assert key.name in out
     # Preset-derived value renders for baseline coverage_min == 70.
     assert re.search(r"coverage_min\s+70 \(preset-derived\)", out)
+
+    # Default mode: the grouped "Config keys" table is the single presenter; the
+    # flat "Resolved values" block is verbose-only.
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
+    cmd_config()
+    default_out = capsys.readouterr().out
+    for key in CONFIG_KEYS:
+        assert key.name in default_out
+    for group in CONFIG_KEY_GROUP_ORDER:
+        if any(k.group == group for k in CONFIG_KEYS):
+            assert group in default_out
+    assert "── Resolved values" not in default_out
+    assert "(preset-derived)" not in default_out
 
 
 def test_cmd_config_no_pyproject(

@@ -185,6 +185,8 @@ def _cmd_presets_list() -> None:
             + f"mutation score>={defaults['mutation_min_score']}  "
             + f"mutation_ci={defaults['mutation_ci_mode']}"
         )
+    print()
+    print(f"Switch with: {_presets_set_invocation()}")
     if not ui.is_verbose():
         return
     ui.section("Next Steps")
@@ -200,16 +202,22 @@ def _cmd_presets_list() -> None:
     print("  in the same [tool.interlocks] table in pyproject.toml.")
 
 
+def _presets_set_invocation() -> str:
+    """The canonical `interlocks presets set <baseline|strict|legacy>` phrase."""
+    choices = "|".join(supported_presets())
+    return f"interlocks presets set <{choices}>"
+
+
 def _presets_usage() -> str:
     choices = "|".join(supported_presets())
-    return f"usage: interlocks presets [<{choices}>] or interlocks presets set <{choices}>"
+    return f"usage: interlocks presets [<{choices}>] or {_presets_set_invocation()}"
 
 
 def _cmd_presets_set(args: list[str]) -> None:
     presets = supported_presets()
     choices = "|".join(presets)
     if len(args) != 1:
-        fail_skip(f"usage: interlocks presets set <{choices}>")
+        fail_skip(f"usage: {_presets_set_invocation()}")
     preset = args[0]
     if preset not in presets:
         fail_skip(f"unsupported preset: {preset} (expected {choices})")

@@ -147,6 +147,18 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.cli:main",
     ),
     Behavior(
+        "cli-config-single-presenter",
+        "config",
+        "config default mode emits one sectioned key table, no preceding flat resolved block",
+        "interlocks.tasks.config:cmd_config",
+    ),
+    Behavior(
+        "cli-presets-default-footer",
+        "config",
+        "presets default mode prints a one-line Switch with: footer",
+        "interlocks.cli:cmd_presets",
+    ),
+    Behavior(
         "cli-help-crash-reports",
         "cli",
         "help surfaces crash-report prompt behavior and cache directory",

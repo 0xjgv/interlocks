@@ -89,6 +89,19 @@ Feature: interlocks CLI surface area
     And the output contains "── Examples"
     And the output does not contain "user-global"
 
+  # req: cli-config-single-presenter
+  Scenario: default-mode config emits the sectioned table only, no flat resolved block
+    Given I run "interlocks config --default-mode"
+    Then the output contains "coverage_min"
+    And the output contains "Thresholds"
+    And the output does not contain "── Resolved values"
+
+  # req: cli-presets-default-footer
+  Scenario: default-mode presets prints a Switch with footer
+    Given I run "interlocks presets --default-mode"
+    Then the output contains "Switch with: interlocks presets set"
+    And the output does not contain "── Next Steps"
+
   # req: cli-evaluate-guidance
   Scenario: Evaluate gap guidance includes closure command
     Given I run "interlocks evaluate" on a project with a traceability gap
