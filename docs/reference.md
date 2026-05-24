@@ -200,8 +200,9 @@ Scaffolding:
 
 Utility:
 
-- `config`: list every `[tool.interlocks]` key with type, default,
-  description, and resolved value.
+- `config`: list every `[tool.interlocks]` key with type, default, current
+  resolved value, source, and description. `--verbose` also prints the compact
+  resolved-value block plus precedence, examples, and next steps.
 - `doctor`: adoption diagnostic, exempt from the `pyproject.toml` preflight
   gate.
 - `setup`: install hooks, agent docs, and Claude skill. `setup --check`
@@ -312,7 +313,9 @@ thresholds for policy. Use `interlocks check --changed[=<ref>]` to scope first
 adoption to changed files. Use global skip only when you need an explicit
 gate-level escape hatch: `interlocks check --skip=typecheck`,
 `INTERLOCKS_SKIP=typecheck interlocks check`, or `[tool.interlocks] skip =
-["typecheck"]`. Unknown skip labels exit 2, and skipped gates print warnings.
+["typecheck"]`. Unknown skip labels exit 1, and skipped gates print warnings.
+The `fix` and `format` labels are one budgeted lint/format gate — skipping
+either disables the whole mutation.
 
 ### What did setup install, and what remains manual?
 

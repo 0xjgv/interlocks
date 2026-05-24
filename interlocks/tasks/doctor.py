@@ -104,7 +104,7 @@ def _build_doctor_report() -> _DoctorReport:
 
     cfg = _safe_load_config(pyproject_path, failures)
     _collect_blockers(cfg, pyproject_path, blockers)
-    _collect_tool_warnings(cfg, warnings, blockers)
+    _collect_tool_blockers(cfg, blockers)
 
     rows = _collect_setup_rows(project_root, cfg, pyproject_path)
     is_blocked = bool(blockers or failures or any(r.state == "fail" for r in rows))
@@ -221,15 +221,12 @@ def _collect_blockers(
         blockers.append(f"unsupported preset: {unsupported}")
 
 
-def _collect_tool_warnings(
-    cfg: InterlockConfig | None,
-    warnings: list[str],
-    blockers: list[str],
-) -> None:
-    warnings.append(
-        "default check mutation is budgeted by author diff; use `interlocks check --renovate` "
-        "or `--mutation-budget=renovation` for intentional project-wide cleanup"
-    )
+def _collect_tool_blockers(cfg: InterlockConfig | None, blockers: list[str]) -> None:
+    """Record blockers from the resolved tool config.
+
+    The budgeted-mutation behavior is documented by `explain check` and
+    `check --help`, so it is not surfaced here — it is not a warning.
+    """
     if cfg is not None and cfg.test_invoker == "uv" and shutil.which("uv") is None:
         blockers.append("test_invoker is `uv`, but `uv` was not found on PATH")
 

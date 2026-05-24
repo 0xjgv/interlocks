@@ -117,41 +117,27 @@ def test_pre_commit_in_process_dispatches(
 
 
 @pytest.mark.parametrize(
-    ("skip", "expected_calls", "expected_warning"),
-    [
-        (
-            "fix",
-            ["run_tasks"],
-            "fix: skipped by global skip policy",
-        ),
-        (
-            "format",
-            ["budgeted-mutation", "stage", "run_tasks"],
-            "format: skipped by global skip policy",
-        ),
-        (
-            "fix,format",
-            ["run_tasks"],
-            "fix: skipped by global skip policy",
-        ),
-    ],
+    "skip",
+    ["fix", "format", "fix,format"],
     ids=["skip-fix", "skip-format", "skip-both-mutators"],
 )
-def test_pre_commit_skip_controls_mutators_and_restaging(
+def test_pre_commit_skip_disables_restaging(
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     skip: str,
-    expected_calls: list[str],
-    expected_warning: str,
 ) -> None:
+    """Skipping `fix` or `format` skips the budgeted mutation, so nothing is re-staged.
+
+    The mutation itself is skipped inside `run_budgeted_mutation` (stubbed here);
+    pre-commit's own job is to drop the `stage(files)` re-stage when either
+    alias label is skipped.
+    """
     calls = _pre_commit_calls(monkeypatch, ["interlocks/mod.py"], skip=skip)
 
     from interlocks.stages import pre_commit as pre_commit_mod
 
     pre_commit_mod.cmd_pre_commit()
 
-    assert [call[0] for call in calls] == expected_calls
-    assert expected_warning in capsys.readouterr().out
+    assert [call[0] for call in calls] == ["budgeted-mutation", "run_tasks"]
 
 
 def test_pre_commit_delegates_parallel_task_skips_to_runner(
@@ -178,7 +164,9 @@ def _pre_commit_calls(
     monkeypatch.setattr(sys, "argv", argv)
     monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
     monkeypatch.setattr(
-        pre_commit_mod, "_run_budgeted_mutation", lambda: calls.append(("budgeted-mutation", None))
+        pre_commit_mod,
+        "_run_budgeted_mutation",
+        lambda _policy: calls.append(("budgeted-mutation", None)),
     )
     monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
     monkeypatch.setattr(

@@ -129,7 +129,8 @@ def test_check_json_is_parseable(tmp_project: Path) -> None:
     assert isinstance(payload["elapsed_seconds"], (int, float))
     assert isinstance(payload["gates"], list)
     for gate in payload["gates"]:
-        assert {"name", "label", "status", "elapsed_seconds"} <= gate.keys()
+        assert {"name", "status", "elapsed_seconds"} <= gate.keys()
+        assert "label" not in gate  # `name` is the sole stable identifier
     assert isinstance(payload["skipped"], list)
     assert "evidence_path" not in payload
 
@@ -358,10 +359,12 @@ def test_check_skip_filters_direct_and_parallel_tasks(
 
     check_mod.cmd_check()
 
-    assert calls == [("run_tasks", ["typecheck", "test"])]
+    # The budgeted-mutation seam is always invoked; `--skip=fix`/`format` is
+    # resolved inside `run_budgeted_mutation` (stubbed here). check itself
+    # filters the advisory deps/crap gates and threads the policy to run_tasks.
+    assert calls == ["budgeted-mutation", ("run_tasks", ["typecheck", "test"])]
     out = capsys.readouterr().out
     assert "skips active" in out
-    assert "fix: skipped by global skip policy" in out
     assert "crap: skipped by global skip policy" in out
 
 

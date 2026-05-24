@@ -25,6 +25,14 @@ Feature: interlocks stage commands on a minimal inline project
     And the stage output does not contain "plan .lintfix/optimize.json"
     And the stage output does not contain "Quality Checks"
 
+  # req: check-skip-format-aliases-fix
+  Scenario: `interlocks check --skip=format` skips the budgeted lint/format mutation
+    Given a minimal tmp project
+    When I run "interlocks check --skip=format" in the tmp project
+    Then the stage exits 0
+    And the stage output contains "fix: skipped"
+    And the stage output does not contain "[format]"
+
   # req: stage-pre-commit
   Scenario: `interlocks pre-commit` no-ops when nothing is staged
     Given a minimal tmp project

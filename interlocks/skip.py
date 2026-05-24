@@ -113,5 +113,6 @@ def _known_labels() -> str:
 
 
 def _fail_skip_usage(message: str) -> None:
+    # Usage error → exit 1; exit 2 is reserved for a missing pyproject.
     print(f"interlocks: {message}", file=sys.stderr)
-    raise SystemExit(2)
+    raise SystemExit(1)

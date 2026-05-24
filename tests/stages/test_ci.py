@@ -185,7 +185,8 @@ def test_ci_json_is_parseable(tmp_project: Path) -> None:
     assert isinstance(payload["elapsed_seconds"], (int, float))
     assert isinstance(payload["gates"], list)
     for gate in payload["gates"]:
-        assert {"name", "label", "status", "elapsed_seconds"} <= gate.keys()
+        assert {"name", "status", "elapsed_seconds"} <= gate.keys()
+        assert "label" not in gate  # `name` is the sole stable identifier
     assert isinstance(payload["skipped"], list)
     assert payload["evidence_path"].endswith("ci.json")
 

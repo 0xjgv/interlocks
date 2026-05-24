@@ -184,8 +184,9 @@ def test_doctor_in_process_reports_sections(
     # Derived Next Steps flags the missing preset + CI, not the generic line.
     assert "Run `interlocks presets`" in captured.out
     assert "Wire CI via `interlocks ci`" in captured.out
-    assert "default check mutation is budgeted by author diff" in captured.out
-    assert "interlocks check --renovate" in captured.out
+    # The budgeted-mutation note is documentation (`explain check` / `check
+    # --help`), not a doctor warning — it no longer appears in the report.
+    assert "default check mutation is budgeted by author diff" not in captured.out
     # task_doctor is CLI-only — it never composes into a stage pipeline.
     assert task_doctor() is None
 
@@ -470,8 +471,8 @@ def test_doctor_verbose_omits_uvx_path_warnings(tmp_path: Path) -> None:
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     # The false uvx-tool PATH warnings are gone...
     assert "tool not found on PATH" not in result.stdout
-    # ...but the real, unconditional mutation-budget warning survives.
-    assert "default check mutation is budgeted by author diff" in result.stdout
+    # ...and the budgeted-mutation note is documentation, not a doctor warning.
+    assert "default check mutation is budgeted by author diff" not in result.stdout
 
 
 def test_doctor_detects_git_pre_commit_hook(

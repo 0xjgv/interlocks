@@ -342,6 +342,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.stages.check:cmd_check",
     ),
     Behavior(
+        "check-skip-format-aliases-fix",
+        "stage",
+        "check --skip=format skips the budgeted lint/format mutation",
+        "interlocks.stages.check:cmd_check",
+    ),
+    Behavior(
         "stage-pre-commit",
         "stage",
         "pre-commit checks staged Python files",

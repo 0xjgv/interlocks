@@ -200,7 +200,8 @@ Or in project config:
 skip = ["typecheck"]
 ```
 
-Unknown skip labels exit 2, and skipped gates print warnings.
+Unknown skip labels exit 1, and skipped gates print warnings. `fix` and
+`format` are one budgeted lint/format gate — skipping either disables it.
 
 ## Advanced Evidence Gates
 

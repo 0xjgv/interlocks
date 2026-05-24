@@ -13,7 +13,7 @@ from interlocks.runner import (
     reset_results,
     run_tasks,
 )
-from interlocks.skip import current_skip_policy, maybe_print_skip_banner, run_unless_skipped
+from interlocks.skip import SkipPolicy, current_skip_policy, maybe_print_skip_banner
 from interlocks.stages._budgeted import run_budgeted_mutation
 from interlocks.tasks.test import task_test
 from interlocks.tasks.typecheck import task_typecheck
@@ -34,9 +34,8 @@ def cmd_pre_commit() -> None:
     maybe_print_skip_banner(skip_policy)
     ui.section("Pre-commit Checks")
     try:
-        run_unless_skipped("format", lambda: None, skip_policy)
-        run_unless_skipped("fix", _run_budgeted_mutation, skip_policy)
-        if not skip_policy.enabled("fix"):
+        _run_budgeted_mutation(skip_policy)
+        if not (skip_policy.enabled("fix") or skip_policy.enabled("format")):
             stage(files)
 
         src_prefix = f"{cfg.src_dir_arg}/"
@@ -50,5 +49,5 @@ def cmd_pre_commit() -> None:
         print_stage_verdict("pre-commit", elapsed)
 
 
-def _run_budgeted_mutation() -> None:
-    run_budgeted_mutation(base="HEAD", emit_legacy_rows=True)
+def _run_budgeted_mutation(skip_policy: SkipPolicy) -> None:
+    run_budgeted_mutation(base="HEAD", emit_legacy_rows=True, skip_policy=skip_policy)
