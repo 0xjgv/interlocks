@@ -52,14 +52,16 @@ def test_init_acceptance_scaffolds_layout(tmp_project: Path) -> None:
     assert "Scenario:" in feature
 
 
-def test_init_acceptance_refuses_to_overwrite(tmp_project: Path) -> None:
-    (tmp_project / "tests" / "features").mkdir()
-    existing = tmp_project / "tests" / "features" / "example.feature"
+def test_init_acceptance_preserves_existing_files_and_creates_missing(tmp_project: Path) -> None:
+    (tmp_project / "tests" / "step_defs").mkdir()
+    existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
     result = _run_cli(tmp_project, "init-acceptance")
-    assert result.returncode != 0
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert existing.read_text(encoding="utf-8") == "# pre-existing\n"
-    assert "refusing to overwrite" in result.stdout
+    assert "created tests/features/example.feature" in result.stdout
+    assert "created tests/step_defs/test_example.py" in result.stdout
+    assert "kept tests/step_defs/conftest.py" in result.stdout
 
 
 def test_init_acceptance_json_scaffolds_layout(tmp_project: Path) -> None:
@@ -75,6 +77,11 @@ def test_init_acceptance_json_scaffolds_layout(tmp_project: Path) -> None:
         "tests/step_defs/test_example.py",
         "tests/step_defs/conftest.py",
     ]
+    assert payload["files"] == [
+        {"path": "tests/features/example.feature", "action": "created"},
+        {"path": "tests/step_defs/test_example.py", "action": "created"},
+        {"path": "tests/step_defs/conftest.py", "action": "created"},
+    ]
     assert payload["next_actions"] == [
         "Add `pytest-bdd>=8` to test/dev dependencies if it is missing.",
         "Create or sync the project environment if `interlocks doctor` reports one missing.",
@@ -86,47 +93,99 @@ def test_init_acceptance_json_scaffolds_layout(tmp_project: Path) -> None:
     assert (tmp_project / "tests" / "step_defs" / "conftest.py").is_file()
 
 
-def test_init_acceptance_json_refuses_to_overwrite(tmp_project: Path) -> None:
-    (tmp_project / "tests" / "features").mkdir()
-    existing = tmp_project / "tests" / "features" / "example.feature"
+def test_init_acceptance_json_preserves_existing_files_and_creates_missing(
+    tmp_project: Path,
+) -> None:
+    (tmp_project / "tests" / "step_defs").mkdir()
+    existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
     result = _run_cli(tmp_project, "init-acceptance", "--json")
-    assert result.returncode == 1
+    assert result.returncode == 0
     assert result.stderr == ""
     payload = json.loads(result.stdout)
     assert payload["command"] == "init-acceptance"
-    assert payload["passed"] is False
-    assert payload["status"] == "refused"
-    assert payload["existing_paths"] == ["tests/features/example.feature"]
-    assert payload["created"] == []
-    assert payload["error"] == (
-        "refusing to overwrite existing files: tests/features/example.feature"
-    )
+    assert payload["passed"] is True
+    assert payload["status"] == "scaffold-present"
+    assert payload["created"] == [
+        "tests/features/example.feature",
+        "tests/step_defs/test_example.py",
+    ]
+    assert payload["files"] == [
+        {"path": "tests/features/example.feature", "action": "created"},
+        {"path": "tests/step_defs/test_example.py", "action": "created"},
+        {"path": "tests/step_defs/conftest.py", "action": "kept"},
+    ]
     assert existing.read_text(encoding="utf-8") == "# pre-existing\n"
+    assert (tmp_project / "tests" / "features" / "example.feature").is_file()
+    assert (tmp_project / "tests" / "step_defs" / "test_example.py").is_file()
+
+
+def test_init_acceptance_keeps_domain_features_without_adding_example(tmp_project: Path) -> None:
+    features = tmp_project / "tests" / "features"
+    features.mkdir()
+    domain = features / "billing.feature"
+    domain.write_text(
+        "Feature: Billing\n  Scenario: charge a card\n    Given a card\n",
+        encoding="utf-8",
+    )
+
+    result = _run_cli(tmp_project, "init-acceptance")
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert "kept tests/features/" in result.stdout
+    assert "next: run `interlocks acceptance`" in result.stdout
+    assert not (features / "example.feature").exists()
     assert not (tmp_project / "tests" / "step_defs").exists()
 
 
-def test_init_acceptance_refusal_payload_is_exact() -> None:
+def test_init_acceptance_json_keeps_domain_features_without_adding_example(
+    tmp_project: Path,
+) -> None:
+    features = tmp_project / "tests" / "features"
+    features.mkdir()
+    domain = features / "billing.feature"
+    domain.write_text(
+        "Feature: Billing\n  Scenario: charge a card\n    Given a card\n",
+        encoding="utf-8",
+    )
+
+    result = _run_cli(tmp_project, "init-acceptance", "--json")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "command": "init-acceptance",
+        "passed": True,
+        "status": "domain-acceptance-present",
+        "created": [],
+        "files": [],
+        "domain_acceptance_feature_count": 1,
+        "domain_acceptance_features": ["tests/features/billing.feature"],
+        "next_actions": ["Run `interlocks acceptance`."],
+    }
+    assert not (features / "example.feature").exists()
+    assert not (tmp_project / "tests" / "step_defs").exists()
+
+
+def test_init_acceptance_success_payload_is_exact() -> None:
     from interlocks.tasks import init_acceptance as mod
 
-    assert mod._init_acceptance_refusal_payload([
-        "tests/features/example.feature",
-        "tests/step_defs/test_example.py",
-    ]) == {
+    files = [
+        {"path": "tests/features/example.feature", "action": "kept"},
+        {"path": "tests/step_defs/test_example.py", "action": "created"},
+    ]
+
+    assert mod._init_acceptance_success_payload(files) == {
         "command": "init-acceptance",
-        "passed": False,
-        "status": "refused",
-        "error": (
-            "refusing to overwrite existing files: "
-            "tests/features/example.feature, tests/step_defs/test_example.py"
-        ),
-        "existing_paths": [
-            "tests/features/example.feature",
-            "tests/step_defs/test_example.py",
-        ],
-        "created": [],
+        "passed": True,
+        "status": "scaffold-present",
+        "created": ["tests/step_defs/test_example.py"],
+        "files": files,
         "next_actions": [
-            "Inspect existing acceptance files before scaffolding the example layout."
+            "Add `pytest-bdd>=8` to test/dev dependencies if it is missing.",
+            "Create or sync the project environment if `interlocks doctor` reports one missing.",
+            "Replace the example scenario with project behavior.",
+            "Run `interlocks acceptance`.",
         ],
     }
 
@@ -167,38 +226,37 @@ def test_init_acceptance_in_process_json_scaffolds(
     ]
 
 
-def test_init_acceptance_in_process_refuses_overwrite(
+def test_init_acceptance_in_process_preserves_existing_files(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """In-process call — exercises the refuse-to-overwrite branch for coverage."""
-    (tmp_project / "tests" / "features").mkdir()
-    existing = tmp_project / "tests" / "features" / "example.feature"
+    (tmp_project / "tests" / "step_defs").mkdir()
+    existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
     monkeypatch.chdir(tmp_project)
     from interlocks.tasks.init_acceptance import cmd_init_acceptance
 
-    with pytest.raises(SystemExit):
-        cmd_init_acceptance()
+    cmd_init_acceptance()
+
     assert existing.read_text(encoding="utf-8") == "# pre-existing\n"
+    assert (tmp_project / "tests" / "features" / "example.feature").is_file()
+    assert (tmp_project / "tests" / "step_defs" / "test_example.py").is_file()
 
 
-def test_init_acceptance_in_process_json_refuses_overwrite(
+def test_init_acceptance_in_process_json_preserves_existing_files(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_project / "tests" / "features").mkdir()
-    existing = tmp_project / "tests" / "features" / "example.feature"
+    (tmp_project / "tests" / "step_defs").mkdir()
+    existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
     monkeypatch.chdir(tmp_project)
     monkeypatch.setattr(sys, "argv", ["interlocks", "init-acceptance", "--json"])
     from interlocks.tasks.init_acceptance import cmd_init_acceptance
 
-    with pytest.raises(SystemExit) as excinfo:
-        cmd_init_acceptance()
+    cmd_init_acceptance()
 
-    assert excinfo.value.code == 1
     payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "refused"
-    assert payload["existing_paths"] == ["tests/features/example.feature"]
+    assert payload["status"] == "scaffold-present"
+    assert payload["files"][-1] == {"path": "tests/step_defs/conftest.py", "action": "kept"}
     assert existing.read_text(encoding="utf-8") == "# pre-existing\n"

@@ -1,17 +1,25 @@
 """Scaffold the pytest-bdd canonical layout under the project's test_dir.
 
-Writes three files from bundled templates; refuses to overwrite anything that
-already exists so re-running is safe. Stdlib-only.
+Writes missing bundled files and preserves existing files so re-running is safe.
+Stdlib-only.
 """
 
 from __future__ import annotations
 
-import sys
+from typing import TYPE_CHECKING, TypeAlias
 
 from interlocks import ui
+from interlocks.acceptance_status import feature_files
 from interlocks.config import load_config
 from interlocks.defaults_path import path as defaults_path
-from interlocks.runner import fail_skip, section
+from interlocks.runner import section
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from interlocks.config import InterlockConfig
+
+_ScaffoldFile: TypeAlias = dict[str, str]
 
 _INIT_ACCEPTANCE_OUTPUTS = (
     "tests/features/example.feature",
@@ -36,25 +44,28 @@ def cmd_init_acceptance() -> None:
     cfg = load_config()
     test_dir = cfg.test_dir
     test_dir.mkdir(parents=True, exist_ok=True)
-
-    targets = [(test_dir / relpath, template) for relpath, template in _INIT_ACCEPTANCE_TEMPLATES]
-
-    existing = [t for t, _ in targets if t.exists()]
-    if existing:
-        rels = [cfg.relpath(p) for p in existing]
+    domain_files = domain_acceptance_feature_files(cfg)
+    if domain_files:
         if ui.is_json():
-            ui.print_json(_init_acceptance_refusal_payload(rels))
-            sys.exit(1)
-        fail_skip(f"init-acceptance: refusing to overwrite existing files: {', '.join(rels)}")
-
-    for target, template in targets:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(defaults_path(template).read_bytes())
-        if not ui.is_json():
-            print(f"created {cfg.relpath(target)}")
-    if ui.is_json():
-        ui.print_json(_init_acceptance_success_payload())
+            ui.print_json(_init_acceptance_domain_payload(cfg, domain_files))
+            return
+        target = cfg.features_dir or (cfg.test_dir / "features")
+        print(f"kept {cfg.relpath(target)}/")
+        print("next: run `interlocks acceptance`")
         return
+
+    files: list[_ScaffoldFile] = []
+    for target, template in _init_acceptance_targets(test_dir):
+        files.append({
+            "path": cfg.relpath(target),
+            "action": _ensure_scaffold_file(target, template),
+        })
+
+    if ui.is_json():
+        ui.print_json(_init_acceptance_success_payload(files))
+        return
+    for file in files:
+        print(f"{file['action']} {file['path']}")
     _print_init_acceptance_next_steps()
 
 
@@ -63,25 +74,61 @@ def _print_init_acceptance_next_steps() -> None:
         print(f"next: {action[0].lower()}{action[1:]}")
 
 
-def _init_acceptance_success_payload() -> dict[str, object]:
+def domain_acceptance_feature_files(cfg: InterlockConfig) -> list[Path]:
+    """Return feature files excluding the unchanged scaffold example."""
+    return [path for path in feature_files(cfg.features_dir) if not _is_scaffold_feature(path)]
+
+
+def _is_scaffold_feature(path: Path) -> bool:
+    if path.name != "example.feature":
+        return False
+    try:
+        return path.read_bytes() == defaults_path("bdd_example.feature").read_bytes()
+    except OSError:
+        return False
+
+
+def _init_acceptance_targets(test_dir: Path) -> tuple[tuple[Path, str], ...]:
+    return tuple(
+        (test_dir / relpath, template) for relpath, template in _INIT_ACCEPTANCE_TEMPLATES
+    )
+
+
+def _ensure_scaffold_file(target: Path, template: str) -> str:
+    if target.exists():
+        return "kept"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(defaults_path(template).read_bytes())
+    return "created"
+
+
+def _init_acceptance_status(files: list[_ScaffoldFile]) -> str:
+    if files and all(file["action"] == "created" for file in files):
+        return "created"
+    return "scaffold-present"
+
+
+def _init_acceptance_success_payload(files: list[_ScaffoldFile]) -> dict[str, object]:
     return {
         "command": "init-acceptance",
         "passed": True,
-        "status": "created",
-        "created": list(_INIT_ACCEPTANCE_OUTPUTS),
+        "status": _init_acceptance_status(files),
+        "created": [file["path"] for file in files if file["action"] == "created"],
+        "files": files,
         "next_actions": list(_INIT_ACCEPTANCE_NEXT_ACTIONS),
     }
 
 
-def _init_acceptance_refusal_payload(existing_paths: list[str]) -> dict[str, object]:
+def _init_acceptance_domain_payload(
+    cfg: InterlockConfig, domain_files: list[Path]
+) -> dict[str, object]:
     return {
         "command": "init-acceptance",
-        "passed": False,
-        "status": "refused",
-        "error": f"refusing to overwrite existing files: {', '.join(existing_paths)}",
-        "existing_paths": existing_paths,
+        "passed": True,
+        "status": "domain-acceptance-present",
         "created": [],
-        "next_actions": [
-            "Inspect existing acceptance files before scaffolding the example layout."
-        ],
+        "files": [],
+        "domain_acceptance_feature_count": len(domain_files),
+        "domain_acceptance_features": [cfg.relpath(path) for path in domain_files],
+        "next_actions": ["Run `interlocks acceptance`."],
     }

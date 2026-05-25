@@ -411,12 +411,12 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     CommandDoc(
         "init-acceptance",
         "Scaffold tests/features + tests/step_defs (pytest-bdd layout)",
-        "Scaffold a working pytest-bdd acceptance example; refuses to overwrite existing files.",
+        "Scaffold a working pytest-bdd acceptance example; preserves existing files "
+        "and creates missing scaffold files.",
         mutates=True,
         outputs=("tests/features/", "tests/step_defs/"),
         exit_codes=(
-            (0, "scaffold written"),
-            (1, "target files already exist"),
+            (0, "scaffold present"),
             _NO_PYPROJECT,
         ),
         flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),

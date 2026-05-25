@@ -18,7 +18,7 @@ Feature: interlocks meta commands
     Then the command exits successfully
 
   # req: meta-init-acceptance
-  Scenario: init-acceptance scaffolds the canonical layout and refuses to overwrite
+  Scenario: init-acceptance scaffolds the canonical layout idempotently
     Given a tmp project without tests/features/
     When I run "interlocks init-acceptance" in the tmp project
     Then the command exits successfully
@@ -27,7 +27,8 @@ Feature: interlocks meta commands
     And the file "tests/step_defs/conftest.py" exists in the tmp project
     And the output contains "next: run `interlocks acceptance`"
     When I run "interlocks init-acceptance" in the tmp project a second time
-    Then the command exits with a non-zero status
+    Then the command exits successfully
+    And the output contains "kept tests/features/example.feature"
 
   # req: meta-setup-hooks
   Scenario: setup-hooks installs an executable pre-commit hook

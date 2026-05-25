@@ -308,7 +308,7 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
     Behavior(
         "meta-init-acceptance",
         "meta",
-        "init-acceptance scaffolds feature files",
+        "init-acceptance scaffolds feature files idempotently",
         "interlocks.tasks.init_acceptance:cmd_init_acceptance",
     ),
     Behavior(

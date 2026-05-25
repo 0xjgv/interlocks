@@ -212,7 +212,8 @@ Scaffolding:
 - `init`: writes a greenfield `pyproject.toml`, `tests/__init__.py`, and
   `tests/test_smoke.py`; refuses to overwrite.
 - `init-acceptance`: writes a working pytest-bdd example under
-  `tests/features/` and `tests/step_defs/`; refuses to overwrite.
+  `tests/features/` and `tests/step_defs/`; preserves existing files and creates
+  missing scaffold files.
 - `init-properties`: writes `<properties_dir>/test_example_properties.py`
   (`properties/` by default) when no domain property tests exist; preserves
   existing files and no-ops once domain properties are present.
