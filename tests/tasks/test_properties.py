@@ -329,6 +329,22 @@ def test_cmd_properties_json_reports_missing_property_tests(
     }
 
 
+def test_cmd_properties_reports_missing_property_tests_before_project_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
+
+    result = _run_properties_command(tmp_path, monkeypatch, capsys, "--json")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "no property tests detected"
+    assert payload["next_actions"] == ["Run `interlocks init-properties` to scaffold properties/."]
+
+
 def test_cmd_properties_skips_when_project_env_missing(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -337,6 +353,7 @@ def test_cmd_properties_skips_when_project_env_missing(
     from interlocks.config import clear_cache
     from interlocks.tasks import properties as properties_mod
 
+    _write_property(tmp_project)
     monkeypatch.chdir(tmp_project)
     clear_cache()
     monkeypatch.setattr(properties_mod, "project_env_ready", lambda _cfg: False)
@@ -357,6 +374,7 @@ def test_cmd_properties_json_reports_project_env_missing(
     from interlocks.config import clear_cache
     from interlocks.tasks import properties as properties_mod
 
+    _write_property(tmp_project)
     monkeypatch.chdir(tmp_project)
     clear_cache()
     monkeypatch.setattr(properties_mod, "project_env_ready", lambda _cfg: False)
@@ -695,11 +713,55 @@ def test_property_candidates_uncovered_hides_property_referenced_functions(
     }
     assert all_payload["include_referenced"] is True
     assert uncovered_payload["include_referenced"] is False
+    assert all_payload["total_count"] == 3
+    assert all_payload["referenced_count"] == 1
+    assert all_payload["unreferenced_count"] == 2
+    assert uncovered_payload["total_count"] == 3
+    assert uncovered_payload["referenced_count"] == 1
+    assert uncovered_payload["unreferenced_count"] == 2
     assert all_by_symbol["property_probe/core.py", "parse_count"]["property_refs"] >= 1
     assert all_by_symbol["property_probe/other.py", "parse_count"]["property_refs"] == 0
     assert ("property_probe/core.py", "parse_count") not in uncovered_symbols
     assert ("property_probe/other.py", "parse_count") in uncovered_symbols
     assert ("property_probe/core.py", "parse_total") in uncovered_symbols
+
+
+def test_property_candidates_uncovered_text_distinguishes_all_referenced(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pkg = tmp_project / "property_probe"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "core.py").write_text(
+        textwrap.dedent(
+            """\
+            def parse_count(raw: str) -> int:
+                if not raw:
+                    return 0
+                return int(raw)
+            """
+        ),
+        encoding="utf-8",
+    )
+    properties = tmp_project / "properties"
+    properties.mkdir()
+    (properties / "test_core_properties.py").write_text(
+        "from property_probe.core import parse_count\n\n"
+        "def test_count_reference() -> None:\n"
+        "    parse_count('1')\n",
+        encoding="utf-8",
+    )
+
+    result = _run_property_candidates(tmp_project, monkeypatch, capsys, "--uncovered")
+
+    assert result.returncode == 0, result.stderr
+    assert "all 1 ranked candidate(s) in all source already have property-test references" in (
+        result.stdout
+    )
+    assert "rerun without `--uncovered`" in result.stdout
+    assert "no source functions look like strong property-test candidates" not in result.stdout
 
 
 def test_property_candidates_uncovered_counts_function_local_property_imports(
@@ -788,6 +850,51 @@ def test_property_candidates_uncovered_requires_property_call_reference(
         "from property_probe.core import parse_count\n\n"
         "def test_count_reference() -> None:\n"
         "    assert parse_count is not None\n",
+        encoding="utf-8",
+    )
+
+    all_result = _run_property_candidates(tmp_project, monkeypatch, capsys, "--json", "--limit=0")
+    uncovered_result = _run_property_candidates(
+        tmp_project, monkeypatch, capsys, "--json", "--uncovered", "--limit=0"
+    )
+
+    assert all_result.returncode == 0, all_result.stderr
+    assert uncovered_result.returncode == 0, uncovered_result.stderr
+    all_payload = json.loads(all_result.stdout)
+    uncovered_payload = json.loads(uncovered_result.stdout)
+    [candidate] = all_payload["candidates"]
+    uncovered_symbols = {
+        (candidate["path"], candidate["name"]) for candidate in uncovered_payload["candidates"]
+    }
+    assert candidate["property_refs"] == 0
+    assert ("property_probe/core.py", "parse_count") in uncovered_symbols
+
+
+def test_property_candidates_uncovered_ignores_module_attribute_existence_checks(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pkg = tmp_project / "property_probe"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "core.py").write_text(
+        textwrap.dedent(
+            """\
+            def parse_count(raw: str) -> int:
+                if not raw:
+                    return 0
+                return int(raw)
+            """
+        ),
+        encoding="utf-8",
+    )
+    properties = tmp_project / "properties"
+    properties.mkdir()
+    (properties / "test_core_properties.py").write_text(
+        "import property_probe.core as core\n\n"
+        "def test_count_reference() -> None:\n"
+        "    assert core.parse_count is not None\n",
         encoding="utf-8",
     )
 
@@ -926,6 +1033,60 @@ def test_property_candidates_uncovered_hides_instance_method_property_references
     assert ("property_probe/other.py", "Parser.parse_value") in uncovered_symbols
 
 
+def test_property_candidates_uncovered_hides_instance_property_attribute_references(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pkg = tmp_project / "property_probe"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "core.py").write_text(
+        textwrap.dedent(
+            """\
+            class Parser:
+                def __init__(self, raw: str) -> None:
+                    self.raw = raw
+
+                @property
+                def parse_value(self) -> int:
+                    if not self.raw:
+                        return 0
+                    return int(self.raw)
+            """
+        ),
+        encoding="utf-8",
+    )
+    properties = tmp_project / "properties"
+    properties.mkdir()
+    (properties / "test_core_properties.py").write_text(
+        "from property_probe.core import Parser\n\n"
+        "def test_parser_property_reference() -> None:\n"
+        "    parser = Parser('1')\n"
+        "    assert parser.parse_value == 1\n",
+        encoding="utf-8",
+    )
+
+    all_result = _run_property_candidates(tmp_project, monkeypatch, capsys, "--json", "--limit=0")
+    uncovered_result = _run_property_candidates(
+        tmp_project, monkeypatch, capsys, "--json", "--uncovered", "--limit=0"
+    )
+
+    assert all_result.returncode == 0, all_result.stderr
+    assert uncovered_result.returncode == 0, uncovered_result.stderr
+    all_payload = json.loads(all_result.stdout)
+    uncovered_payload = json.loads(uncovered_result.stdout)
+    all_by_symbol = {
+        (candidate["path"], candidate["qualname"]): candidate
+        for candidate in all_payload["candidates"]
+    }
+    uncovered_symbols = {
+        (candidate["path"], candidate["qualname"]) for candidate in uncovered_payload["candidates"]
+    }
+    assert all_by_symbol["property_probe/core.py", "Parser.parse_value"]["property_refs"] >= 1
+    assert ("property_probe/core.py", "Parser.parse_value") not in uncovered_symbols
+
+
 def test_property_candidates_text_output_shows_class_qualname(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1049,7 +1210,11 @@ def test_property_candidates_text_output_reports_no_candidates(
     result = _run_property_candidates(tmp_project, monkeypatch, capsys, "--limit=0")
 
     assert result.returncode == 0, result.stderr
-    assert "no source functions look like strong property-test candidates" in result.stdout
+    assert "no source functions in all source look like strong property-test candidates" in (
+        result.stdout
+    )
+    assert "extract or add typed, side-effect-light domain functions" in result.stdout
+    assert "interlocks init-properties" in result.stdout
 
 
 def test_property_candidates_changed_scope_filters_and_skips_bad_python(

@@ -1088,6 +1088,39 @@ def test_evaluate_json_is_parseable(
     }
 
 
+def test_evaluate_json_without_pyproject_reports_init_next_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "evaluate", "--json"])
+
+    cmd_evaluate()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "evaluate"
+    assert payload["next_actions"] == [
+        "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults."
+    ]
+
+
+def test_evaluate_human_without_pyproject_reports_init_next_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "evaluate"])
+
+    cmd_evaluate()
+
+    out = capsys.readouterr().out
+    assert "Run `interlocks init` to scaffold pyproject.toml" in out
+    next_actions = out.split("Next Actions", maxsplit=1)[1]
+    assert next_actions.index("Run `interlocks init`") < next_actions.index("[acceptance]")
+
+
 def test_evaluate_check_json_serializes_optional_action_and_closure() -> None:
     item = EvaluationItem(
         "sample",

@@ -146,19 +146,6 @@ def cmd_properties(*, profile_default: str = "ci") -> None:
             })
             sys.exit(1)
         fail_skip(f"properties: unsupported profile {profile!r} (expected {choices})")
-    if not project_env_ready(cfg):
-        if ui.is_json():
-            ui.print_json(
-                _properties_skip_payload(
-                    cfg,
-                    profile,
-                    project_env_skip_message("properties"),
-                    "Create or sync the project environment, then rerun `interlocks properties`.",
-                )
-            )
-            return
-        warn_skip(project_env_skip_message("properties"))
-        return
     task = task_properties(profile=profile)
     if task is None:
         properties_dir = _properties_dir_arg(cfg)
@@ -176,6 +163,19 @@ def cmd_properties(*, profile_default: str = "ci") -> None:
             "properties: no property tests detected — run `interlocks init-properties` "
             f"to scaffold {properties_dir}/"
         )
+        return
+    if not project_env_ready(cfg):
+        if ui.is_json():
+            ui.print_json(
+                _properties_skip_payload(
+                    cfg,
+                    profile,
+                    project_env_skip_message("properties"),
+                    "Create or sync the project environment, then rerun `interlocks properties`.",
+                )
+            )
+            return
+        warn_skip(project_env_skip_message("properties"))
         return
     if ui.is_json():
         run_task_json(

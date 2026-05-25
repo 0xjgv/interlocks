@@ -180,6 +180,69 @@ class _CandidateSignals:
     cautions: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class _PropertyCandidatesState:
+    cfg: InterlockConfig
+    scope_ref: str | None
+    include_referenced: bool
+    all_candidates: list[PropertyCandidate]
+    candidates: list[PropertyCandidate]
+    shown: list[PropertyCandidate]
+
+    @property
+    def total_count(self) -> int:
+        return len(self.all_candidates)
+
+    @property
+    def scope_label(self) -> str:
+        return f"changed vs {self.scope_ref}" if self.scope_ref else "all source"
+
+    @property
+    def json_scope_label(self) -> str:
+        return f"changed vs {self.scope_ref}" if self.scope_ref else "all"
+
+    @property
+    def referenced_count(self) -> int:
+        return sum(1 for candidate in self.all_candidates if candidate.property_refs)
+
+    @property
+    def unreferenced_count(self) -> int:
+        return self.total_count - self.referenced_count
+
+    @property
+    def next_actions(self) -> tuple[str, ...]:
+        if self.candidates:
+            return ()
+        if self.total_count and not self.include_referenced:
+            return (
+                "Rerun without `--uncovered` to review referenced candidates.",
+                "Add deeper invariants where property references are shallow.",
+            )
+        if not self.total_count:
+            return (
+                "Extract or add typed, side-effect-light domain functions before "
+                "property-test hardening.",
+                "Run `interlocks init-properties` when domain invariants are ready.",
+            )
+        return ()
+
+    def to_json(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "command": "property-candidates",
+            "scope": self.json_scope_label,
+            "include_referenced": self.include_referenced,
+            "count": len(self.candidates),
+            "total_count": self.total_count,
+            "referenced_count": self.referenced_count,
+            "unreferenced_count": self.unreferenced_count,
+            "shown": len(self.shown),
+            "candidates": [candidate.to_json() for candidate in self.shown],
+        }
+        if self.next_actions:
+            payload["next_actions"] = list(self.next_actions)
+        return payload
+
+
 def property_candidates(
     cfg: InterlockConfig, *, changed: set[str] | None = None, include_referenced: bool = True
 ) -> list[PropertyCandidate]:
@@ -204,63 +267,80 @@ def property_candidates(
 
 
 def cmd_property_candidates() -> None:
-    cfg, scope_ref, include_referenced, candidates, shown = _property_candidates_command_state()
+    state = _property_candidates_command_state()
     if ui.is_json():
-        ui.print_json(
-            _property_candidates_json(
-                scope_ref=scope_ref,
-                include_referenced=include_referenced,
-                candidates=candidates,
-                shown=shown,
-            )
-        )
+        ui.print_json(_property_candidates_json(state))
         return
-    _render_property_candidates(cfg, shown)
+    _render_property_candidates(state)
 
 
-def _property_candidates_command_state() -> tuple[
-    InterlockConfig,
-    str | None,
-    bool,
-    list[PropertyCandidate],
-    list[PropertyCandidate],
-]:
+def _property_candidates_command_state() -> _PropertyCandidatesState:
     cfg = load_config()
     limit = _candidate_limit()
     scope_ref = arg_flag_value("--changed", cfg.changed_ref)
     changed = changed_py_files_vs(scope_ref) if scope_ref else None
     include_referenced = arg_flag_value("--uncovered", "1") is None
-    candidates = property_candidates(cfg, changed=changed, include_referenced=include_referenced)
+    all_candidates = property_candidates(cfg, changed=changed, include_referenced=True)
+    candidates = (
+        all_candidates
+        if include_referenced
+        else [candidate for candidate in all_candidates if candidate.property_refs == 0]
+    )
     shown = candidates[:limit] if limit else candidates
-    return cfg, scope_ref, include_referenced, candidates, shown
+    return _PropertyCandidatesState(
+        cfg=cfg,
+        scope_ref=scope_ref,
+        include_referenced=include_referenced,
+        all_candidates=all_candidates,
+        candidates=candidates,
+        shown=shown,
+    )
 
 
-def _property_candidates_json(
-    *,
-    scope_ref: str | None,
-    include_referenced: bool,
-    candidates: list[PropertyCandidate],
-    shown: list[PropertyCandidate],
-) -> dict[str, object]:
-    return {
-        "command": "property-candidates",
-        "scope": f"changed vs {scope_ref}" if scope_ref else "all",
-        "include_referenced": include_referenced,
-        "count": len(candidates),
-        "shown": len(shown),
-        "candidates": [candidate.to_json() for candidate in shown],
-    }
+def _property_candidates_json(state: _PropertyCandidatesState) -> dict[str, object]:
+    return state.to_json()
 
 
-def _render_property_candidates(cfg: InterlockConfig, shown: list[PropertyCandidate]) -> None:
-    ui.command_banner("property-candidates", cfg)
+def _render_property_candidates(state: _PropertyCandidatesState) -> None:
+    ui.command_banner("property-candidates", state.cfg)
     ui.section("Property Candidates")
-    if not shown:
-        print("  no source functions look like strong property-test candidates")
+    if not state.shown:
+        for line in _empty_candidate_lines(state):
+            print(line)
         return
-    for candidate in shown:
+    print(_candidate_summary_line(state))
+    for candidate in state.shown:
         for line in _candidate_display_lines(candidate):
             print(line)
+
+
+def _candidate_summary_line(state: _PropertyCandidatesState) -> str:
+    if state.include_referenced:
+        return (
+            f"  showing {len(state.shown)} of {len(state.candidates)} ranked candidate(s) "
+            f"in {state.scope_label}"
+        )
+    return (
+        f"  showing {len(state.shown)} of {len(state.candidates)} unreferenced candidate(s) "
+        f"in {state.scope_label} ({state.referenced_count} referenced)"
+    )
+
+
+def _empty_candidate_lines(state: _PropertyCandidatesState) -> tuple[str, ...]:
+    next_lines = tuple(f"  next: {action[0].lower()}{action[1:]}" for action in state.next_actions)
+    if not state.total_count:
+        return (
+            f"  no source functions in {state.scope_label} look like strong "
+            "property-test candidates",
+            *next_lines,
+        )
+    if not state.include_referenced:
+        return (
+            f"  all {state.total_count} ranked candidate(s) in {state.scope_label} already "
+            "have property-test references",
+            *next_lines,
+        )
+    return ("  no source functions look like strong property-test candidates",)
 
 
 def _candidate_display_lines(candidate: PropertyCandidate) -> list[str]:
@@ -370,6 +450,7 @@ def _property_reference_counts(cfg: InterlockConfig) -> _PropertyReferenceCounts
     root = cfg.properties_dir
     if root is None or not root.is_dir():
         return _PropertyReferenceCounts({})
+    property_attributes = _property_attribute_symbols(cfg)
     counts: dict[tuple[str, str], int] = {}
     for source in sorted(root.rglob("*.py")):
         if "__pycache__" in source.parts:
@@ -378,9 +459,45 @@ def _property_reference_counts(cfg: InterlockConfig) -> _PropertyReferenceCounts
             tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         except (OSError, SyntaxError):
             continue
-        for ref in _property_references_from_tree(cfg, tree):
+        for ref in _property_references_from_tree(cfg, tree, property_attributes):
             counts[ref] = counts.get(ref, 0) + 1
     return _PropertyReferenceCounts(counts)
+
+
+def _property_attribute_symbols(cfg: InterlockConfig) -> frozenset[tuple[str, str]]:
+    symbols: set[tuple[str, str]] = set()
+    for source in _iter_source_files(cfg):
+        rel = cfg.relpath(source)
+        try:
+            tree = ast.parse(source.read_text(encoding="utf-8"), filename=rel)
+        except (OSError, SyntaxError):
+            continue
+        symbols.update(_property_attribute_symbols_from_tree(tree, rel))
+    return frozenset(symbols)
+
+
+def _property_attribute_symbols_from_tree(tree: ast.AST, relpath: str) -> set[tuple[str, str]]:
+    if not isinstance(tree, ast.Module):
+        return set()
+    symbols: set[tuple[str, str]] = set()
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for child in node.body:
+            if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if _has_property_decorator(child):
+                symbols.add((relpath, f"{node.name}.{child.name}"))
+    return symbols
+
+
+def _has_property_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        parts = _dotted_parts(target)
+        if parts and parts[-1] in {"property", "cached_property"}:
+            return True
+    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -390,20 +507,26 @@ class _ReferenceAliases:
     instances: dict[str, tuple[str, str]]
 
 
-def _property_references_from_tree(cfg: InterlockConfig, tree: ast.AST) -> list[tuple[str, str]]:
+def _property_references_from_tree(
+    cfg: InterlockConfig,
+    tree: ast.AST,
+    property_attributes: frozenset[tuple[str, str]] = frozenset(),
+) -> list[tuple[str, str]]:
     if not isinstance(tree, ast.Module):
         return []
     module_aliases = _reference_aliases(cfg, tree)
     refs: list[tuple[str, str]] = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            refs.extend(_references_from_scope(cfg, module_aliases, node))
+            refs.extend(_references_from_scope(cfg, module_aliases, node, property_attributes))
         elif isinstance(node, ast.ClassDef):
             for child in node.body:
                 if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                    refs.extend(_references_from_scope(cfg, module_aliases, child))
+                    refs.extend(
+                        _references_from_scope(cfg, module_aliases, child, property_attributes)
+                    )
         else:
-            refs.extend(_resolved_references(cfg, module_aliases, node))
+            refs.extend(_resolved_references(cfg, module_aliases, node, property_attributes))
     return refs
 
 
@@ -411,21 +534,32 @@ def _references_from_scope(
     cfg: InterlockConfig,
     module_aliases: _ReferenceAliases,
     scope: ast.FunctionDef | ast.AsyncFunctionDef,
+    property_attributes: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[tuple[str, str]]:
     local_aliases = _scope_reference_aliases(cfg, module_aliases, scope)
-    return _resolved_references(cfg, local_aliases, scope)
+    return _resolved_references(cfg, local_aliases, scope, property_attributes)
 
 
 def _resolved_references(
     cfg: InterlockConfig,
     aliases: _ReferenceAliases,
     node: ast.AST,
+    property_attributes: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[tuple[str, str]]:
     refs: list[tuple[str, str]] = []
+    call_func_ids = {id(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)}
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
             ref = _resolved_reference(cfg, aliases, child.func)
             if ref is not None:
+                refs.append(ref)
+        elif (
+            isinstance(child, ast.Attribute)
+            and isinstance(child.ctx, ast.Load)
+            and id(child) not in call_func_ids
+        ):
+            ref = _resolved_reference(cfg, aliases, child)
+            if ref is not None and ref in property_attributes:
                 refs.append(ref)
     return refs
 

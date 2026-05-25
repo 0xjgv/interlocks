@@ -112,14 +112,18 @@ def cmd_evaluate() -> None:
             _print_unreadable_config_report(start)
         return
     report = evaluate(cfg)
+    report_next_actions = _report_next_actions(cfg)
 
     if ui.is_json():
-        ui.print_json({
+        payload: dict[str, object] = {
             "command": "evaluate",
             "score": {"earned": report.total, "max": report.max_total},
             "verdict": report.verdict,
             "checks": [_check_json(item) for item in report.items],
-        })
+        }
+        if report_next_actions:
+            payload["next_actions"] = list(report_next_actions)
+        ui.print_json(payload)
         return
 
     ui.command_banner("evaluate", cfg)
@@ -133,7 +137,10 @@ def cmd_evaluate() -> None:
     ])
 
     ui.section("Next Actions")
-    actions = [_format_action(item) for item in report.items if item.next_action is not None]
+    actions = [
+        *report_next_actions,
+        *[_format_action(item) for item in report.items if item.next_action is not None],
+    ]
     ui.message_list(actions, empty="No local evaluation gaps detected.")
     ui.command_footer(start)
 
@@ -172,6 +179,14 @@ def evaluate(cfg: InterlockConfig) -> EvaluationReport:
         max_total=max_total,
         verdict=_verdict(total, max_total),
     )
+
+
+def _report_next_actions(cfg: InterlockConfig) -> tuple[str, ...]:
+    if not (cfg.project_root / "pyproject.toml").is_file():
+        return (
+            "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults.",
+        )
+    return ()
 
 
 def _feature_files(cfg: InterlockConfig) -> list[Path]:

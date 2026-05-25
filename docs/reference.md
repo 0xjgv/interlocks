@@ -171,7 +171,10 @@ Correctness:
 - `property-candidates [--json] [--changed[=REF]] [--uncovered] [--limit=N]`:
   static, read-only ranking of source functions that look suitable for
   property-test hardening. `--uncovered` hides functions already referenced by
-  property tests so agents can keep moving through a brownfield sweep.
+  property tests so agents can keep moving through a brownfield sweep. JSON
+  output includes filtered, total, referenced, and unreferenced counts plus
+  zero-result `next_actions`, so a sweep distinguishes "nothing found" from
+  "everything ranked is already referenced."
 
 Hygiene:
 

@@ -37,6 +37,7 @@ from interlocks.tasks.evaluate import (
     _pr_speed_item,
     _properties_item,
     _read_ci_evidence,
+    _report_next_actions,
     _security_item,
     _tool_section,
     _verdict,
@@ -69,6 +70,24 @@ def _cfg(root: Path) -> InterlockConfig:
         properties_dir=root / "properties",
         ci_evidence_path=root / ".interlocks" / "ci.json",
     )
+
+
+@given(has_pyproject=st.booleans())
+def test_report_next_actions_only_bootstraps_missing_pyproject(has_pyproject: bool) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        if has_pyproject:
+            (root / "pyproject.toml").write_text(
+                "[project]\nname = 'probe'\nversion = '0.0.0'\n",
+                encoding="utf-8",
+            )
+        cfg = _cfg(root)
+
+        actions = _report_next_actions(cfg)
+
+    assert bool(actions) is not has_pyproject
+    if actions:
+        assert "interlocks init" in actions[0]
 
 
 @given(

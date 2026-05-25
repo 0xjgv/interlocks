@@ -18,20 +18,26 @@ from interlocks.tasks.property_candidates import (
     _candidate_from_function,
     _candidate_function_items,
     _candidate_function_nodes,
+    _candidate_summary_line,
     _candidates_from_tree,
     _CandidateSignals,
     _caution_line,
+    _empty_candidate_lines,
+    _has_property_decorator,
     _iter_source_files,
     _known_side_effect_call,
     _looks_like_class_symbol,
     _module_relpath,
     _node_side_effect_cautions,
+    _property_attribute_symbols,
+    _property_attribute_symbols_from_tree,
     _property_candidates_error_payload,
     _property_candidates_json,
     _property_candidates_usage,
     _property_reference_counts,
     _property_references_from_tree,
     _property_refs_line,
+    _PropertyCandidatesState,
     _record_import_aliases,
     _record_import_from_aliases,
     _record_instance_aliases,
@@ -386,6 +392,56 @@ def test_property_candidate_json_uses_plain_json_shapes(
 def test_property_candidates_json_preserves_counts_and_scope(
     scope_ref: str | None, include_referenced: bool, shown_count: int
 ) -> None:
+    all_candidates = [
+        PropertyCandidate(
+            path=f"pkg/mod_{index}.py",
+            name=f"parse_{index}",
+            line=index + 1,
+            score=10,
+            reasons=("typed generated inputs",),
+            cautions=(),
+            strategies={},
+            property_refs=index % 2,
+        )
+        for index in range(shown_count + 2)
+    ]
+    candidates = (
+        all_candidates
+        if include_referenced
+        else [candidate for candidate in all_candidates if candidate.property_refs == 0]
+    )
+    shown = candidates[:shown_count]
+    state = _PropertyCandidatesState(
+        cfg=InterlockConfig(
+            project_root=Path(),
+            src_dir=Path("pkg"),
+            test_dir=Path("tests"),
+            test_runner="pytest",
+            test_invoker="python",
+        ),
+        scope_ref=scope_ref,
+        include_referenced=include_referenced,
+        all_candidates=all_candidates,
+        candidates=candidates,
+        shown=shown,
+    )
+
+    payload = _property_candidates_json(state)
+
+    assert payload["scope"] == (f"changed vs {scope_ref}" if scope_ref else "all")
+    assert state.json_scope_label == payload["scope"]
+    assert payload["include_referenced"] is include_referenced
+    assert payload["count"] == len(candidates)
+    assert payload["total_count"] == state.total_count
+    assert payload["referenced_count"] == state.referenced_count
+    assert payload["unreferenced_count"] == state.unreferenced_count
+    assert payload["shown"] == len(shown)
+    assert payload["candidates"] == [candidate.to_json() for candidate in shown]
+    assert "next_actions" not in payload
+
+
+@given(total=st.integers(min_value=1, max_value=20))
+def test_uncovered_empty_message_reports_scope_and_all_referenced(total: int) -> None:
     candidates = [
         PropertyCandidate(
             path=f"pkg/mod_{index}.py",
@@ -395,23 +451,103 @@ def test_property_candidates_json_preserves_counts_and_scope(
             reasons=("typed generated inputs",),
             cautions=(),
             strategies={},
+            property_refs=1,
         )
-        for index in range(shown_count + 2)
+        for index in range(total)
     ]
-    shown = candidates[:shown_count]
-
-    payload = _property_candidates_json(
-        scope_ref=scope_ref,
-        include_referenced=include_referenced,
-        candidates=candidates,
-        shown=shown,
+    state = _PropertyCandidatesState(
+        cfg=InterlockConfig(
+            project_root=Path(),
+            src_dir=Path("pkg"),
+            test_dir=Path("tests"),
+            test_runner="pytest",
+            test_invoker="python",
+        ),
+        scope_ref="HEAD",
+        include_referenced=False,
+        all_candidates=candidates,
+        candidates=[],
+        shown=[],
     )
 
-    assert payload["scope"] == (f"changed vs {scope_ref}" if scope_ref else "all")
-    assert payload["include_referenced"] is include_referenced
-    assert payload["count"] == len(candidates)
-    assert payload["shown"] == shown_count
-    assert payload["candidates"] == [candidate.to_json() for candidate in shown]
+    lines = _empty_candidate_lines(state)
+
+    assert lines[0] == (
+        f"  all {total} ranked candidate(s) in changed vs HEAD already have "
+        "property-test references"
+    )
+    assert state.next_actions == (
+        "Rerun without `--uncovered` to review referenced candidates.",
+        "Add deeper invariants where property references are shallow.",
+    )
+    assert "rerun without `--uncovered`" in lines[1]
+
+
+def test_empty_candidate_state_reports_greenfield_next_actions() -> None:
+    state = _PropertyCandidatesState(
+        cfg=InterlockConfig(
+            project_root=Path(),
+            src_dir=Path("pkg"),
+            test_dir=Path("tests"),
+            test_runner="pytest",
+            test_invoker="python",
+        ),
+        scope_ref=None,
+        include_referenced=True,
+        all_candidates=[],
+        candidates=[],
+        shown=[],
+    )
+
+    payload = _property_candidates_json(state)
+    lines = _empty_candidate_lines(state)
+
+    assert payload["next_actions"] == [
+        "Extract or add typed, side-effect-light domain functions before property-test hardening.",
+        "Run `interlocks init-properties` when domain invariants are ready.",
+    ]
+    assert "no source functions in all source" in lines[0]
+    assert "extract or add typed" in lines[1]
+    assert "init-properties" in lines[2]
+
+
+@given(
+    shown_count=st.integers(min_value=1, max_value=5),
+    total=st.integers(min_value=5, max_value=20),
+)
+def test_candidate_summary_line_reports_scope(shown_count: int, total: int) -> None:
+    candidates = [
+        PropertyCandidate(
+            path=f"pkg/mod_{index}.py",
+            name=f"parse_{index}",
+            line=index + 1,
+            score=10,
+            reasons=("typed generated inputs",),
+            cautions=(),
+            strategies={},
+            property_refs=index % 2,
+        )
+        for index in range(total)
+    ]
+    state = _PropertyCandidatesState(
+        cfg=InterlockConfig(
+            project_root=Path(),
+            src_dir=Path("pkg"),
+            test_dir=Path("tests"),
+            test_runner="pytest",
+            test_invoker="python",
+        ),
+        scope_ref="main",
+        include_referenced=True,
+        all_candidates=candidates,
+        candidates=candidates,
+        shown=candidates[:shown_count],
+    )
+
+    summary = _candidate_summary_line(state)
+
+    assert f"showing {min(shown_count, total)} of {total}" in summary
+    assert "in changed vs main" in summary
 
 
 @given(
@@ -542,22 +678,32 @@ def test_reference_resolution_distinguishes_module_and_class_symbols(
         module_node = ast.parse(f"generated.{name}()").body[0]
         method_node = ast.parse(f"Parser.{method}(None)").body[0]
         instance_node = ast.parse(f"parser.{method}()").body[0]
+        attribute_node = ast.parse(f"parser.{method}").body[0]
         extra_assignment = ast.parse("other = Parser()").body[0]
         assert isinstance(function_node, ast.Expr)
         assert isinstance(module_node, ast.Expr)
         assert isinstance(method_node, ast.Expr)
         assert isinstance(instance_node, ast.Expr)
+        assert isinstance(attribute_node, ast.Expr)
         assert isinstance(extra_assignment, ast.Assign)
         assert isinstance(function_node.value, ast.Call)
         assert isinstance(module_node.value, ast.Call)
         assert isinstance(method_node.value, ast.Call)
         assert isinstance(instance_node.value, ast.Call)
+        assert isinstance(attribute_node.value, ast.Attribute)
 
         _record_instance_aliases(cfg, aliases, extra_assignment.targets, extra_assignment.value)
         direct = _resolved_reference(cfg, aliases, function_node.value.func)
         module_ref = _resolved_reference(cfg, aliases, module_node.value.func)
         method_ref = _resolved_reference(cfg, aliases, method_node.value.func)
         instance_ref = _resolved_reference(cfg, aliases, instance_node.value.func)
+        attribute_refs = _resolved_references(
+            cfg,
+            aliases,
+            attribute_node,
+            frozenset({("pkg/generated.py", f"Parser.{method}")}),
+        )
+        non_property_attribute_refs = _resolved_references(cfg, aliases, attribute_node)
         scope = import_tree.body[-1]
         assert isinstance(scope, ast.FunctionDef)
         scope_aliases = _scope_reference_aliases(cfg, aliases, scope)
@@ -585,8 +731,73 @@ def test_reference_resolution_distinguishes_module_and_class_symbols(
         assert module_ref == ("pkg/generated.py", name)
         assert method_ref == ("pkg/generated.py", f"Parser.{method}")
         assert instance_ref == ("pkg/generated.py", f"Parser.{method}")
+        assert attribute_refs == [("pkg/generated.py", f"Parser.{method}")]
+        assert non_property_attribute_refs == []
         assert ("pkg/generated.py", f"Parser.{method}") in scoped_refs
+        assert scoped_refs.count(("pkg/generated.py", f"Parser.{method}")) == 1
         assert ("pkg/generated.py", f"Parser.{method}") in tree_refs
+
+
+@given(name=_IDENT)
+def test_property_attribute_symbols_track_property_like_decorators(name: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "generated.py").write_text(
+            "from functools import cached_property\n\n"
+            "class Parser:\n"
+            "    @property\n"
+            f"    def {name}(self) -> int:\n"
+            "        return 1\n\n"
+            "    @cached_property\n"
+            f"    def cached_{name}(self) -> int:\n"
+            "        return 2\n\n"
+            f"    def plain_{name}(self) -> int:\n"
+            "        return 3\n",
+            encoding="utf-8",
+        )
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        symbols = _property_attribute_symbols(cfg)
+        tree_symbols = _property_attribute_symbols_from_tree(
+            ast.parse((pkg / "generated.py").read_text(encoding="utf-8")),
+            "pkg/generated.py",
+        )
+
+    assert symbols == frozenset({
+        ("pkg/generated.py", f"Parser.{name}"),
+        ("pkg/generated.py", f"Parser.cached_{name}"),
+    })
+    assert tree_symbols == set(symbols)
+
+
+@given(
+    decorator=st.sampled_from([
+        "property",
+        "property()",
+        "cached_property",
+        "cached_property()",
+        "functools.cached_property",
+        "functools.cached_property()",
+        "pytest.fixture",
+        "staticmethod",
+    ])
+)
+def test_has_property_decorator_matches_property_like_names(decorator: str) -> None:
+    node = _function(f"@{decorator}\ndef value(self) -> int:\n    return 1\n")
+    expected = decorator.removesuffix("()").rsplit(".", maxsplit=1)[-1] in {
+        "property",
+        "cached_property",
+    }
+
+    assert _has_property_decorator(node) is expected
 
 
 @given(
