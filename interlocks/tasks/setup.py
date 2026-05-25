@@ -29,6 +29,7 @@ _PROGRESSIVE_RECOMMENDATION = (
     'Run `interlocks presets set progressive` to set preset = "progressive" '
     "for autopilot ratcheting."
 )
+_GIT_INIT_SETUP_ACTION = "Run `git init`, then `interlocks setup` to install local integrations."
 _SETUP_USAGE = "usage: interlocks setup [--check] [--ci=github]"
 _LOCAL_INSTALL_NEXT_ACTIONS = (
     "Run `interlocks check` after edits.",
@@ -88,7 +89,7 @@ def _cmd_setup_install(project_root: Path) -> None:
     if not is_git_repo(project_root):
         _fail_setup_error(
             "setup: not a git repository — run `git init` first, then `interlocks setup`",
-            next_actions=["Run `git init`, then rerun `interlocks setup`."],
+            next_actions=[_GIT_INIT_SETUP_ACTION],
         )
     ui.section("Setup")
     install_hooks(project_root)
@@ -212,12 +213,13 @@ def _cmd_setup_ci_check(project_root: Path) -> None:
 def _cmd_setup_check(project_root: Path) -> None:
     statuses = setup_artifact_statuses(project_root)
     extra_lines = _progressive_recommendation_lines(project_root)
+    fix_message = _local_setup_fix_message(project_root)
     if ui.is_json():
         _emit_setup_payload(
             _check_payload(
                 mode="local",
                 statuses=statuses,
-                fix_message="Run `interlocks setup` to install or refresh local integrations.",
+                fix_message=fix_message,
                 extra_lines=extra_lines,
             )
         )
@@ -226,9 +228,15 @@ def _cmd_setup_check(project_root: Path) -> None:
         "Setup Check",
         statuses,
         ok_message="Local integrations are installed and current.",
-        fix_message="Run `interlocks setup` to install or refresh local integrations.",
+        fix_message=fix_message,
         extra_lines=extra_lines,
     )
+
+
+def _local_setup_fix_message(project_root: Path) -> str:
+    if not is_git_repo(project_root):
+        return _GIT_INIT_SETUP_ACTION
+    return "Run `interlocks setup` to install or refresh local integrations."
 
 
 def _check_payload(

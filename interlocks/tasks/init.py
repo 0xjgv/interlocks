@@ -24,6 +24,7 @@ from interlocks.scaffold import (
 
 _INIT_OUTPUTS = ("pyproject.toml", "tests/__init__.py", "tests/test_smoke.py")
 _INIT_NEXT_ACTIONS = (
+    "Run `git init`, then `interlocks setup` to install local integrations.",
     "Run `interlocks presets set progressive` for ratcheting defaults.",
     "Run `interlocks init-properties` to scaffold property tests.",
 )

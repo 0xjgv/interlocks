@@ -69,6 +69,20 @@ def test_setup_check_fails_when_artifacts_missing(
     assert "Run `interlocks setup`" in out
 
 
+def test_setup_check_reports_git_init_before_setup_in_non_git_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_no_git(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--check")
+
+    out = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "Run `git init`, then `interlocks setup`" in out
+    assert "Run `interlocks setup` to install or refresh" not in out
+
+
 def test_setup_check_default_mode_prints_fix_and_progressive_next_steps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -163,6 +177,21 @@ def test_setup_check_json_reports_missing_integrations(
     )
 
 
+def test_setup_check_json_reports_git_init_before_setup_in_non_git_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_no_git(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--check", "--json")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["next_actions"][0] == (
+        "Run `git init`, then `interlocks setup` to install local integrations."
+    )
+
+
 def test_setup_json_refuses_non_git_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -176,7 +205,9 @@ def test_setup_json_refuses_non_git_directory(
     assert payload["command"] == "setup"
     assert payload["status"] == "error"
     assert "not a git repository" in payload["error"]
-    assert payload["next_actions"] == ["Run `git init`, then rerun `interlocks setup`."]
+    assert payload["next_actions"] == [
+        "Run `git init`, then `interlocks setup` to install local integrations."
+    ]
     assert not (tmp_path / ".git").exists()
 
 
