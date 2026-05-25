@@ -5,11 +5,11 @@ from __future__ import annotations
 from hypothesis import given
 from hypothesis import strategies as st
 
+from interlocks.scaffold import scaffold_status
 from interlocks.tasks.init import (
     _INIT_NEXT_ACTIONS,
     _INIT_OUTPUTS,
     _init_refusal_payload,
-    _init_status,
     _init_success_payload,
 )
 
@@ -46,7 +46,7 @@ def test_init_success_payload_reports_created_subset(
 
     payload = _init_success_payload(project_name, files)
 
-    assert payload["status"] == _init_status(files)
+    assert payload["status"] == scaffold_status(files)
     assert payload["project_name"] == project_name
     assert payload["created"] == [file["path"] for file in files if file["action"] == "created"]
     assert payload["files"] == files
@@ -59,7 +59,7 @@ def test_init_status_distinguishes_all_created(actions: list[str]) -> None:
         for index, action in enumerate(actions)
     ]
 
-    status = _init_status(files)
+    status = scaffold_status(files)
 
     assert status == ("created" if files and set(actions) == {"created"} else "scaffold-present")
 

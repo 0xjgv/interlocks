@@ -10,11 +10,11 @@ from hypothesis import strategies as st
 
 from interlocks.config import InterlockConfig
 from interlocks.defaults_path import path as defaults_path
+from interlocks.scaffold import scaffold_status
 from interlocks.tasks.init_acceptance import (
     _INIT_ACCEPTANCE_NEXT_ACTIONS,
     _INIT_ACCEPTANCE_OUTPUTS,
     _init_acceptance_domain_payload,
-    _init_acceptance_status,
     _init_acceptance_success_payload,
     _is_scaffold_feature,
 )
@@ -50,7 +50,7 @@ def test_init_acceptance_success_payload_reports_created_subset(
 
     assert payload["command"] == "init-acceptance"
     assert payload["passed"] is True
-    assert payload["status"] == _init_acceptance_status(files)
+    assert payload["status"] == scaffold_status(files)
     assert payload["files"] == files
     assert payload["created"] == [file["path"] for file in files if file["action"] == "created"]
     next_actions = payload["next_actions"]
@@ -65,7 +65,7 @@ def test_init_acceptance_status_distinguishes_all_created(actions: list[str]) ->
         for index, action in enumerate(actions)
     ]
 
-    status = _init_acceptance_status(files)
+    status = scaffold_status(files)
 
     assert status == ("created" if files and set(actions) == {"created"} else "scaffold-present")
 

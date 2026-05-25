@@ -24,6 +24,7 @@ from interlocks.runner import (
     section,
     warn_skip,
 )
+from interlocks.scaffold import ScaffoldFile, ensure_bytes_file, scaffold_file
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -43,7 +44,7 @@ _INIT_PROPERTIES_DOMAIN_FILE_LIMIT = 20
 @dataclass(frozen=True)
 class _InitPropertiesResult:
     status: str
-    files: tuple[dict[str, str], ...] = ()
+    files: tuple[ScaffoldFile, ...] = ()
     domain_files: tuple[Path, ...] = ()
     next_actions: tuple[str, ...] = field(default_factory=tuple)
 
@@ -226,10 +227,14 @@ def cmd_init_properties() -> None:
         print(f"kept {cfg.relpath(properties_dir)}/")
         print("next: run `interlocks properties --profile=check`")
         return
-    files: list[dict[str, str]] = []
+    files: list[ScaffoldFile] = []
     for target, template in _init_properties_targets(properties_dir):
-        action = _ensure_scaffold_file(target, template)
-        files.append({"path": cfg.relpath(target), "action": action})
+        files.append(
+            scaffold_file(
+                cfg.relpath(target),
+                ensure_bytes_file(target, defaults_path(template).read_bytes()),
+            )
+        )
     if ui.is_json():
         ui.print_json(
             _init_properties_payload(
@@ -274,14 +279,6 @@ def _init_properties_payload(
 
 def _init_properties_targets(properties_dir: Path) -> tuple[tuple[Path, str], ...]:
     return ((properties_dir / "test_example_properties.py", "properties_test_example.py"),)
-
-
-def _ensure_scaffold_file(target: Path, template: str) -> str:
-    if target.exists():
-        return "kept"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(defaults_path(template).read_bytes())
-    return "created"
 
 
 def _print_init_properties_next_steps() -> None:

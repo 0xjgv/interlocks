@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import TypeAlias
 
 from interlocks import ui
 from interlocks.defaults_path import path as defaults_path
 from interlocks.runner import Task, fail_skip, section
+from interlocks.scaffold import (
+    ScaffoldFile,
+    created_paths,
+    ensure_bytes_file,
+    ensure_text_file,
+    scaffold_file,
+    scaffold_status,
+)
 
-_ScaffoldFile: TypeAlias = dict[str, str]
 _INIT_OUTPUTS = ("pyproject.toml", "tests/__init__.py", "tests/test_smoke.py")
 _INIT_NEXT_ACTIONS = (
     "Run `interlocks presets set progressive` for ratcheting defaults.",
@@ -40,28 +46,32 @@ def cmd_init() -> None:
         fail_skip("init: refusing to overwrite existing pyproject.toml")
 
     template = defaults_path("scaffold_pyproject.toml").read_text(encoding="utf-8")
-    files: list[_ScaffoldFile] = [
-        {
-            "path": "pyproject.toml",
-            "action": _ensure_text_file(
+    files: list[ScaffoldFile] = [
+        scaffold_file(
+            "pyproject.toml",
+            ensure_text_file(
                 pyproject,
                 template.replace("{project_name}", cwd.name),
             ),
-        }
+        )
     ]
 
     targets["tests"].mkdir(exist_ok=True)
-    files.append({
-        "path": "tests/__init__.py",
-        "action": _ensure_text_file(targets["tests/__init__.py"], ""),
-    })
-    files.append({
-        "path": "tests/test_smoke.py",
-        "action": _ensure_bytes_file(
-            targets["tests/test_smoke.py"],
-            defaults_path("scaffold_test_example.py").read_bytes(),
-        ),
-    })
+    files.append(
+        scaffold_file(
+            "tests/__init__.py",
+            ensure_text_file(targets["tests/__init__.py"], ""),
+        )
+    )
+    files.append(
+        scaffold_file(
+            "tests/test_smoke.py",
+            ensure_bytes_file(
+                targets["tests/test_smoke.py"],
+                defaults_path("scaffold_test_example.py").read_bytes(),
+            ),
+        )
+    )
     if ui.is_json():
         ui.print_json(_init_success_payload(cwd.name, files))
         return
@@ -84,35 +94,13 @@ def _init_targets(cwd: Path) -> dict[str, Path]:
     }
 
 
-def _ensure_text_file(target: Path, content: str) -> str:
-    if target.exists():
-        return "kept"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content, encoding="utf-8")
-    return "created"
-
-
-def _ensure_bytes_file(target: Path, content: bytes) -> str:
-    if target.exists():
-        return "kept"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(content)
-    return "created"
-
-
-def _init_status(files: list[_ScaffoldFile]) -> str:
-    if files and all(file["action"] == "created" for file in files):
-        return "created"
-    return "scaffold-present"
-
-
-def _init_success_payload(project_name: str, files: list[_ScaffoldFile]) -> dict[str, object]:
+def _init_success_payload(project_name: str, files: list[ScaffoldFile]) -> dict[str, object]:
     return {
         "command": "init",
         "passed": True,
-        "status": _init_status(files),
+        "status": scaffold_status(files),
         "project_name": project_name,
-        "created": [file["path"] for file in files if file["action"] == "created"],
+        "created": created_paths(files),
         "files": files,
         "next_actions": list(_INIT_NEXT_ACTIONS),
     }

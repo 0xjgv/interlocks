@@ -6,20 +6,25 @@ Stdlib-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 
 from interlocks import ui
 from interlocks.acceptance_status import feature_files
 from interlocks.config import load_config
 from interlocks.defaults_path import path as defaults_path
 from interlocks.runner import section
+from interlocks.scaffold import (
+    ScaffoldFile,
+    created_paths,
+    ensure_bytes_file,
+    scaffold_file,
+    scaffold_status,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from interlocks.config import InterlockConfig
-
-_ScaffoldFile: TypeAlias = dict[str, str]
 
 _INIT_ACCEPTANCE_OUTPUTS = (
     "tests/features/example.feature",
@@ -54,12 +59,14 @@ def cmd_init_acceptance() -> None:
         print("next: run `interlocks acceptance`")
         return
 
-    files: list[_ScaffoldFile] = []
+    files: list[ScaffoldFile] = []
     for target, template in _init_acceptance_targets(test_dir):
-        files.append({
-            "path": cfg.relpath(target),
-            "action": _ensure_scaffold_file(target, template),
-        })
+        files.append(
+            scaffold_file(
+                cfg.relpath(target),
+                ensure_bytes_file(target, defaults_path(template).read_bytes()),
+            )
+        )
 
     if ui.is_json():
         ui.print_json(_init_acceptance_success_payload(files))
@@ -94,26 +101,12 @@ def _init_acceptance_targets(test_dir: Path) -> tuple[tuple[Path, str], ...]:
     )
 
 
-def _ensure_scaffold_file(target: Path, template: str) -> str:
-    if target.exists():
-        return "kept"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(defaults_path(template).read_bytes())
-    return "created"
-
-
-def _init_acceptance_status(files: list[_ScaffoldFile]) -> str:
-    if files and all(file["action"] == "created" for file in files):
-        return "created"
-    return "scaffold-present"
-
-
-def _init_acceptance_success_payload(files: list[_ScaffoldFile]) -> dict[str, object]:
+def _init_acceptance_success_payload(files: list[ScaffoldFile]) -> dict[str, object]:
     return {
         "command": "init-acceptance",
         "passed": True,
-        "status": _init_acceptance_status(files),
-        "created": [file["path"] for file in files if file["action"] == "created"],
+        "status": scaffold_status(files),
+        "created": created_paths(files),
         "files": files,
         "next_actions": list(_INIT_ACCEPTANCE_NEXT_ACTIONS),
     }
