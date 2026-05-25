@@ -267,6 +267,12 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "interlocks.tasks.init:cmd_init",
     ),
     Behavior(
+        "init-preserve-tests-dir",
+        "init",
+        "init preserves an existing tests directory while creating missing scaffold files",
+        "interlocks.tasks.init:cmd_init",
+    ),
+    Behavior(
         "init-preserve-existing",
         "init",
         "init preserves existing project files",

@@ -808,12 +808,13 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         "init",
         "Scaffold a greenfield pyproject.toml + tests/ in CWD",
         "Bootstrap a greenfield project — writes pyproject.toml and a tests/ "
-        "smoke test; refuses to overwrite existing files.",
+        "smoke test; preserves existing test scaffold files but refuses to overwrite "
+        "an existing pyproject.toml.",
         mutates=True,
         outputs=("pyproject.toml", "tests/__init__.py", "tests/test_smoke.py"),
         exit_codes=(
-            (0, "project scaffolded"),
-            (1, "target files already exist"),
+            (0, "project scaffold present"),
+            (1, "pyproject.toml already exists"),
         ),
         flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),

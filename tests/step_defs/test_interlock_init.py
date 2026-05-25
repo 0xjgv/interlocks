@@ -36,6 +36,12 @@ def _dir_with_pyproject(tmp_path: Path) -> InitContext:
     return InitContext(project=tmp_path)
 
 
+@given("a directory containing an empty tests directory", target_fixture="ctx")
+def _dir_with_empty_tests(tmp_path: Path) -> InitContext:
+    (tmp_path / "tests").mkdir()
+    return InitContext(project=tmp_path)
+
+
 @when(parsers.parse('I run "interlocks {subcmd}" there'))
 def _run_interlock(ctx: InitContext, subcmd: str) -> None:
     ctx.result = run_interlock_in_cwd(ctx.project, *subcmd.split())
@@ -61,6 +67,13 @@ def _file_exists(ctx: InitContext, relpath: str) -> None:
 @then(parsers.parse('the file "{relpath}" does not exist'))
 def _file_absent(ctx: InitContext, relpath: str) -> None:
     assert not (ctx.project / relpath).exists()
+
+
+@then(parsers.parse('the output contains "{needle}"'))
+def _output_contains(ctx: InitContext, needle: str) -> None:
+    assert ctx.result is not None
+    combined = ctx.result.stdout + ctx.result.stderr
+    assert needle in combined, f"expected {needle!r} in:\n{combined}"
 
 
 @then("the existing pyproject.toml is unchanged")
