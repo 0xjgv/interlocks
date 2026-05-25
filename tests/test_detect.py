@@ -178,6 +178,25 @@ def test_detect_src_dir_skips_tests_dir(tmp_path: Path) -> None:
     assert detect_src_dir(tmp_path, {}) == (tmp_path / "mypkg").resolve()
 
 
+def test_detect_src_dir_skips_properties_dir(tmp_path: Path) -> None:
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "__init__.py").write_text("", encoding="utf-8")
+    (properties / "test_example_properties.py").write_text(
+        "def test_example():\n    pass\n", encoding="utf-8"
+    )
+
+    assert detect_src_dir(tmp_path, {}) == tmp_path.resolve()
+
+
+def test_detect_src_dir_allows_real_properties_package(tmp_path: Path) -> None:
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "__init__.py").write_text("", encoding="utf-8")
+
+    assert detect_src_dir(tmp_path, {}) == properties.resolve()
+
+
 # ─────────────── test-invoker detection ─────────────────────────────
 
 

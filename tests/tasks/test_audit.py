@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -53,6 +54,24 @@ def test_audit_clean_deps_passes(tmp_project: Path) -> None:
     )
 
 
+def test_audit_json_clean_no_deps_passes(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+
+    audit_mod.cmd_audit()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "audit"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "audit"
+    assert captured.err == ""
+
+
 def test_audit_invokes_pip_audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Fast in-process check: cmd_audit builds a uvx-dispatched pip-audit Task and runs it."""
     (tmp_path / "pyproject.toml").write_text(
@@ -77,6 +96,38 @@ def test_audit_invokes_pip_audit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     task = captured["task"]
     assert task.description == "Dep audit"
+    assert task.start_status == "running"
+    assert task.cmd == uvx_tool("pip-audit", ".", version=default_pin("pip-audit"))
+
+
+def test_audit_json_invokes_shared_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "audit-probe"
+            version = "0.0.1"
+            dependencies = ["requests"]
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    captured: dict[str, object] = {}
+
+    def fake_run_task_json(command: str, task: Task) -> None:
+        captured["command"] = command
+        captured["task"] = task
+
+    monkeypatch.setattr(audit_mod, "run_task_json", fake_run_task_json)
+
+    audit_mod.cmd_audit()
+
+    task = captured["task"]
+    assert captured["command"] == "audit"
+    assert isinstance(task, Task)
+    assert task.start_status == "running"
     assert task.cmd == uvx_tool("pip-audit", ".", version=default_pin("pip-audit"))
 
 
@@ -137,6 +188,30 @@ def test_audit_network_skip_warns_when_pypi_unreachable(
     assert "transient" in out
 
 
+def test_audit_network_skip_json_warns_when_pypi_unreachable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    monkeypatch.setattr(
+        audit_mod,
+        "capture",
+        lambda _cmd: _StubProc(returncode=1, stderr="Could not fetch the index"),
+    )
+    monkeypatch.setattr(
+        audit_mod,
+        "_pip_audit_task",
+        lambda: Task("Dep audit", [sys.executable, "-c", "pass"], label="audit"),
+    )
+
+    audit_mod.cmd_audit(allow_network_skip=True)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "audit"
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert "transient" in payload["reason"]
+
+
 def test_audit_network_skip_warns_on_ensurepip_crash(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -175,6 +250,32 @@ def test_audit_network_skip_passes_through_real_findings(
 
     assert exc.value.code == 1
     assert vuln_id in capsys.readouterr().out
+
+
+def test_audit_network_skip_json_fails_on_real_findings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    monkeypatch.setattr(
+        audit_mod,
+        "capture",
+        lambda _cmd: _StubProc(returncode=1, stdout="CVE-2024-12345: vulnerable"),
+    )
+    monkeypatch.setattr(
+        audit_mod,
+        "_pip_audit_task",
+        lambda: Task("Dep audit", [sys.executable, "-c", "pass"], label="audit"),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        audit_mod.cmd_audit(allow_network_skip=True)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "audit"
+    assert payload["passed"] is False
+    assert payload["status"] == "failed"
 
 
 def test_audit_network_skip_clean_run_prints_ok(

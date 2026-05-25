@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import textwrap
 from pathlib import Path
@@ -78,6 +79,29 @@ def test_coverage_passes_when_threshold_met(
     assert (tmp_project / ".coverage").is_file()
 
 
+def test_coverage_json_reports_gate_result_when_threshold_met(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_project / "tests" / "test_mod.py").write_text(_COVERING_TEST_SRC, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+
+    from interlocks.tasks.coverage import cmd_coverage
+
+    cmd_coverage(min_pct=80)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "coverage"
+    assert payload["passed"] is True
+    assert payload["min_pct"] == 80
+    assert payload["include_properties"] is False
+    assert payload["property_profile"] is None
+    assert payload["gates"][0]["name"] == "coverage"
+
+
 def test_coverage_fails_below_threshold(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -108,6 +132,14 @@ def _rcfile_flag(cmd: list[str]) -> str | None:
 
 def _coverage_run_cmd(pre_cmds: tuple[list[str], ...]) -> list[str]:
     return next(cmd for cmd in pre_cmds if "coverage" in cmd and "run" in cmd)
+
+
+def _coverage_run_cmds(pre_cmds: tuple[list[str], ...]) -> list[list[str]]:
+    return [cmd for cmd in pre_cmds if "coverage" in cmd and "run" in cmd]
+
+
+def _property_coverage_run_cmd(pre_cmds: tuple[list[str], ...]) -> list[str]:
+    return next(cmd for cmd in _coverage_run_cmds(pre_cmds) if "--append" in cmd)
 
 
 def _coverage_json_cmd(pre_cmds: tuple[list[str], ...]) -> list[str]:
@@ -234,6 +266,111 @@ def test_coverage_emits_json_under_progressive_preset(
     assert str(tmp_path / ".interlocks" / "coverage.json") in json_cmd
 
 
+def test_coverage_can_append_property_tests_before_report(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.tasks.coverage import task_coverage
+
+    properties = tmp_project / "properties"
+    properties.mkdir()
+    (properties / "test_mod_properties.py").write_text(
+        textwrap.dedent(
+            """\
+            from hypothesis import given
+            from hypothesis import strategies as st
+
+            from mypkg.mod import double
+
+
+            @given(st.integers())
+            def test_double_is_even_for_even_inputs(value: int) -> None:
+                assert double(value * 2) % 2 == 0
+            """
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+
+    task = task_coverage(min_pct=80, include_properties=True, property_profile="check")
+
+    assert task is not None
+    unit_cmd, property_cmd = _coverage_run_cmds(task.pre_cmds)
+    assert "--append" not in unit_cmd
+    assert "--append" in property_cmd
+    assert "properties" in property_cmd
+    assert "--hypothesis-profile=check" in property_cmd
+    assert any(".interlocks/property_coverage_runner.py" in " ".join(cmd) for cmd in task.pre_cmds)
+    assert task.display == "coverage report --fail-under=80 + properties"
+    assert task.start_status == "running"
+    assert "unit tests under coverage" in task.progress_steps
+    assert "property tests under coverage" in task.progress_steps
+    assert task.progress_steps[-1] == "coverage report"
+
+
+def test_coverage_properties_flag_selects_profile(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.runner import Task
+    from interlocks.tasks import coverage as coverage_mod
+
+    properties = tmp_project / "properties"
+    properties.mkdir()
+    (properties / "test_mod_properties.py").write_text(
+        "def test_property() -> None:\n    assert True\n", encoding="utf-8"
+    )
+    captured: list[Task] = []
+
+    def capture_task(task: Task) -> None:
+        captured.append(task)
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--properties=nightly"])
+    monkeypatch.setattr(coverage_mod, "run", capture_task)
+
+    coverage_mod.cmd_coverage()
+
+    task = captured[0]
+    property_cmd = _property_coverage_run_cmd(task.pre_cmds)
+    assert "--hypothesis-profile=nightly" in property_cmd
+
+
+def test_coverage_properties_flag_rejects_unknown_profile(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.tasks.coverage import cmd_coverage
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--properties=slow"])
+
+    with pytest.raises(SystemExit):
+        cmd_coverage()
+
+
+def test_coverage_properties_flag_rejects_unknown_profile_json_before_env_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.tasks.coverage import cmd_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--properties=slow", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_coverage()
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "command": "coverage",
+        "passed": False,
+        "error": "unsupported property profile 'slow'",
+        "expected_property_profiles": ["check", "ci", "nightly", "default"],
+    }
+
+
 def test_coverage_default_min_pct_uses_cfg(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -295,6 +432,89 @@ def test_cmd_coverage_skips_without_project_env(
 
     cmd_coverage()  # must not raise SystemExit
     assert "coverage: skipped — no project environment" in capsys.readouterr().out
+
+
+def test_cmd_coverage_json_reports_missing_project_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.tasks.coverage import cmd_coverage
+
+    (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+
+    cmd_coverage()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "coverage"
+    assert payload["status"] == "skipped"
+    assert payload["min_pct"] == 80
+    assert payload["include_properties"] is False
+    assert payload["property_profile"] is None
+    assert "no project environment" in payload["reason"]
+
+
+def test_coverage_skip_payload_without_properties_is_exact() -> None:
+    from interlocks.tasks.coverage import _coverage_skip_payload
+
+    assert _coverage_skip_payload(
+        min_pct=90,
+        include_properties=False,
+        property_profile="ci",
+        reason="no project environment",
+        next_action="Create the project environment.",
+    ) == {
+        "command": "coverage",
+        "passed": True,
+        "status": "skipped",
+        "min_pct": 90,
+        "include_properties": False,
+        "property_profile": None,
+        "reason": "no project environment",
+        "next_actions": ["Create the project environment."],
+    }
+
+
+def test_coverage_skip_payload_with_properties_is_exact() -> None:
+    from interlocks.tasks.coverage import _coverage_skip_payload
+
+    assert _coverage_skip_payload(
+        min_pct=75,
+        include_properties=True,
+        property_profile="nightly",
+        reason="missing environment",
+        next_action="Sync dependencies.",
+    ) == {
+        "command": "coverage",
+        "passed": True,
+        "status": "skipped",
+        "min_pct": 75,
+        "include_properties": True,
+        "property_profile": "nightly",
+        "reason": "missing environment",
+        "next_actions": ["Sync dependencies."],
+    }
+
+
+def test_cmd_coverage_can_suppress_json_for_internal_callers(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.runner import Task
+    from interlocks.tasks import coverage as coverage_mod
+
+    captured: list[Task] = []
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "trust", "--json"])
+    monkeypatch.setattr(coverage_mod, "run", captured.append)
+
+    coverage_mod.cmd_coverage(min_pct=80, emit_json=False)
+
+    assert captured
+    assert capsys.readouterr().out == ""
 
 
 def test_task_coverage_runs_for_uv_project_without_venv(

@@ -131,7 +131,7 @@ Feature: interlocks CLI surface area
   # req: cli-json-doctor
   Scenario: doctor --json emits parseable JSON with status/blockers/warnings
     Given I run "interlocks doctor --json" in a temp project
-    Then stdout is a single JSON object with keys "command,status,blockers,warnings,detected,setup_checklist"
+    Then stdout is a single JSON object with keys "command,status,blockers,warnings,detected,setup_checklist,next_steps"
 
   # req: cli-json-config
   Scenario: config --json emits parseable JSON with resolved key/value/source

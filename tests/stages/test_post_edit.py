@@ -92,6 +92,29 @@ def test_post_edit_noop_in_process(tmp_project: Path, monkeypatch: pytest.Monkey
     assert calls == []
 
 
+def test_post_edit_noop_json_in_process(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No changed files -> JSON mode emits a structured no-op."""
+    from interlocks.stages import post_edit as post_edit_mod
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "post-edit", "--json"])
+    monkeypatch.setattr(post_edit_mod, "changed_py_files", list)
+
+    post_edit_mod.cmd_post_edit()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "post-edit"
+    assert payload["passed"] is True
+    assert payload["gates"] == []
+    assert payload["skipped"] == [{"name": "post-edit", "reason": "no uncommitted Python files"}]
+
+
 def test_post_edit_in_process_runs_ruff_on_changed_files(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -105,6 +128,61 @@ def test_post_edit_in_process_runs_ruff_on_changed_files(
     monkeypatch.chdir(tmp_project)
     post_edit_mod.cmd_post_edit()
     assert len(calls) == 1
+
+
+def test_post_edit_json_reports_budgeted_mutation(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.stages import post_edit as post_edit_mod
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "post-edit", "--json"])
+    monkeypatch.setattr(post_edit_mod, "changed_py_files", lambda: ["app/mod.py"])
+    monkeypatch.setattr(post_edit_mod, "run_budgeted_mutation", lambda **_kw: None)
+
+    post_edit_mod.cmd_post_edit()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "post-edit"
+    assert payload["passed"] is True
+    assert payload["gates"] == [
+        {
+            "name": "fix-optimize",
+            "status": "ok",
+            "elapsed_seconds": None,
+        }
+    ]
+    assert payload["skipped"] == []
+
+
+def test_post_edit_json_reports_advisory_failure(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.stages import post_edit as post_edit_mod
+
+    def fail_budgeted_mutation(**_kw: object) -> None:
+        raise SystemExit(7)
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "post-edit", "--json"])
+    monkeypatch.setattr(post_edit_mod, "changed_py_files", lambda: ["app/mod.py"])
+    monkeypatch.setattr(post_edit_mod, "run_budgeted_mutation", fail_budgeted_mutation)
+
+    post_edit_mod.cmd_post_edit()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "post-edit"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["status"] == "warn"
+    assert payload["gates"][0]["detail"] == "budgeted mutation exited 7"
 
 
 def test_post_edit_tolerates_unfixable_lint(tmp_project: Path) -> None:

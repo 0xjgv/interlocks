@@ -12,20 +12,19 @@ the tree even with ``--apply`` — they always materialize a patch for review.
 
 from __future__ import annotations
 
-import shlex
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 from interlocks import ui
-from interlocks.config import load_config
+from interlocks.config import load_config, relpath
 from interlocks.lintfix import budgets, classify, diff, escrow, rules, simulate, verify
 from interlocks.runner import arg_flag_value, arg_value
+from interlocks.tasks.fix_cli import verify_cmd_from_argv
 
 if TYPE_CHECKING:
     from interlocks.config import InterlockConfig
 
-_DEFAULT_VERIFY_CMD: tuple[str, ...] = ("interlocks", "ci")
 _ESCROW_MODES: tuple[str, ...] = ("escrow", "advisory")
 
 
@@ -71,6 +70,9 @@ def cmd_fix_rule(
     cfg = load_config()
     base_sha = diff.resolve_base(args.base)
     if not base_sha:
+        if ui.is_json():
+            ui.print_json(_fix_rule_base_payload(args))
+            return
         ui.row(
             "fix-rule",
             args.rule,
@@ -82,11 +84,17 @@ def cmd_fix_rule(
 
     files = diff.changed_files(base_sha)
     if not files:
+        if ui.is_json():
+            ui.print_json(_fix_rule_no_files_payload(args))
+            return
         ui.row("fix-rule", args.rule, "no changed .py files vs base", state="ok")
         return
 
     candidate = simulate.simulate_rule(args.rule, files)
     if candidate.returncode >= 2:
+        if ui.is_json():
+            ui.print_json(_fix_rule_ruff_failure_payload(args, candidate))
+            sys.exit(candidate.returncode)
         ui.row(
             "fix-rule",
             args.rule,
@@ -109,6 +117,8 @@ def cmd_fix_rule(
     _print_plan(classification, candidate.diff, args.base, args.budget_name)
 
     rc = _dispatch_classification(classification, args, candidate, files, cfg)
+    if ui.is_json():
+        ui.print_json(_fix_rule_payload(cfg, args, classification, files, rc))
     if rc:
         sys.exit(rc)
 
@@ -158,6 +168,8 @@ def _dispatch_classification(
 
 
 def _print_plan(c: classify.Classification, diff_text: str, base: str, budget_name: str) -> None:
+    if ui.is_json():
+        return
     m = c.metrics
     ui.section(f"fix-rule plan ({base}, budget={budget_name})")
     rows: list[tuple[str, str]] = [
@@ -177,16 +189,116 @@ def _print_plan(c: classify.Classification, diff_text: str, base: str, budget_na
         print(diff_text)
 
 
+def _fix_rule_base_payload(args: _FixRuleArgs) -> dict[str, object]:
+    return {
+        "command": "fix-rule",
+        "passed": True,
+        "status": "unknown-base",
+        "rule": args.rule,
+        "base": args.base,
+        "budget": args.budget_name,
+        "apply_requested": args.apply,
+        "error": f"unknown base ref {args.base!r}",
+    }
+
+
+def _fix_rule_no_files_payload(args: _FixRuleArgs) -> dict[str, object]:
+    return {
+        "command": "fix-rule",
+        "passed": True,
+        "status": "no-changed-files",
+        "rule": args.rule,
+        "base": args.base,
+        "budget": args.budget_name,
+        "apply_requested": args.apply,
+    }
+
+
+def _fix_rule_ruff_failure_payload(
+    args: _FixRuleArgs,
+    candidate: simulate.CandidatePatch,
+) -> dict[str, object]:
+    return {
+        "command": "fix-rule",
+        "passed": False,
+        "status": "ruff-failed",
+        "rule": args.rule,
+        "base": args.base,
+        "budget": args.budget_name,
+        "apply_requested": args.apply,
+        "returncode": candidate.returncode,
+    }
+
+
+def _fix_rule_payload(
+    cfg: InterlockConfig,
+    args: _FixRuleArgs,
+    classification: classify.Classification,
+    files: tuple[str, ...],
+    returncode: int,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "command": "fix-rule",
+        "passed": returncode == 0,
+        "status": _fix_rule_status(classification, args, returncode),
+        "rule": args.rule,
+        "base": args.base,
+        "budget": args.budget_name,
+        "apply_requested": args.apply,
+        "mode": classification.mode,
+        "reason": classification.reason,
+        "changed_files": list(files),
+        "candidate_files": list(files),
+        "metrics": asdict(classification.metrics),
+        "cost": asdict(classification.cost),
+    }
+    _add_fix_rule_artifact_paths(payload, cfg, classification, returncode)
+    return payload
+
+
+def _fix_rule_status(
+    classification: classify.Classification,
+    args: _FixRuleArgs,
+    returncode: int,
+) -> str:
+    if returncode:
+        return "apply-failed"
+    if classification.mode in _ESCROW_MODES:
+        return classification.mode
+    if classification.mode == "skip":
+        return "skip"
+    return "applied" if args.apply else "auto-eligible"
+
+
+def _add_fix_rule_artifact_paths(
+    payload: dict[str, object],
+    cfg: InterlockConfig,
+    classification: classify.Classification,
+    returncode: int,
+) -> None:
+    if classification.mode in _ESCROW_MODES:
+        patch_path = escrow.escrow_dir(cfg.project_root) / f"{classification.rule}.patch"
+        payload["patch_path"] = relpath(cfg.project_root, patch_path)
+    if returncode:
+        payload["failed_patch"] = ".lintfix/failed.patch"
+
+
 def _required_rule() -> str:
     value = arg_value("--rule=", "")
-    if not value:
+    if len(value) == 0:
+        if ui.is_json():
+            ui.print_json({
+                "command": "fix-rule",
+                "passed": False,
+                "status": "missing-rule",
+                "error": "missing required --rule=<value>",
+                "usage": "usage: interlocks fix-rule --rule=<value> [--apply] [--json]",
+            })
+            sys.exit(2)
         print("interlocks fix-rule: missing required --rule=<value>", file=sys.stderr)
         sys.exit(2)
     return value
 
 
 def _verify_cmd_argv() -> tuple[str, ...]:
-    raw = arg_value("--verify-cmd=", "")
-    if raw:
-        return tuple(shlex.split(raw))
-    return _DEFAULT_VERIFY_CMD
+    return verify_cmd_from_argv("fix-rule")

@@ -203,6 +203,7 @@ def test_frames_have_correct_kind_tags(force_interlocks_frame: None) -> None:
             assert isinstance(frame["count"], int)
 
 
+@pytest.mark.mutmut_incompatible
 def test_frames_include_synthetic_raise_function(
     force_interlocks_frame: None,
 ) -> None:

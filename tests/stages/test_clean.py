@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -92,6 +93,36 @@ def test_clean_is_idempotent(tmp_project: Path) -> None:
     assert first.returncode == 0
     assert second.returncode == 0
     assert "[clean]" in second.stdout
+
+
+def test_clean_json_reports_removed_artifacts(tmp_project: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-P", "-m", "interlocks.cli", "clean", "--json"],
+        cwd=tmp_project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    removed = set(payload["removed"])
+    assert payload["command"] == "clean"
+    assert payload["passed"] is True
+    assert payload["status"] == "cleaned"
+    expected_removed = {*ROOT_ARTIFACTS, *RECURSIVE_ARTIFACTS}
+    assert payload["removed_count"] == len(expected_removed)
+    assert removed == expected_removed
+    gates = payload["gates"]
+    assert isinstance(gates, list)
+    assert len(gates) == 1
+    assert gates[0]["name"] == "clean"
+    assert gates[0]["status"] == "ok"
+    assert isinstance(gates[0]["elapsed_seconds"], float)
+    assert payload["skipped"] == []
+    for name in (*ROOT_ARTIFACTS, *RECURSIVE_ARTIFACTS):
+        assert not (tmp_project / name).exists(), f"{name} still present"
 
 
 def test_clean_in_process_removes_artifacts(

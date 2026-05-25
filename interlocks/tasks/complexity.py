@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from interlocks import ui
 from interlocks.config import load_config
-from interlocks.runner import Task, run, uvx_tool
+from interlocks.runner import Task, run, run_task_json, uvx_tool
 
 
 def task_complexity() -> Task:
@@ -32,8 +33,12 @@ def task_complexity() -> Task:
             f"lizard -C {cfg.complexity_max_ccn} "
             f"-a {cfg.complexity_max_args} -L {cfg.complexity_max_loc}"
         ),
+        start_status="running",
     )
 
 
 def cmd_complexity() -> None:
+    if ui.is_json():
+        run_task_json("complexity", task_complexity())
+        return
     run(task_complexity())

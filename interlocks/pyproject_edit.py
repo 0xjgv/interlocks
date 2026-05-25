@@ -15,6 +15,7 @@ import re
 import signal
 import tempfile
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
     from types import FrameType
 
-_MUTMUT_HEADER = re.compile(r"^\[tool\.mutmut\]\s*$", re.MULTILINE)
+_MUTMUT_HEADER = re.compile(r"^\[tool\.mutmut\][ \t]*$", re.MULTILINE)
 _NEXT_HEADER = re.compile(r"^\[", re.MULTILINE)
 _PATHS_LINE = re.compile(r"^(?P<indent>[ \t]*)paths_to_mutate\s*=\s*(?P<value>.+)$", re.MULTILINE)
 
@@ -36,15 +37,42 @@ def _value_is_multiline(value: str) -> bool:
     stripped = value.strip()
     if not stripped.startswith("["):
         return False
-    depth = 0
-    for ch in stripped:
-        if ch == "[":
-            depth += 1
+    scan = _ArrayValueScan()
+    return not any(scan.consume(ch) for ch in stripped)
+
+
+@dataclass
+class _ArrayValueScan:
+    quote: str | None = None
+    escaped: bool = False
+    depth: int = 0
+
+    def consume(self, ch: str) -> bool:
+        """Consume one character; return True once the outer array closes."""
+        if self.quote is not None:
+            self._consume_quoted(ch)
+            return False
+        return self._consume_unquoted(ch)
+
+    def _consume_quoted(self, ch: str) -> None:
+        if self.escaped:
+            self.escaped = False
+        elif self.quote == '"' and ch == "\\":
+            self.escaped = True
+        elif ch == self.quote:
+            self.quote = None
+
+    def _consume_unquoted(self, ch: str) -> bool:
+        if ch in {'"', "'"}:
+            self.quote = ch
+        elif ch == "#":
+            self.quote = "#"
+        elif ch == "[":
+            self.depth += 1
         elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                return False
-    return True
+            self.depth -= 1
+            return self.depth == 0
+        return False
 
 
 def _mutmut_slice(text: str) -> tuple[int, int] | None:

@@ -25,6 +25,7 @@ from interlocks.runner import (
     record_result,
     reset_results,
     run_tasks,
+    skips_snapshot,
     stage_json,
 )
 from interlocks.skip import (
@@ -45,6 +46,7 @@ from interlocks.tasks.deps import task_deps
 from interlocks.tasks.format_check import task_format_check
 from interlocks.tasks.lint import cmd_lint_progressive, task_lint
 from interlocks.tasks.mutation import cmd_mutation
+from interlocks.tasks.properties import property_test_files, task_properties
 from interlocks.tasks.typecheck import task_typecheck
 
 if TYPE_CHECKING:
@@ -53,7 +55,7 @@ if TYPE_CHECKING:
 
 def cmd_ci() -> None:
     """Full verification: format_check, lint, complexity, audit, deps, arch, typecheck,
-    coverage, CRAP, (optionally) mutation."""
+    coverage, acceptance, properties, CRAP, and optional mutation."""
     start = time.monotonic()
     cfg = load_config()
     reset_results()
@@ -68,7 +70,7 @@ def cmd_ci() -> None:
     # DISABLED + OPTIONAL_MISSING → skip silently (preserve current CI behavior)
     exit_code = 0
     try:
-        run_tasks(_parallel_tasks(cfg))
+        run_tasks(_parallel_tasks(cfg, skip_policy))
         # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
         ui.section("Gates")
         if cfg.preset == "progressive":
@@ -79,7 +81,13 @@ def cmd_ci() -> None:
         raise
     finally:
         elapsed = time.monotonic() - start
-        _write_ci_evidence(cfg, elapsed_seconds=elapsed, passed=exit_code == 0, context=context)
+        _write_ci_evidence(
+            cfg,
+            elapsed_seconds=elapsed,
+            passed=exit_code == 0,
+            context=context,
+            skipped=_skipped_labels(),
+        )
         run_summary.flush(cfg)
         ui.stage_footer(elapsed)
         print_stage_verdict("ci", elapsed)
@@ -94,12 +102,21 @@ def cmd_ci() -> None:
             )
 
 
-def _parallel_tasks(cfg: InterlockConfig) -> list[Task]:
+def _parallel_tasks(cfg: InterlockConfig, skip_policy: SkipPolicy) -> list[Task]:
     tasks: list[Task] = [task_format_check()]
     if cfg.preset != "progressive":
         tasks.append(task_lint())
     tasks.extend([task_complexity(), task_audit(), task_deps()])
-    optional = (task_typecheck(), task_coverage(), task_arch(), _acceptance_task(cfg))
+    optional = (
+        task_typecheck(),
+        task_coverage(
+            include_properties=not skip_policy.enabled("properties"),
+            property_profile="ci",
+        ),
+        task_arch(),
+        _acceptance_task(cfg),
+        _properties_task(cfg, skip_policy),
+    )
     tasks.extend(t for t in optional if t is not None)
     return tasks
 
@@ -115,6 +132,17 @@ def _acceptance_task(cfg: InterlockConfig) -> Task | None:
     return None
 
 
+def _properties_task(cfg: InterlockConfig, skip_policy: SkipPolicy) -> Task | None:
+    if not property_test_files(cfg):
+        return None
+    if skip_policy.enabled("properties"):
+        warn_skipped("properties")
+        return None
+    if skip_policy.enabled("coverage"):
+        return task_properties(profile="ci")
+    return None
+
+
 def _post_coverage_gates(cfg: InterlockConfig, skip_policy: SkipPolicy) -> None:
     # CRAP/mutation run against the project under test. When a non-uv project
     # has no environment, coverage (and the tests under it) did not run — CRAP
@@ -125,10 +153,10 @@ def _post_coverage_gates(cfg: InterlockConfig, skip_policy: SkipPolicy) -> None:
     if skip_policy.enabled("coverage") or no_env:
         warn_skipped("crap", "coverage was skipped")
     else:
-        _run_post_coverage_gate("crap", cmd_crap, skip_policy)
+        _run_post_coverage_gate("crap", lambda: cmd_crap(emit_json=False), skip_policy)
     _run_post_coverage_gate(
         "attribution",
-        lambda: cmd_behavior_attribution(refresh=False),
+        lambda: cmd_behavior_attribution(refresh=False, emit_json=False),
         skip_policy,
     )
     if not no_env and _should_run_mutation(cfg.mutation_ci_mode, run_in_ci=cfg.run_mutation_in_ci):
@@ -176,18 +204,24 @@ def _write_ci_evidence(
     *,
     elapsed_seconds: float,
     passed: bool,
-    created_at: float | None = None,
     context: str | None = None,
+    skipped: list[str] | None = None,
 ) -> None:
     path = cfg.ci_evidence_path
     payload: dict[str, object] = {
         "command": "interlocks ci",
         "elapsed_seconds": round(elapsed_seconds, 3),
-        "created_at": created_at if created_at is not None else time.time(),
+        "created_at": time.time(),
         "passed": passed,
         "budget_seconds": cfg.pr_ci_runtime_budget_seconds,
     }
+    if skipped:
+        payload["skipped"] = skipped
     if context:
         payload["context"] = context
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _skipped_labels() -> list[str]:
+    return sorted({skip["name"] for skip in skips_snapshot()})

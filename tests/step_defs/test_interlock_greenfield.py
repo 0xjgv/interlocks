@@ -223,8 +223,8 @@ def _doctor_names_gap_inline(greenfield_result: subprocess.CompletedProcess[str]
     """
     combined = greenfield_result.stdout + greenfield_result.stderr
     needles = (
-        "ci workflow: not detected",
-        "preset: using dataclass defaults",
+        "ci workflow: run `interlocks setup --ci=github`",
+        "preset: run `interlocks presets set progressive`",
         "interlocks cfg: defaults apply",
         "acceptance: not wired",
         "run `interlocks setup`",

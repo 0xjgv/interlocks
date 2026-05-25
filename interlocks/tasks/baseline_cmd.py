@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import asdict, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from interlocks import ui
 from interlocks.baseline import (
@@ -34,8 +34,12 @@ from interlocks.run_summary import load as load_summary
 from interlocks.runner import capture, fail_skip, ok
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from interlocks.baseline import BaselineFloor
     from interlocks.config import InterlockConfig
+
+_BASELINE_ACTIONS = ("show", "init", "advance", "check")
 
 
 def cmd_baseline() -> None:
@@ -56,13 +60,16 @@ def cmd_baseline() -> None:
     elif action == "check":
         _cmd_check(cfg, json_mode=json_mode)
     else:
-        fail_skip(f"unknown baseline action: {action} (expected show|init|advance|check)")
+        _fail_baseline(
+            f"unknown baseline action: {action} (expected show|init|advance|check)",
+            json_mode=json_mode,
+        )
 
 
 def _cmd_show(cfg: InterlockConfig, *, json_mode: bool) -> None:
     floor = load_baseline(cfg)
     if json_mode:
-        print(json.dumps(_floor_to_dict(cfg, floor), sort_keys=True, indent=2))
+        print(json.dumps(_floor_show_payload(cfg, floor), sort_keys=True, indent=2))
         return
     if floor.is_empty:
         print("(no baseline recorded — run `interlocks baseline init`)")
@@ -85,23 +92,25 @@ def _last_advance_rows(floor: BaselineFloor) -> list[tuple[str, str]]:
 
 
 def _cmd_init(cfg: InterlockConfig, *, json_mode: bool) -> None:
-    summary = _require_summary(cfg)
+    summary = _require_summary(cfg, json_mode=json_mode)
     candidate = floor_from_summary(summary)
     if candidate.is_empty:
-        fail_skip("baseline init: run-summary has no measurements to capture")
+        _fail_baseline(
+            "baseline init: run-summary has no measurements to capture",
+            json_mode=json_mode,
+        )
     floor = replace(candidate, updated_at=utc_now_iso(), advanced_from_sha=_git_head_sha())
     target = write_baseline(cfg, floor)
     if json_mode:
         print(json.dumps(_floor_to_dict(cfg, floor), sort_keys=True, indent=2))
         return
-    if ui.is_verbose():
-        ok(f"wrote {cfg.relpath(target)}")
+    _print_floor_write("wrote", cfg, target)
     ui.section("Floor")
     ui.kv_block(_floor_rows(floor))
 
 
 def _cmd_advance(cfg: InterlockConfig, *, json_mode: bool, auto_pr: bool) -> None:
-    summary = _require_summary(cfg)
+    summary = _require_summary(cfg, json_mode=json_mode)
     sha = _git_head_sha()
     new_floor = advance_from_summary(cfg, summary, sha=sha)
     if new_floor is None:
@@ -115,8 +124,7 @@ def _cmd_advance(cfg: InterlockConfig, *, json_mode: bool, auto_pr: bool) -> Non
         payload = {"advanced": True, "auto_pr": auto_pr, **_floor_to_dict(cfg, new_floor)}
         print(json.dumps(payload, sort_keys=True, indent=2))
         return
-    if ui.is_verbose():
-        ok(f"updated {cfg.relpath(target)}")
+    _print_floor_write("updated", cfg, target)
     ui.section("New floor")
     ui.kv_block(_floor_rows(new_floor))
     if auto_pr and ui.is_verbose():
@@ -126,13 +134,23 @@ def _cmd_advance(cfg: InterlockConfig, *, json_mode: bool, auto_pr: bool) -> Non
 
 def _cmd_check(cfg: InterlockConfig, *, json_mode: bool) -> None:
     floor = load_baseline(cfg)
-    summary = _require_summary(cfg)
+    summary = _require_summary(cfg, json_mode=json_mode)
     candidate = floor_from_summary(summary)
     regressions = _baseline_regressions(floor, candidate)
     if json_mode:
-        print(json.dumps({"ok": not regressions, "regressions": regressions}, sort_keys=True))
+        payload: dict[str, object] = {
+            "baseline_present": not floor.is_empty,
+            "ok": not regressions,
+            "regressions": regressions,
+        }
+        if floor.is_empty:
+            payload["next_action"] = "Run `interlocks baseline init` to record the first floor."
+        print(json.dumps(payload, sort_keys=True))
         if regressions:
             sys.exit(1)
+        return
+    if floor.is_empty:
+        print("(no baseline recorded — run `interlocks baseline init`)")
         return
     if not regressions:
         if ui.is_verbose():
@@ -157,6 +175,14 @@ def _baseline_regressions(floor: BaselineFloor, candidate: BaselineFloor) -> lis
     return regressions
 
 
+def _print_floor_write(verb: str, cfg: InterlockConfig, target: Path) -> None:
+    message = f"{verb} {cfg.relpath(target)}"
+    if ui.is_verbose():
+        ok(message)
+        return
+    print(message)
+
+
 def _metric_regression(
     field: str,
     *,
@@ -175,19 +201,48 @@ def _metric_regression(
     return f"{field}: {measured} above floor {current_floor}"
 
 
-def _require_summary(cfg: InterlockConfig) -> RunSummary:
+def _require_summary(cfg: InterlockConfig, *, json_mode: bool) -> RunSummary:
     summary = load_summary(cfg)
     if summary is None:
-        fail_skip(
+        _fail_baseline(
             "baseline: no run summary found at .interlocks/run-summary.json — "
-            "run `interlocks check` or `interlocks ci` first"
+            "run `interlocks check` or `interlocks ci` first",
+            json_mode=json_mode,
         )
     return summary
+
+
+def _baseline_usage() -> str:
+    return "usage: interlocks baseline [show|init|advance|check] [--json] [--auto-pr]"
+
+
+def _baseline_error_payload(message: str) -> dict[str, object]:
+    return {
+        "command": "baseline",
+        "error": message,
+        "usage": _baseline_usage(),
+        "expected_actions": list(_BASELINE_ACTIONS),
+    }
+
+
+def _fail_baseline(message: str, *, json_mode: bool) -> NoReturn:
+    if json_mode:
+        ui.print_json(_baseline_error_payload(message))
+        raise SystemExit(1)
+    fail_skip(message)
 
 
 def _floor_to_dict(cfg: InterlockConfig, floor: BaselineFloor) -> dict[str, object]:
     payload = asdict(floor)
     payload["path"] = cfg.relpath(baseline_path(cfg))
+    return payload
+
+
+def _floor_show_payload(cfg: InterlockConfig, floor: BaselineFloor) -> dict[str, object]:
+    payload = _floor_to_dict(cfg, floor)
+    payload["baseline_present"] = not floor.is_empty
+    if floor.is_empty:
+        payload["next_action"] = "Run `interlocks baseline init` to record the first floor."
     return payload
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import textwrap
 from collections.abc import Callable
@@ -17,6 +18,8 @@ from interlocks.metrics import (
     compute_crap_rows,
     coverage_line_rate,
     function_coverage,
+    mutation_evidence_is_stale,
+    newer_than,
     parse_coverage,
 )
 
@@ -65,6 +68,20 @@ def test_parse_lizard_stops_at_warnings_block() -> None:
     names = [r.name for r in rows]
     assert names == ["cmd_big", "helper"]
     assert names.count("cmd_big") == 1
+
+
+# ─────────────── newer_than ────────────────────────────────────────
+
+
+def test_newer_than_requires_existing_strictly_newer_file(tmp_path: Path) -> None:
+    path = tmp_path / "input.py"
+    path.write_text("", encoding="utf-8")
+    os.utime(path, (100, 100))
+
+    assert newer_than(path, 99.5)
+    assert not newer_than(path, 100)
+    assert not newer_than(path, 100.5)
+    assert not newer_than(tmp_path / "missing.py", 0)
 
 
 # ─────────────── function_coverage ─────────────────────────────────
@@ -225,12 +242,98 @@ def test_read_mutation_summary_uses_pinned_interlocks_mutmut(
     monkeypatch.setattr(metrics_mod, "load_config", _Cfg)
     monkeypatch.setattr(metrics_mod, "capture", fake_capture)
 
-    summary = metrics_mod.read_mutation_summary()
+    summary = metrics_mod.read_mutation_summary(require_interlocks_evidence=False)
 
     assert summary is not None
     assert summary.score == 50.0
     assert "interlocks-mutmut==9.9.9" in commands[0]
     assert commands[0][-3:] == ["mutmut", "results", "--all=true"]
+
+
+def test_read_mutation_summary_returns_none_when_results_command_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Cfg:
+        def tool_version(self, name: str) -> str:
+            assert name == "interlocks-mutmut"
+            return "9.9.9"
+
+    def fake_capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 1, "", "collection failed")
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "mutants").mkdir()
+    monkeypatch.setattr(metrics_mod, "load_config", _Cfg)
+    monkeypatch.setattr(metrics_mod, "capture", fake_capture)
+
+    assert metrics_mod.read_mutation_summary(require_interlocks_evidence=False) is None
+
+
+def test_read_mutation_summary_returns_none_without_parseable_mutants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Cfg:
+        def tool_version(self, name: str) -> str:
+            assert name == "interlocks-mutmut"
+            return "9.9.9"
+
+    def fake_capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 0, "no results\n", "")
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "mutants").mkdir()
+    monkeypatch.setattr(metrics_mod, "load_config", _Cfg)
+    monkeypatch.setattr(metrics_mod, "capture", fake_capture)
+
+    assert metrics_mod.read_mutation_summary(require_interlocks_evidence=False) is None
+
+
+def test_read_mutation_summary_requires_current_interlocks_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Cfg:
+        project_root = tmp_path
+
+        def tool_version(self, name: str) -> str:
+            assert name == "interlocks-mutmut"
+            return "9.9.9"
+
+    def fake_capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            "interlocks.a.x__mutmut_1: killed\n",
+            "",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "mutants").mkdir()
+    stats = tmp_path / "mutants/mutmut-stats.json"
+    stats.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(metrics_mod, "load_config", _Cfg)
+    monkeypatch.setattr(metrics_mod, "capture", fake_capture)
+
+    assert metrics_mod.read_mutation_summary() is None
+
+    evidence = tmp_path / ".interlocks/mutation.json"
+    evidence.parent.mkdir()
+    evidence.write_text('{"completed": false}', encoding="utf-8")
+    newer = stats.stat().st_mtime + 1
+    os.utime(evidence, (newer, newer))
+
+    summary = metrics_mod.read_mutation_summary()
+
+    assert summary is not None
+    assert summary.score == 100.0
+    assert summary.completed is False
+
+    newer_stats = evidence.stat().st_mtime + 1
+    os.utime(stats, (newer_stats, newer_stats))
+    assert mutation_evidence_is_stale(tmp_path) is True
+    assert metrics_mod.read_mutation_summary() is None
 
 
 def test_parse_results_groups_by_status() -> None:

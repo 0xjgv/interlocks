@@ -57,4 +57,5 @@ def make_ruff_task(name: str, files: list[str] | None = None) -> Task:
         ),
         label=spec.label,
         display=spec.display,
+        start_status="running",
     )

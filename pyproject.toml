@@ -55,6 +55,7 @@ dev = [
     # coverage` directly. Dev installs the same pin from interlocks/defaults/tools.py
     # so self-dogfooding works without a second uvx hop.
     "coverage>=7.13.5",
+    "hypothesis>=6",
 ]
 
 # ── interlocks (self-config; all keys optional — defaults come from auto-detect) ──
@@ -87,6 +88,7 @@ pr_ci_runtime_budget_seconds = 600
 testpaths = ["tests"]
 markers = [
     "slow: marks tests that take multiple seconds (deselect with -m 'not slow')",
+    "mutmut_incompatible: tests skipped by mutmut because its runtime cannot execute their subprocess or package-data assertions reliably",
     # Acceptance feature areas (pytest-bdd auto-promotes Gherkin tags to markers).
     "agents: agent-doc registration acceptance scenarios",
     "cli: CLI surface acceptance scenarios",
@@ -186,6 +188,13 @@ ignore = [
     "SIM105",   # contextlib.suppress suggestion
     "TCH",      # type-checking imports (fixtures need runtime types)
 ]
+"properties/**/*.py" = [
+    "ANN",      # type annotations relaxed in property tests
+    "PLC2701",  # private-name-import (dogfooding internal pure helpers)
+    "PLR2004",  # generated examples compare against fixed bounds
+    "RUF069",   # float equality comparisons fine in property tests
+    "S101",     # assert usage in property tests
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["interlocks"]
@@ -224,19 +233,11 @@ show_missing = true
 [tool.mutmut]
 paths_to_mutate = ["interlocks/"]
 tests_dir = ["tests/"]
-# Deselect tests whose subprocesses invoke ``python -m interlocks.cli`` from a CWD
-# without ``pyproject.toml``. The subprocess loads the mutated ``interlocks`` and
-# mutmut's runtime can't discover ``paths_to_mutate`` from that CWD, crashing
-# before the test can assert. These paths are exercised under regular pytest.
+also_copy = ["tools/", "interlocks/defaults/"]
+# Deselect tests whose subprocesses or package-data assertions are incompatible
+# with mutmut's runtime. They are exercised under regular pytest.
 pytest_add_cli_args = [
-    "--deselect=tests/tasks/test_doctor.py::test_doctor_tmpdir_flags_missing_pyproject",
-    "--deselect=tests/tasks/test_doctor.py::test_doctor_tmpdir_verbose_full_report",
-    "--deselect=tests/test_preflight.py::test_cli_check_exits_two_without_pyproject",
-    "--deselect=tests/test_preflight.py::test_cli_help_works_without_pyproject",
-    "--deselect=tests/test_github_action.py::test_action_metadata_delegates_to_interlock_ci",
-    "--deselect=tests/step_defs/test_interlock_crash.py",
-    "--deselect=tests/test_crash_payload.py::test_frames_include_synthetic_raise_function",
-    "-m", "not slow",
+    "-m", "not slow and not mutmut_incompatible",
 ]
 
 # ── Deptry ─────────────────────────────────────────────────────────

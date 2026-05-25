@@ -23,10 +23,10 @@ preset = "baseline"  # "baseline" | "strict" | "legacy"
 ```
 
 - `baseline` lowers first-adoption friction: advisory CRAP, relaxed thresholds,
-  mutation off in CI, acceptance off in `check`.
+  mutation off in CI, acceptance and property tests off in `check`.
 - `strict` is for mature repositories: stronger thresholds, blocking CRAP and
-  mutation, mutation in CI, acceptance in `check`, and required Gherkin
-  coverage.
+  mutation, mutation in CI, acceptance and property tests in `check`, and
+  required Gherkin coverage.
 - `legacy` is for ratcheting existing repositories: permissive thresholds,
   advisory gates, mutation off in CI.
 
@@ -62,6 +62,7 @@ preset = "baseline"
 # Paths / runners
 src_dir = "mypkg"
 test_dir = "tests"
+properties_dir = "properties"
 test_runner = "pytest"            # "pytest" | "unittest"
 test_invoker = "python"           # "python" | "uv"
 pytest_args = ["-q", "-x"]
@@ -88,6 +89,7 @@ mutation_since_ref = "origin/main"
 acceptance_runner = "pytest-bdd"  # "pytest-bdd" | "behave" | "off"
 features_dir = "tests/features"
 run_acceptance_in_check = false
+run_properties_in_check = false
 require_acceptance = false        # true -> fail stages when no Gherkin scenarios are present
 
 # Evaluation policy / cached evidence
@@ -123,10 +125,10 @@ interlocks config show import-linter
 
 | Stage | When | What runs |
 |-------|------|-----------|
-| `interlocks check` | Local edit loop | fix -> format -> parallel(typecheck, test, acceptance when opted in) -> deps advisory -> cached CRAP advisory or refresh hint -> suppressions |
+| `interlocks check` | Local edit loop | fix -> format -> parallel(typecheck, test, acceptance/properties when opted in) -> deps advisory -> cached CRAP advisory or refresh hint -> suppressions |
 | `interlocks pre-commit` | Git pre-commit hook | fix/format staged Python files, re-stage, typecheck, tests when source changed |
-| `interlocks ci` | Pull requests and protected branches | format-check, lint, complexity, audit, deps, typecheck, coverage, arch, acceptance -> CRAP -> optional mutation per `mutation_ci_mode`; writes `.interlocks/ci.json` timing evidence |
-| `interlocks nightly` | Scheduled jobs | coverage -> audit with warn-skips on transient pip-audit failures -> mutation, always blocking on `mutation_min_score` |
+| `interlocks ci` | Pull requests and protected branches | format-check, lint, complexity, audit, deps, typecheck, coverage including properties, arch, acceptance -> CRAP -> optional mutation per `mutation_ci_mode`; writes `.interlocks/ci.json` timing evidence |
+| `interlocks nightly` | Scheduled jobs | coverage including properties -> audit with warn-skips on transient pip-audit failures -> mutation, always blocking on `mutation_min_score` |
 | `interlocks post-edit` | Editor/agent hook interface | advisory ruff fix + format on changed Python files |
 | `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill; `--ci=github` installs/checks GitHub CI wiring |
 | `interlocks clean` | Local cleanup | removes caches, build artifacts, coverage output, mutation state, and `__pycache__/` |
@@ -161,6 +163,15 @@ Correctness:
 - `acceptance`: Gherkin via pytest-bdd or behave. With
   `require_acceptance = true`, registered public behavior IDs must be covered by
   runnable scenarios.
+- `properties --profile=check|ci|nightly|default`: pytest + Hypothesis property
+  tests under `properties_dir`. The runner-owned `check` profile is intentionally
+  small for post-edit feedback; `ci` and `nightly` run deeper generated-input
+  sweeps. Root-level `properties/` is the default so normal `pytest tests` runs
+  do not accidentally use the wrong Hypothesis profile.
+- `property-candidates [--json] [--changed[=REF]] [--uncovered] [--limit=N]`:
+  static, read-only ranking of source functions that look suitable for
+  property-test hardening. `--uncovered` hides functions already referenced by
+  property tests so agents can keep moving through a brownfield sweep.
 
 Hygiene:
 
@@ -174,9 +185,11 @@ Hygiene:
 
 Advanced gates:
 
-- `coverage --min=N`: coverage.py with fail-under. `--min=N` overrides
-  `coverage_min`. uv-managed projects get Coverage.py injected via
-  `uv run --with`; no project dep required.
+- `coverage --min=N [--properties[=profile]]`: coverage.py with fail-under.
+  `--min=N` overrides `coverage_min`; `--properties` appends property tests
+  before reporting, defaulting to the `ci` Hypothesis profile. uv-managed
+  projects get Coverage.py injected via `uv run --with`; no project dep
+  required.
 - `crap --max=N [--changed-only]`: CRAP complexity x coverage gate. Blocking
   depends on `enforce_crap`.
 - `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only]`:
@@ -184,9 +197,9 @@ Advanced gates:
   passed.
 - `trust [--refresh] [--no-trend]`: actionable trust report combining coverage,
   CRAP, mutation, suspicious-test AST inspection, recent git diff, and next
-  actions. `--refresh` runs coverage first with `--min=0`.
-- `evaluate`: read-only 11-check quality scorecard for acceptance, unit tests,
-  coverage, mutation, complexity, deps, deps-freshness, security,
+  actions. `--refresh` runs coverage first with `--min=0 --properties`.
+- `evaluate`: read-only 12-check quality scorecard for acceptance, unit tests,
+  properties, coverage, mutation, complexity, deps, deps-freshness, security,
   audit-severity, PR speed, and CI. It reports gap-closure command, task/stage
   kind, and rationale without running tests, audits, mutation, or package-index
   lookups.
@@ -197,6 +210,9 @@ Scaffolding:
   `tests/test_smoke.py`; refuses to overwrite.
 - `init-acceptance`: writes a working pytest-bdd example under
   `tests/features/` and `tests/step_defs/`; refuses to overwrite.
+- `init-properties`: writes `<properties_dir>/test_example_properties.py`
+  (`properties/` by default) when no domain property tests exist; preserves
+  existing files and no-ops once domain properties are present.
 
 Utility:
 
@@ -239,8 +255,8 @@ live behavior ID is uncovered, a scenario marker is stale, or duplicate live IDs
 exist. Remediation names the behavior ID and suggests adding `# req: <id>` or
 `@req-<id>`.
 
-Advisory trace evidence is separate from behavior markers. Set
-`INTERLOCKS_ACCEPTANCE_TRACE=1` to request runtime public-symbol evidence; trace
+Advisory trace evidence is separate from behavior markers. Run
+`interlocks acceptance --trace` to request runtime public-symbol evidence; trace
 failures, missing evidence, or newly untraced symbols are diagnostic-only in
 this release and do not change `acceptance`, `ci`, or `check` exit codes.
 
@@ -271,6 +287,7 @@ bundled default.
 | `bdd_example.feature` | `init-acceptance` | none | direct copy |
 | `bdd_test_example.py` | `init-acceptance` | none | direct copy |
 | `bdd_conftest.py` | `init-acceptance` | none | direct copy |
+| `properties_test_example.py` | `init-properties` | none | direct copy |
 | `agents_block.md` | `setup`, `agents` | existing `interlocks` doc reference | appended/created |
 | `skill/SKILL.md` | `setup`, `setup-skill` | byte match at `.claude/skills/interlocks/SKILL.md` | direct copy |
 | `scaffold_pyproject.toml` | `init` | none | read plus `{project_name}` substitution |
@@ -310,12 +327,13 @@ reports the active source.
 
 Prefer native tool ignores for narrow code-level exceptions. Use presets and
 thresholds for policy. Use `interlocks check --changed[=<ref>]` to scope first
-adoption to changed files. Use global skip only when you need an explicit
-gate-level escape hatch: `interlocks check --skip=typecheck`,
-`INTERLOCKS_SKIP=typecheck interlocks check`, or `[tool.interlocks] skip =
-["typecheck"]`. Unknown skip labels exit 1, and skipped gates print warnings.
-The `fix` and `format` labels are one budgeted lint/format gate — skipping
-either disables the whole mutation.
+adoption to changed files; it skips graph-wide gates, the test suite, and
+property tests because those checks are not file-level. Use global skip only
+when you need an explicit gate-level escape hatch: `interlocks check
+--skip=typecheck`, `INTERLOCKS_SKIP=typecheck interlocks check`, or
+`[tool.interlocks] skip = ["typecheck"]`. Unknown skip labels exit 1, and
+skipped gates print warnings. The `fix` and `format` labels are one budgeted
+lint/format gate — skipping either disables the whole mutation.
 
 ### What did setup install, and what remains manual?
 

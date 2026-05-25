@@ -50,7 +50,7 @@ Feature: interlocks stage commands on a minimal inline project
     And the stage output contains "[coverage]"
 
   # req: stage-nightly
-  Scenario: `interlocks nightly` runs coverage + mutation (bounded runtime)
+  Scenario: `interlocks nightly` runs coverage, properties, audit, and mutation
     Given a minimal tmp project
     When I run "interlocks nightly" in the tmp project
     Then the stage exits 0

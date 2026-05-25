@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import textwrap
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from interlocks.config import InterlockConfig, load_config
+from interlocks.defaults_path import path as defaults_path
 from interlocks.tasks import evaluate as evaluate_mod
-from interlocks.tasks.evaluate import _ITEM_COUNT, EvaluationItem, cmd_evaluate, evaluate
+from interlocks.tasks.evaluate import (
+    _ITEM_COUNT,
+    ClosurePath,
+    EvaluationItem,
+    cmd_evaluate,
+    evaluate,
+)
 from tests.conftest import TmpProjectFactory
 
 
@@ -72,6 +81,9 @@ def _pyproject(
 
 _SRC_FILES = {"pkg/__init__.py": ""}
 _TEST_FILES = {"test_smoke.py": "def test_ok() -> None:\n    assert True\n"}
+_PROPERTY_FILES = {
+    "test_lengths.py": "def test_reversing_preserves_length() -> None:\n    assert True\n"
+}
 _FEATURE = """\
 Feature: checkout
 
@@ -105,14 +117,17 @@ def _write_dedented(path: Path, content: str) -> None:
     path.write_text(textwrap.dedent(content), encoding="utf-8")
 
 
-def _project(
-    make_tmp_project: TmpProjectFactory,
-    *,
-    pyproject: str | None = None,
-    test_files: dict[str, str] | None = None,
-    feature: str | None = _FEATURE,
-    workflow: str | None = _WORKFLOW,
-) -> Path:
+def _project(make_tmp_project: TmpProjectFactory, **overrides: object) -> Path:
+    pyproject = cast("str | None", overrides.pop("pyproject", None))
+    test_files = cast("dict[str, str] | None", overrides.pop("test_files", None))
+    property_files = cast(
+        "dict[str, str] | None",
+        overrides.pop("property_files", _PROPERTY_FILES),
+    )
+    feature = cast("str | None", overrides.pop("feature", _FEATURE))
+    workflow = cast("str | None", overrides.pop("workflow", _WORKFLOW))
+    if overrides:
+        raise AssertionError(f"unexpected project override(s): {sorted(overrides)}")
     project = make_tmp_project(
         pyproject=_pyproject() if pyproject is None else pyproject,
         src_files=_SRC_FILES,
@@ -120,6 +135,9 @@ def _project(
     )
     if feature is not None:
         _write_dedented(project / "tests" / "features" / "checkout.feature", feature)
+    if property_files is not None:
+        for name, content in property_files.items():
+            _write_dedented(project / "properties" / name, content)
     if workflow is not None:
         _write_dedented(project / ".github" / "workflows" / "ci.yml", workflow)
     _write_ci_evidence(project)
@@ -132,6 +150,7 @@ def _write_ci_evidence(
     elapsed_seconds: float = 30.0,
     created_at: float | None = None,
     passed: bool = True,
+    skipped: list[str] | None = None,
 ) -> None:
     path = project / ".interlocks" / "ci.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +160,8 @@ def _write_ci_evidence(
         "created_at": time.time() if created_at is None else created_at,
         "passed": passed,
     }
+    if skipped:
+        payload["skipped"] = skipped
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -149,14 +170,14 @@ def _item(cfg: InterlockConfig, category: str) -> EvaluationItem:
     return next(item for item in report.items if item.category == category)
 
 
-def test_all_pass_project_scores_33_of_33(
+def test_all_pass_project_scores_36_of_36(
     make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(_project(make_tmp_project))
     report = evaluate(load_config())
 
-    assert report.total == 33
-    assert report.max_total == 33
+    assert report.total == 36
+    assert report.max_total == 36
     assert report.verdict == "HEALTHY"
     assert all(item.score == 3 for item in report.items)
 
@@ -261,6 +282,82 @@ def test_missing_tests_lowers_unit_test_score(
     assert "Add test_*.py" in (item.next_action or "")
 
 
+def test_missing_property_tests_lowers_properties_score(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project, property_files=None)
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "properties")
+
+    assert item.score == 0
+    assert item.detail == "no property tests detected"
+    assert "init-properties" in (item.next_action or "")
+
+
+def test_scaffold_only_property_tests_do_not_score_as_domain_properties(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    example = defaults_path("properties_test_example.py").read_text(encoding="utf-8")
+    project = _project(
+        make_tmp_project,
+        property_files={"test_example_properties.py": example},
+    )
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "properties")
+
+    assert item.score == 1
+    assert item.detail == "only scaffold example property detected"
+    assert "Replace properties/test_example_properties.py" in (item.next_action or "")
+
+
+def test_scaffold_only_property_next_action_uses_configured_dir(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pyproject = _pyproject().replace(
+        'test_dir = "tests"\n',
+        'test_dir = "tests"\nproperties_dir = "tests/properties"\n',
+    )
+    example = defaults_path("properties_test_example.py").read_text(encoding="utf-8")
+    project = _project(make_tmp_project, pyproject=pyproject, property_files=None)
+    _write_dedented(project / "tests" / "properties" / "test_example_properties.py", example)
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "properties")
+
+    assert item.score == 1
+    assert item.next_action == (
+        "Replace tests/properties/test_example_properties.py with domain invariants."
+    )
+
+
+def test_domain_property_tests_report_ci_wiring_detail(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "properties")
+
+    assert item.score == 3
+    assert item.detail == "domain properties in CI"
+
+
+def test_domain_property_tests_without_ci_wiring_report_partial_detail(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(evaluate_mod, "_ci_source_contains", lambda _needle: False)
+
+    item = _item(load_config(), "properties")
+
+    assert item.score == 1
+    assert item.detail == "domain properties present but not wired into CI"
+    assert item.next_action == "Wire task_properties() into `interlocks ci`."
+
+
 def test_coveragerc_branch_setting_is_read_when_pyproject_coverage_absent(
     make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -352,6 +449,47 @@ def test_mutation_ci_without_enforcement_scores_two(
 
     assert item.score == 2
     assert item.next_action == "Set enforce_mutation = true and mutation_min_score > 0."
+
+
+def test_mutation_item_surfaces_partial_cached_evidence(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    evidence = project / ".interlocks/mutation.json"
+    evidence.parent.mkdir(exist_ok=True)
+    evidence.write_text('{"completed": false}', encoding="utf-8")
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "mutation")
+
+    assert item.score == 2
+    assert item.status == "warn"
+    assert "latest evidence partial" in item.detail
+    assert item.next_action == ("Rerun `interlocks mutation --min-score=85 --max-runtime=900`.")
+    assert item.closure is not None
+    assert item.closure.command == "interlocks nightly"
+
+
+def test_mutation_item_surfaces_no_result_cached_evidence(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    evidence = project / ".interlocks/mutation.json"
+    evidence.parent.mkdir(exist_ok=True)
+    evidence.write_text('{"completed": false, "no_results": true}', encoding="utf-8")
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "mutation")
+
+    assert item.score == 2
+    assert item.status == "warn"
+    assert "latest evidence had no checked mutants" in item.detail
+    assert item.next_action == (
+        "Rerun `interlocks mutation --min-score=85 --max-runtime=900` "
+        "with more runtime, or use `--changed-only` for a bounded pass."
+    )
+    assert item.closure is not None
+    assert item.closure.command == "interlocks nightly"
 
 
 def test_mutation_off_lowers_mutation_score(
@@ -687,6 +825,23 @@ def test_pr_speed_stale_evidence_scores_partial(
     assert "Refresh stale CI timing evidence" in item.next_action
 
 
+def test_pr_speed_input_stale_evidence_scores_partial(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    edited = project / "pkg" / "__init__.py"
+    edited.write_text("# edited after CI\n", encoding="utf-8")
+    future = time.time() + 10
+    os.utime(edited, (future, future))
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "pr-speed")
+
+    assert item.score == 1
+    assert item.next_action is not None
+    assert "source, test, or property inputs changed" in item.next_action
+
+
 def test_pr_speed_passing_evidence_scores_full(
     make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -709,6 +864,19 @@ def test_pr_speed_failing_evidence_scores_partial(
 
     assert item.score == 1
     assert item.next_action == "Fix failing `interlocks ci` evidence before scoring PR speed."
+
+
+def test_pr_speed_skipped_evidence_scores_partial(
+    make_tmp_project: TmpProjectFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(make_tmp_project)
+    _write_ci_evidence(project, skipped=["mutation", "coverage"])
+    monkeypatch.chdir(project)
+
+    item = _item(load_config(), "pr-speed")
+
+    assert item.score == 1
+    assert item.next_action == "Run `interlocks ci` without --skip to write full timing evidence."
 
 
 def test_closure_guidance_covers_task_stage_and_standalone_paths(
@@ -809,9 +977,9 @@ def test_source_contains_returns_false_for_missing_file(tmp_path: Path) -> None:
 
 
 def test_verdicts_cover_all_bands() -> None:
-    assert evaluate_mod._verdict(33, 33) == "HEALTHY"
-    assert evaluate_mod._verdict(23, 33) == "GAPS"
-    assert evaluate_mod._verdict(0, 33) == "NEEDS WORK"
+    assert evaluate_mod._verdict(36, 36) == "HEALTHY"
+    assert evaluate_mod._verdict(25, 36) == "GAPS"
+    assert evaluate_mod._verdict(0, 36) == "NEEDS WORK"
     assert evaluate_mod._verdict(0, 0) == "NEEDS WORK"
 
 
@@ -840,7 +1008,7 @@ def test_cmd_evaluate_handles_malformed_pyproject(
     out = capsys.readouterr().out
     assert "command=evaluate" in out
     assert "pyproject.toml unreadable" in out
-    assert "0 / 33" in out
+    assert "0 / 36" in out
 
 
 def test_cmd_evaluate_prints_report_sections(
@@ -864,11 +1032,17 @@ def test_cmd_evaluate_prints_report_sections(
 def test_cmd_evaluate_exits_zero_even_for_low_score(
     make_tmp_project: TmpProjectFactory,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     project = _project(make_tmp_project, test_files={}, feature=None, workflow=None)
     monkeypatch.chdir(project)
 
     cmd_evaluate()
+
+    out = capsys.readouterr().out
+    assert "command=evaluate" in out
+    assert "total" in out
+    assert "Next Actions" in out
 
 
 def test_evaluate_json_is_parseable(
@@ -888,7 +1062,55 @@ def test_evaluate_json_is_parseable(
     assert payload["verdict"] in {"HEALTHY", "GAPS", "NEEDS WORK"}
     assert len(payload["checks"]) == _ITEM_COUNT
     for check in payload["checks"]:
-        assert set(check.keys()) == {"name", "earned", "max", "rationale"}
+        assert set(check.keys()) == {
+            "name",
+            "earned",
+            "max",
+            "status",
+            "rationale",
+            "next_action",
+            "closure",
+        }
+    actions = {check["name"]: check for check in payload["checks"]}
+    assert actions["acceptance"]["next_action"] == (
+        "Run `interlocks init-acceptance` to scaffold feature files."
+    )
+    assert actions["acceptance"]["closure"] == {
+        "command": "interlocks init-acceptance",
+        "kind": "task",
+        "rationale": "scaffolds acceptance feature files",
+    }
+    assert actions["ci"]["next_action"] == "Add .github/workflows CI that runs `interlocks ci`."
+    assert actions["ci"]["closure"] == {
+        "command": "interlocks ci",
+        "kind": "stage",
+        "rationale": "PR-grade merge gate owner",
+    }
+
+
+def test_evaluate_check_json_serializes_optional_action_and_closure() -> None:
+    item = EvaluationItem(
+        "sample",
+        1,
+        status="warn",
+        detail="needs work",
+        next_action="Do the thing.",
+        closure=ClosurePath("interlocks sample", "task", "sample owner"),
+    )
+
+    assert evaluate_mod._check_json(item) == {
+        "name": "sample",
+        "earned": 1,
+        "max": 3,
+        "status": "warn",
+        "rationale": "needs work",
+        "next_action": "Do the thing.",
+        "closure": {
+            "command": "interlocks sample",
+            "kind": "task",
+            "rationale": "sample owner",
+        },
+    }
 
 
 def test_evaluate_json_error_when_pyproject_unreadable(

@@ -36,9 +36,9 @@ def tmp_project(make_tmp_project: TmpProjectFactory) -> Path:
     return root
 
 
-def _run_setup_hooks(cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_setup_hooks(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "setup-hooks"],
+        [sys.executable, "-m", "interlocks.cli", "setup-hooks", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -50,6 +50,9 @@ def test_setup_hooks_installs_pre_commit_and_stop_hook(tmp_project: Path) -> Non
     result = _run_setup_hooks(tmp_project)
 
     assert result.returncode == 0, result.stderr
+    assert "[git hook]" in result.stdout
+    assert "[claude hook]" in result.stdout
+    assert "installed" in result.stdout
 
     pre_commit = tmp_project / ".git" / "hooks" / "pre-commit"
     assert pre_commit.exists()
@@ -74,3 +77,44 @@ def test_setup_hooks_is_idempotent(tmp_project: Path) -> None:
     hooks = settings["hooks"]["Stop"][0]["hooks"]
     post_edit_hooks = [h for h in hooks if h["command"].endswith("-m interlocks.cli post-edit")]
     assert len(post_edit_hooks) == 1
+
+
+def test_setup_hooks_json_reports_installed_hooks(tmp_project: Path) -> None:
+    result = _run_setup_hooks(tmp_project, "--json")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "command": "setup-hooks",
+        "passed": True,
+        "status": "installed",
+        "installed": True,
+        "hooks": [
+            {
+                "label": "git hook",
+                "target": ".git/hooks/pre-commit",
+                "action": "installed",
+                "installed": True,
+            },
+            {
+                "label": "claude hook",
+                "target": ".claude/settings.json → Stop",
+                "action": "installed",
+                "installed": True,
+            },
+        ],
+        "next_actions": ["Run `interlocks setup --check` to verify all local integrations."],
+    }
+    assert "[git hook]" not in result.stdout
+
+
+def test_setup_hooks_json_reports_refreshed_hooks_on_rerun(tmp_project: Path) -> None:
+    assert _run_setup_hooks(tmp_project).returncode == 0
+
+    result = _run_setup_hooks(tmp_project, "--json")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert [hook["action"] for hook in payload["hooks"]] == ["refreshed", "refreshed"]
+    assert payload["installed"] is True

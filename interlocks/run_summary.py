@@ -12,6 +12,7 @@ consumer; everything else (CLI, gates) ignores this file.
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -121,7 +122,7 @@ def _maybe_pull_coverage(cfg: InterlockConfig) -> None:
     if not isinstance(totals, dict):
         return
     pct = totals.get("percent_covered")
-    if isinstance(pct, (int, float)) and not isinstance(pct, bool):
+    if isinstance(pct, (int, float)) and not isinstance(pct, bool) and math.isfinite(pct):
         record_coverage(float(pct))
 
 

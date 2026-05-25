@@ -82,6 +82,7 @@ def test_main_exits_with_command_status(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert "- Result: failed (exit 7)" in summary.read_text(encoding="utf-8")
 
 
+@pytest.mark.mutmut_incompatible
 def test_action_metadata_delegates_to_interlock_ci() -> None:
     action = (Path(__file__).resolve().parent.parent / "action.yml").read_text(encoding="utf-8")
 

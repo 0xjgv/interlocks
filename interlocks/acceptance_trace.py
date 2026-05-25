@@ -46,8 +46,10 @@ def trace_enabled() -> bool:
     return os.environ.get(_TRACE_ENV) == "1"
 
 
-def trace_can_wrap_command(runner_cmd: list[str]) -> bool:
-    return os.environ.get(_IN_PROCESS_ENV) == "1" and _runner_module(runner_cmd) is not None
+def trace_can_wrap_command(runner_cmd: list[str], *, force_in_process: bool = False) -> bool:
+    return (
+        force_in_process or trace_enabled() or os.environ.get(_IN_PROCESS_ENV) == "1"
+    ) and _runner_module(runner_cmd) is not None
 
 
 def trace_wrapper_cmd(
@@ -89,8 +91,8 @@ def load_trace_evidence(project_root: Path) -> AcceptanceTraceEvidence | None:
 def format_trace_evidence(evidence: AcceptanceTraceEvidence | None) -> str:
     if evidence is None:
         return (
-            "acceptance trace evidence unavailable — run acceptance with "
-            "INTERLOCKS_ACCEPTANCE_TRACE=1 for advisory runtime detail"
+            "acceptance trace evidence unavailable — run `interlocks acceptance --trace` "
+            "for advisory runtime detail"
         )
     lines = ["acceptance trace evidence (advisory; not blocking)"]
     if evidence.failure is not None:

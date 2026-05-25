@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -101,10 +102,32 @@ def _run_arch(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _run_arch_json(cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "interlocks.cli", "arch", "--json"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 @pytest.mark.slow
 def test_arch_passes_on_clean_project(clean_project: Path) -> None:
     result = _run_arch(clean_project)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+
+
+@pytest.mark.slow
+def test_arch_json_passes_on_clean_project(clean_project: Path) -> None:
+    result = _run_arch_json(clean_project)
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert payload["command"] == "arch"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "arch"
+    assert result.stderr.startswith("interlocks: [arch]")
 
 
 @pytest.mark.slow
@@ -115,12 +138,39 @@ def test_arch_fails_when_src_imports_tests(dirty_project: Path) -> None:
 
 
 @pytest.mark.slow
+def test_arch_json_fails_when_src_imports_tests(dirty_project: Path) -> None:
+    result = _run_arch_json(dirty_project)
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload["command"] == "arch"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
+    assert "lint-imports" in payload["gates"][0]["detail"]
+    assert result.stderr.startswith("interlocks: [arch]")
+
+
+@pytest.mark.slow
 def test_arch_skips_when_tests_not_a_package(non_package_tests: Path) -> None:
     result = _run_arch(non_package_tests)
     # Skipped gracefully: exit 0 and a nudge message.
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "arch:" in result.stdout
     assert "default needs" in result.stdout
+
+
+@pytest.mark.slow
+def test_arch_json_skips_when_tests_not_a_package(non_package_tests: Path) -> None:
+    result = _run_arch_json(non_package_tests)
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    assert payload["command"] == "arch"
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert "default needs" in payload["reason"]
+    assert payload["next_actions"]
+    assert result.stderr == ""
 
 
 @dataclass(frozen=True)
@@ -177,6 +227,7 @@ def test_task_arch_uses_user_contracts_when_declared(
     task = arch_mod.task_arch()
     assert task is not None
     assert task.description == "Architecture (import-linter)"
+    assert task.start_status == "running"
     assert "--config" not in task.cmd
 
 
@@ -282,3 +333,137 @@ def test_task_arch_layered_skips_when_no_layers_defined(
     out = capsys.readouterr().out
     assert "layered template selected" in out
     assert "arch_layers" in out
+
+
+def test_arch_skip_reason_default_is_exact(tmp_path: Path) -> None:
+    from interlocks.config import InterlockConfig
+    from interlocks.tasks import arch as arch_mod
+
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+    )
+
+    assert arch_mod._skip_reason(cfg) == (
+        "arch: no [tool.importlinter] contracts — "
+        "default needs src_dir and test_dir to be Python packages"
+    )
+
+
+def test_arch_skip_reason_layered_is_exact(tmp_path: Path) -> None:
+    from interlocks.config import InterlockConfig
+    from interlocks.tasks import arch as arch_mod
+
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+        arch_template="layered",
+    )
+
+    assert arch_mod._skip_reason(cfg) == (
+        "arch: layered template selected but [tool.interlocks.arch_layers] layers is empty "
+        "— list layer modules ordered top → bottom (high-level first)"
+    )
+
+
+def test_cmd_arch_json_skip_emits_exact_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.tasks import arch as arch_mod
+
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text("[project]\nname='x'\n", encoding="utf-8")
+    src = proj / "pkg"
+    src.mkdir()
+    (src / "__init__.py").write_text("", encoding="utf-8")
+    tests = proj / "tests"
+    tests.mkdir()
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "arch", "--json"])
+    _stub_load_config(monkeypatch, _ArchProject(proj, src, tests))
+
+    arch_mod.cmd_arch()
+
+    assert json.loads(capsys.readouterr().out) == {
+        "command": "arch",
+        "passed": True,
+        "status": "skipped",
+        "reason": (
+            "arch: no [tool.importlinter] contracts — "
+            "default needs src_dir and test_dir to be Python packages"
+        ),
+        "next_actions": [
+            "Add import-linter contracts or make the configured source and test dirs packages."
+        ],
+    }
+
+
+def test_cmd_arch_json_runs_arch_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from interlocks.config import InterlockConfig
+    from interlocks.runner import Task
+    from interlocks.tasks import arch as arch_mod
+
+    task = Task("Architecture", ["lint-imports"], label="arch")
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+    )
+    calls: list[tuple[str, Task]] = []
+
+    def fake_run_task_json(command: str, observed_task: Task) -> None:
+        calls.append((command, observed_task))
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "arch", "--json"])
+    monkeypatch.setattr(arch_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(arch_mod, "task_arch", lambda: task)
+    monkeypatch.setattr(arch_mod, "run_task_json", fake_run_task_json)
+
+    arch_mod.cmd_arch()
+
+    assert calls == [("arch", task)]
+
+
+def test_cmd_arch_human_runs_arch_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from interlocks.config import InterlockConfig
+    from interlocks.runner import Task
+    from interlocks.tasks import arch as arch_mod
+
+    task = Task("Architecture", ["lint-imports"], label="arch")
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+    )
+    calls: list[Task] = []
+
+    def fake_run(observed_task: Task) -> None:
+        calls.append(observed_task)
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "arch"])
+    monkeypatch.setattr(arch_mod, "load_config", lambda: cfg)
+    monkeypatch.setattr(arch_mod, "task_arch", lambda: task)
+    monkeypatch.setattr(arch_mod, "run", fake_run)
+
+    arch_mod.cmd_arch()
+
+    assert calls == [task]

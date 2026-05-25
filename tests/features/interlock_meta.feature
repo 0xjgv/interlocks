@@ -25,6 +25,7 @@ Feature: interlocks meta commands
     And the file "tests/features/example.feature" exists in the tmp project
     And the file "tests/step_defs/test_example.py" exists in the tmp project
     And the file "tests/step_defs/conftest.py" exists in the tmp project
+    And the output contains "next: run `interlocks acceptance`"
     When I run "interlocks init-acceptance" in the tmp project a second time
     Then the command exits with a non-zero status
 
@@ -33,6 +34,8 @@ Feature: interlocks meta commands
     Given a tmp project with a .git directory
     When I run "interlocks setup-hooks" in the tmp project
     Then the command exits successfully
+    And the output contains "[git hook]"
+    And the output contains "[claude hook]"
     And the pre-commit hook exists in the tmp project
     And the pre-commit hook is executable
 
@@ -41,6 +44,7 @@ Feature: interlocks meta commands
     Given a bare tmp project
     When I run "interlocks setup-skill" in the tmp project
     Then the command exits successfully
+    And the output contains "[claude skill]"
     And the file ".claude/skills/interlocks/SKILL.md" exists in the tmp project
     And the SKILL.md in the tmp project matches the bundled copy
 

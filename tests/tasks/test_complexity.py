@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 import textwrap
 from pathlib import Path
 
@@ -66,6 +68,27 @@ def test_complexity_passes_on_simple_code(
     assert "ok" in out
 
 
+def test_complexity_json_passes_on_simple_code(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_project / "interlocks" / "mod.py").write_text(_SIMPLE_SRC, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "complexity", "--json"])
+
+    from interlocks.tasks.complexity import cmd_complexity
+
+    cmd_complexity()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "complexity"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "complexity"
+    assert captured.err.startswith("interlocks: [complexity]")
+
+
 def test_complexity_fails_on_tangled_function(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -77,6 +100,27 @@ def test_complexity_fails_on_tangled_function(
     with pytest.raises(SystemExit) as exc:
         cmd_complexity()
     assert exc.value.code not in (0, None)
+
+
+def test_complexity_json_fails_on_tangled_function(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_project / "interlocks" / "mod.py").write_text(_COMPLEX_SRC, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "complexity", "--json"])
+
+    from interlocks.tasks.complexity import cmd_complexity
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_complexity()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "complexity"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
 
 
 # ─────────────── threshold cascade ─────────────────────

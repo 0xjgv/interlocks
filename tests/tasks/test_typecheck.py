@@ -9,6 +9,7 @@ invoke the function directly under ``monkeypatch.chdir``.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -59,6 +60,30 @@ def test_typecheck_clean_exits_zero(
     assert "ok" in out
 
 
+def test_typecheck_json_clean_exits_zero(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.typecheck import cmd_typecheck
+
+    (tmp_project / "interlocks" / "mod.py").write_text(CLEAN, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "typecheck", "--json"])
+    clear_cache()
+
+    cmd_typecheck()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "typecheck"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "typecheck"
+    assert payload["skipped"] == []
+    assert captured.err.startswith("interlocks: [typecheck]")
+
+
 def test_typecheck_violating_exits_nonzero(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -69,6 +94,29 @@ def test_typecheck_violating_exits_nonzero(
     with pytest.raises(SystemExit) as excinfo:
         cmd_typecheck()
     assert excinfo.value.code != 0
+
+
+def test_typecheck_json_violating_exits_nonzero(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.typecheck import cmd_typecheck
+
+    (tmp_project / "interlocks" / "mod.py").write_text(VIOLATING, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "typecheck", "--json"])
+    clear_cache()
+
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_typecheck()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert payload["command"] == "typecheck"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
 
 
 # ─────────────── bundled pyrightconfig fallback ─────────────────────
@@ -95,6 +143,7 @@ def test_typecheck_injects_bundled_config_in_bare_project(
     monkeypatch.chdir(tmp_path)
     task = task_typecheck()
     assert task is not None
+    assert task.start_status == "running"
     cmd = task.cmd
     assert "--project" in cmd
     cfg_path = Path(cmd[cmd.index("--project") + 1])
@@ -197,7 +246,7 @@ def test_typecheck_skips_without_project_env(
 def test_typecheck_uv_project_omits_pythonpath_even_when_venv_exists(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """uv uses a command prefix, not a concrete --pythonpath file, in this implementation."""
+    """uv projects run basedpyright inside the target project environment."""
     from interlocks.tasks.typecheck import task_typecheck
 
     _make_stub_venv_python(tmp_project)
@@ -206,6 +255,9 @@ def test_typecheck_uv_project_omits_pythonpath_even_when_venv_exists(
 
     task = task_typecheck()
     assert task is not None
+    assert task.cmd[:3] == ["uv", "run", "--with"]
+    assert task.cmd[4:6] == ["--index-strategy", "first-index"]
+    assert task.cmd[6] == "basedpyright"
     assert "--pythonpath" not in task.cmd
 
 
@@ -308,10 +360,36 @@ def test_cmd_typecheck_skips_without_project_env(
     assert "typecheck: skipped — no project environment" in capsys.readouterr().out
 
 
+def test_cmd_typecheck_json_skips_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.typecheck import cmd_typecheck
+
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    pkg = tmp_path / "interlocks"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "typecheck", "--json"])
+    clear_cache()
+
+    cmd_typecheck()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "typecheck"
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert "no project environment" in payload["reason"]
+    assert payload["next_actions"] == [
+        "Create or sync the project environment, then rerun `interlocks typecheck`."
+    ]
+
+
 def test_task_typecheck_runs_for_uv_project_without_venv(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """uv projects short-circuit project_env_ready — the guard never fires."""
+    """uv projects can materialize the target environment through `uv run`."""
     from interlocks.tasks.typecheck import task_typecheck
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
@@ -321,7 +399,10 @@ def test_task_typecheck_runs_for_uv_project_without_venv(
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
-    assert task_typecheck() is not None
+    task = task_typecheck()
+
+    assert task is not None
+    assert task.cmd[:3] == ["uv", "run", "--with"]
 
 
 @pytest.mark.slow

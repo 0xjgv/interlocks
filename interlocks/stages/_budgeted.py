@@ -10,6 +10,7 @@ label disables the whole gate.
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING
 
 from interlocks import ui
@@ -45,7 +46,7 @@ def run_budgeted_mutation(
     if cli_budget:
         budget = cli_budget
     try:
-        # `verify_cmd=("python", "-c", "pass")` is a deliberate no-op: the stage
+        # `verify_cmd=(sys.executable, "-c", "pass")` is a deliberate no-op: the stage
         # runs its own typecheck + test gates right after this mutation, so they
         # are the real verification — a heavier verifier here would be slow and,
         # for `check`, recursive. `apply_*_with_verify`'s restore-on-failure
@@ -55,7 +56,7 @@ def run_budgeted_mutation(
             budget=budget,
             apply=True,
             stats_path="",
-            verify_cmd=("python", "-c", "pass"),
+            verify_cmd=(sys.executable, "-c", "pass"),
         )
     except SystemExit as exc:
         # `cmd_fix_optimize` exits non-zero when ruff itself fails (rc ≥ 2).

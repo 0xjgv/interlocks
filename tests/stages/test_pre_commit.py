@@ -91,6 +91,85 @@ def test_pre_commit_noop_in_process(
     assert "pre-commit: skipped — no staged python files" in capsys.readouterr().out
 
 
+def test_pre_commit_noop_json_in_process(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from interlocks.stages import pre_commit as pre_commit_mod
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "pre-commit", "--json"])
+    monkeypatch.setattr(pre_commit_mod, "staged_py_files", list)
+
+    pre_commit_mod.cmd_pre_commit()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "pre-commit"
+    assert payload["passed"] is True
+    assert payload["gates"] == []
+    assert payload["skipped"] == [{"name": "pre-commit", "reason": "no staged Python files"}]
+
+
+def test_pre_commit_json_reports_stage_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from types import SimpleNamespace
+
+    from interlocks.runner import Task, record_result
+    from interlocks.skip import SkipPolicy
+    from interlocks.stages import pre_commit as pre_commit_mod
+
+    calls: list[tuple[str, object]] = []
+    monkeypatch.setattr(sys, "argv", ["interlocks", "pre-commit", "--json"])
+    monkeypatch.setattr(pre_commit_mod, "load_config", lambda: SimpleNamespace(src_dir_arg="src"))
+    monkeypatch.setattr(
+        pre_commit_mod,
+        "current_skip_policy",
+        lambda: SkipPolicy(frozenset(), "cli"),
+    )
+    monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: ["src/mod.py"])
+    monkeypatch.setattr(pre_commit_mod, "stage", lambda files: calls.append(("stage", files)))
+    monkeypatch.setattr(
+        pre_commit_mod,
+        "task_typecheck",
+        lambda: Task("Type check", ["python", "-c", "pass"], label="typecheck"),
+    )
+    monkeypatch.setattr(
+        pre_commit_mod,
+        "task_test",
+        lambda: Task("Run tests", ["python", "-c", "pass"], label="test"),
+    )
+
+    def fake_budgeted_mutation(_policy: object) -> None:
+        calls.append(("budgeted-mutation", None))
+        record_result("fix", status="ok", elapsed=None, detail=None)
+
+    def fake_run_tasks(tasks: list[Task]) -> None:
+        labels = [task.label or task.description for task in tasks]
+        calls.append(("run_tasks", labels))
+        for label in labels:
+            record_result(label, status="ok", elapsed=None, detail=None)
+
+    monkeypatch.setattr(pre_commit_mod, "_run_budgeted_mutation", fake_budgeted_mutation)
+    monkeypatch.setattr(pre_commit_mod, "run_tasks", fake_run_tasks)
+
+    pre_commit_mod.cmd_pre_commit()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "pre-commit"
+    assert payload["passed"] is True
+    assert [gate["name"] for gate in payload["gates"]] == ["fix", "typecheck", "test"]
+    assert payload["skipped"] == []
+    assert calls == [
+        ("budgeted-mutation", None),
+        ("stage", ["src/mod.py"]),
+        ("run_tasks", ["typecheck", "test"]),
+    ]
+
+
 @pytest.mark.parametrize(
     ("staged", "expected_task_descs"),
     [
@@ -156,12 +235,14 @@ def _pre_commit_calls(
     monkeypatch: pytest.MonkeyPatch, staged: list[str], *, skip: str | None = None
 ) -> list[tuple[str, object]]:
     from interlocks.stages import pre_commit as pre_commit_mod
+    from interlocks.tasks import typecheck as typecheck_mod
 
     calls: list[tuple[str, object]] = []
     argv = ["interlocks", "pre-commit"]
     if skip is not None:
         argv.append(f"--skip={skip}")
     monkeypatch.setattr(sys, "argv", argv)
+    monkeypatch.setattr(typecheck_mod, "project_env_ready", lambda _cfg: True)
     monkeypatch.setattr(pre_commit_mod, "staged_py_files", lambda: staged)
     monkeypatch.setattr(
         pre_commit_mod,

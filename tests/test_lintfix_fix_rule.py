@@ -11,6 +11,7 @@ Two layers:
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -92,6 +93,23 @@ def test_plan_mode_does_not_mutate_tree(repo: Path) -> None:
     assert f.read_text(encoding="utf-8") == _I001_MUTATION
 
 
+def test_plan_mode_json_reports_auto_eligible(repo: Path) -> None:
+    f = repo / "sample.py"
+    f.write_text(_I001_MUTATION, encoding="utf-8")
+    result = _run_fix_rule(repo, "--rule=I001", "--json")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "fix-rule"
+    assert payload["passed"] is True
+    assert payload["status"] == "auto-eligible"
+    assert payload["rule"] == "I001"
+    assert payload["mode"] == "auto"
+    assert payload["apply_requested"] is False
+    assert f.read_text(encoding="utf-8") == _I001_MUTATION
+
+
 def test_f401_defaults_to_escrow_and_writes_patch(repo: Path) -> None:
     f = repo / "sample.py"
     f.write_text(_F401_MUTATION, encoding="utf-8")
@@ -103,6 +121,18 @@ def test_f401_defaults_to_escrow_and_writes_patch(repo: Path) -> None:
     escrow = repo / ".lintfix" / "escrow" / "F401.patch"
     assert escrow.is_file()
     assert "import json" in escrow.read_text(encoding="utf-8")
+
+
+def test_f401_json_reports_escrow_patch(repo: Path) -> None:
+    f = repo / "sample.py"
+    f.write_text(_F401_MUTATION, encoding="utf-8")
+    result = _run_fix_rule(repo, "--rule=F401", "--apply", "--json")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "escrow"
+    assert payload["patch_path"] == ".lintfix/escrow/F401.patch"
+    assert "import json" in f.read_text(encoding="utf-8")
 
 
 def test_apply_mode_mutates_on_clean_verify(repo: Path) -> None:
@@ -134,10 +164,69 @@ def test_apply_mode_restores_tree_on_verify_failure(repo: Path) -> None:
     assert (repo / ".lintfix" / "failed.patch").is_file()
 
 
+def test_apply_mode_json_reports_verify_failure(repo: Path) -> None:
+    f = repo / "sample.py"
+    original = _I001_MUTATION
+    f.write_text(original, encoding="utf-8")
+    result = _run_fix_rule(
+        repo,
+        "--rule=I001",
+        "--apply",
+        "--json",
+        f'--verify-cmd={sys.executable} -c "import sys;sys.exit(1)"',
+    )
+
+    assert result.returncode != 0
+    assert f.read_text(encoding="utf-8") == original
+    payload = json.loads(result.stdout)
+    assert payload["passed"] is False
+    assert payload["status"] == "apply-failed"
+    assert payload["failed_patch"] == ".lintfix/failed.patch"
+
+
 def test_no_changed_files_exits_clean(repo: Path) -> None:
     # Tree matches HEAD — no diff vs base.
     result = _run_fix_rule(repo, "--rule=I001")
     assert result.returncode == 0
+
+
+def test_no_changed_files_json_reports_noop(repo: Path) -> None:
+    result = _run_fix_rule(repo, "--rule=I001", "--json")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["passed"] is True
+    assert payload["status"] == "no-changed-files"
+
+
+def test_missing_rule_json_exits_with_usage(repo: Path) -> None:
+    result = _run_fix_rule(repo, "--json")
+
+    assert result.returncode == 2
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "fix-rule"
+    assert payload["passed"] is False
+    assert payload["status"] == "missing-rule"
+    assert "missing required --rule" in payload["error"]
+
+
+def test_required_rule_missing_json_payload_is_exact(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-rule", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        fix_rule_mod._required_rule()
+
+    assert exc.value.code == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "command": "fix-rule",
+        "passed": False,
+        "status": "missing-rule",
+        "error": "missing required --rule=<value>",
+        "usage": "usage: interlocks fix-rule --rule=<value> [--apply] [--json]",
+    }
 
 
 # ─────────────── in-process unit layer ────────────────────────────
@@ -335,19 +424,25 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_cmd_fix_rule_unknown_base_returns_clean(
-    project: Path, monkeypatch: pytest.MonkeyPatch
+    project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(diff_mod, "resolve_base", lambda _base: "")
     # No exception, no exit — just a warn row.
     fix_rule_mod.cmd_fix_rule(rule="I001", base="nope")
+    assert "unknown base ref 'nope'" in capsys.readouterr().out
 
 
 def test_cmd_fix_rule_no_changed_files_returns_clean(
-    project: Path, monkeypatch: pytest.MonkeyPatch
+    project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(diff_mod, "resolve_base", lambda _base: "basesha")
     monkeypatch.setattr(diff_mod, "changed_files", lambda _base: ())
     fix_rule_mod.cmd_fix_rule(rule="I001")
+    assert "no changed .py files vs base" in capsys.readouterr().out
 
 
 def test_cmd_fix_rule_ruff_failure_exits_with_rc(

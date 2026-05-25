@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tools import run_lintfix_e2e
 
 
@@ -69,6 +71,7 @@ def test_run_scenarios_keep_going_collects_failures(tmp_path: Path) -> None:
     assert [result.passed for result in results] == [False, True]
 
 
+@pytest.mark.mutmut_incompatible
 def test_run_cli_captures_interlocks_output(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "demo"\nversion = "0.0.0"\n',

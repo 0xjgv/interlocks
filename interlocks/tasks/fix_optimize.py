@@ -22,25 +22,24 @@ verifier, and restores the tree on any failure.
 from __future__ import annotations
 
 import json
-import shlex
 import sys
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from interlocks import ui
-from interlocks.config import load_config
+from interlocks.config import load_config, relpath
 from interlocks.lintfix import budgets, escrow, verify
 from interlocks.lintfix import optimize as optimize_mod
 from interlocks.lintfix import plan as plan_module
 from interlocks.lintfix import stats as stats_module
 from interlocks.runner import arg_flag_value, arg_value, dump_and_exit
 from interlocks.tasks import fix_annotate
+from interlocks.tasks.fix_cli import verify_cmd_from_argv
 from interlocks.tasks.fix_metrics import aggregate_metrics
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-_DEFAULT_VERIFY_CMD: tuple[str, ...] = ("interlocks", "ci")
 _DEFAULT_STATS_PATH = ".lintfix/replay.json"
 
 
@@ -57,6 +56,21 @@ class _Options:
     metrics: bool
 
 
+@dataclass(frozen=True)
+class _OptimizeArtifacts:
+    plan: plan_module.Plan
+    selection: optimize_mod.Selection
+    plan_by_rule: dict[str, plan_module.PlannedCandidate]
+    optimize_path: Path
+    stats_source: str | None
+
+
+@dataclass(frozen=True)
+class _OptionalOutputs:
+    annotation_result: fix_annotate.AnnotationResult | None
+    metrics_path: Path | None
+
+
 def cmd_fix_optimize(
     *,
     base: str | None = None,
@@ -66,47 +80,122 @@ def cmd_fix_optimize(
     verify_cmd: tuple[str, ...] | None = None,
 ) -> None:
     """Build a fix plan, optimize selection, write artifacts, optionally apply + verify."""
+    should_emit_json = _standalone_json_requested()
     opts = _resolve_options(base, budget, apply, stats_path, verify_cmd)
     cfg = load_config()
     plan = plan_module.build_plan(base=opts.base, budget_name=opts.budget_name)
 
-    if plan.discovery_error is not None:
-        ui.row(
-            "fix-optimize",
-            "discover",
-            "ruff failed",
-            detail=f"rc={plan.discovery_error.returncode}",
-            state="fail",
-        )
-        dump_and_exit(plan.discovery_error.returncode, "", plan.discovery_error.stderr)
+    _exit_if_discovery_failed(opts, plan, should_emit_json)
+    artifacts = _build_artifacts(cfg.project_root, opts, plan)
+    _print_summary(
+        plan,
+        artifacts.selection,
+        opts,
+        cfg.relpath(artifacts.optimize_path),
+        artifacts.stats_source,
+    )
+    outputs = _run_optional_outputs(cfg.project_root, opts, should_emit_json)
+    _apply_and_emit_json(cfg.project_root, opts, artifacts, outputs, should_emit_json)
 
-    stats_map = _load_stats(opts.stats_path, cfg.project_root)
+
+def _exit_if_discovery_failed(
+    opts: _Options,
+    plan: plan_module.Plan,
+    should_emit_json: bool,
+) -> None:
+    if plan.discovery_error is None:
+        return
+    if should_emit_json:
+        ui.print_json(_fix_optimize_error_payload(opts, plan.discovery_error))
+        sys.exit(plan.discovery_error.returncode)
+    ui.row(
+        "fix-optimize",
+        "discover",
+        "ruff failed",
+        detail=f"rc={plan.discovery_error.returncode}",
+        state="fail",
+    )
+    dump_and_exit(plan.discovery_error.returncode, "", plan.discovery_error.stderr)
+
+
+def _build_artifacts(
+    project_root: Path,
+    opts: _Options,
+    plan: plan_module.Plan,
+) -> _OptimizeArtifacts:
+    stats_map = _load_stats(opts.stats_path, project_root)
     stats_source = opts.stats_path if stats_map is not None else None
     candidates = optimize_mod.candidates_from_plan(plan.candidates, stats_map)
     profile = budgets.profile(opts.budget_name, author_cost=plan.author_cost)
     selection = optimize_mod.optimize(candidates, profile)
 
     plan_by_rule = {c.classification.rule: c for c in plan.candidates}
-    patch_paths = plan_module.materialize_escrow_patches(cfg.project_root, plan)
+    patch_paths = plan_module.materialize_escrow_patches(project_root, plan)
 
     # `plan.json` here is byte-identical to what `fix-plan` writes — one writer.
-    plan_module.write_plan_json(
-        cfg.project_root, plan_module.serialize(plan, patch_paths=patch_paths)
-    )
+    plan_module.write_plan_json(project_root, plan_module.serialize(plan, patch_paths=patch_paths))
     payload = _serialize(plan, selection, patch_paths, plan_by_rule)
-    out_path = _write_optimize_json(cfg.project_root, payload)
+    out_path = _write_optimize_json(project_root, payload)
+    return _OptimizeArtifacts(plan, selection, plan_by_rule, out_path, stats_source)
 
-    _print_summary(plan, selection, opts, cfg.relpath(out_path), stats_source)
 
-    # Annotations + metrics run before `--apply` so a CI step that fails the
-    # apply still surfaces hints and rolls up its metrics artifact.
+def _run_optional_outputs(
+    project_root: Path,
+    opts: _Options,
+    should_emit_json: bool,
+) -> _OptionalOutputs:
+    """Run annotation/metrics outputs before apply so failed applies still report hints."""
+    annotation_result: fix_annotate.AnnotationResult | None = None
     if opts.annotate:
-        _annotate(cfg.project_root)
+        annotation_result = _annotate(project_root, emit_json=should_emit_json)
+    metrics_path: Path | None = None
     if opts.metrics:
-        aggregate_metrics(cfg.project_root)
+        metrics_path = aggregate_metrics(project_root)
+    return _OptionalOutputs(annotation_result, metrics_path)
 
-    if opts.apply:
-        _apply_selection(cfg.project_root, plan_by_rule, selection, opts.verify_cmd)
+
+def _apply_and_emit_json(
+    project_root: Path,
+    opts: _Options,
+    artifacts: _OptimizeArtifacts,
+    outputs: _OptionalOutputs,
+    should_emit_json: bool,
+) -> None:
+    apply_exit_code: int | None = None
+    try:
+        if opts.apply:
+            _apply_selection(
+                project_root,
+                artifacts.plan_by_rule,
+                artifacts.selection,
+                opts.verify_cmd,
+            )
+    except SystemExit as exc:
+        apply_exit_code = _system_exit_code(exc)
+        if should_emit_json:
+            _emit_json_payload(project_root, opts, artifacts, outputs, apply_exit_code)
+        raise
+    if should_emit_json:
+        _emit_json_payload(project_root, opts, artifacts, outputs, apply_exit_code)
+
+
+def _emit_json_payload(
+    project_root: Path,
+    opts: _Options,
+    artifacts: _OptimizeArtifacts,
+    outputs: _OptionalOutputs,
+    apply_exit_code: int | None,
+) -> None:
+    ui.print_json(_fix_optimize_payload(project_root, opts, artifacts, outputs, apply_exit_code))
+
+
+def _standalone_json_requested() -> bool:
+    if not ui.is_json():
+        return False
+    for arg in sys.argv[1:]:
+        if not arg.startswith("-"):
+            return arg in {"fix-optimize", "unblock"}
+    return False
 
 
 def _resolve_options(
@@ -141,7 +230,7 @@ def _resolve_stats_path() -> str:
     return _DEFAULT_STATS_PATH
 
 
-def _annotate(project_root: Path) -> None:
+def _annotate(project_root: Path, *, emit_json: bool) -> fix_annotate.AnnotationResult | None:
     """Emit GitHub annotations from ``optimize.json`` — advisory, never alters exit code.
 
     SPEC §821: annotation errors must not fail ``fix-optimize``. Both a hard
@@ -149,11 +238,131 @@ def _annotate(project_root: Path) -> None:
     warning row here.
     """
     try:
-        fix_annotate.emit_annotations(project_root, source="optimize")
+        return fix_annotate.emit_annotations(
+            project_root,
+            source="optimize",
+            emit_json=emit_json,
+        )
     except SystemExit as exc:
         ui.row("fix-optimize", "annotate", f"skipped (exit {exc.code})", state="warn")
     except Exception as exc:
         ui.row("fix-optimize", "annotate", str(exc), state="warn")
+    return None
+
+
+def _fix_optimize_payload(
+    project_root: Path,
+    opts: _Options,
+    artifacts: _OptimizeArtifacts,
+    outputs: _OptionalOutputs,
+    apply_exit_code: int | None,
+) -> dict[str, object]:
+    """Return the compact JSON summary; full detail stays in .lintfix artifacts."""
+    plan = artifacts.plan
+    selection = artifacts.selection
+    payload: dict[str, object] = {
+        "command": "fix-optimize",
+        "passed": apply_exit_code in (None, 0),
+        "status": _fix_optimize_status(opts, selection, apply_exit_code),
+        "plan_path": ".lintfix/plan.json",
+        "optimize_path": relpath(project_root, artifacts.optimize_path),
+        "base": plan.base,
+        "head": plan.head,
+        "budget": selection.budget_name,
+        "candidate_count": len(plan.candidates),
+        "selected_count": len(selection.selected),
+        "not_selected_count": len(selection.rejected),
+        "selected_rules": _selected_rules(selection),
+        "total_value": selection.total_value,
+        "total_cost": asdict(selection.total_cost),
+        "stats_source": artifacts.stats_source,
+        "apply": _apply_payload(selection, opts.apply, apply_exit_code),
+    }
+    if outputs.annotation_result is not None:
+        payload["annotations"] = _annotation_payload(project_root, outputs.annotation_result)
+    if outputs.metrics_path is not None:
+        payload["metrics_path"] = relpath(project_root, outputs.metrics_path)
+    return payload
+
+
+def _fix_optimize_status(
+    opts: _Options,
+    selection: optimize_mod.Selection,
+    apply_exit_code: int | None,
+) -> str:
+    if apply_exit_code not in (None, 0):
+        return "apply-failed"
+    if not opts.apply:
+        return "planned"
+    if not selection.selected:
+        return "nothing-to-apply"
+    return "applied"
+
+
+def _apply_payload(
+    selection: optimize_mod.Selection,
+    requested: bool,
+    exit_code: int | None,
+) -> dict[str, object]:
+    rules = _selected_rules(selection)
+    if not requested:
+        return {"requested": False, "status": "not-requested"}
+    payload: dict[str, object] = {
+        "requested": True,
+        "status": "applied" if rules else "nothing-to-apply",
+        "selected_rules": rules,
+    }
+    if exit_code not in (None, 0):
+        payload["status"] = "failed"
+        payload["returncode"] = exit_code
+        payload["failed_patch"] = ".lintfix/failed.patch"
+    return payload
+
+
+def _selected_rules(selection: optimize_mod.Selection) -> list[str]:
+    return [selected.candidate.rule for selected in selection.selected]
+
+
+def _annotation_payload(
+    project_root: Path,
+    result: fix_annotate.AnnotationResult,
+) -> dict[str, object]:
+    return {
+        "source": result.source,
+        "path": relpath(project_root, result.path),
+        "found": result.found,
+        "notice": result.notice,
+        "warning": result.warning,
+        "skip": result.skip,
+        "annotation_count": result.annotation_count,
+    }
+
+
+def _fix_optimize_error_payload(
+    opts: _Options,
+    error: plan_module.DiscoveryError,
+) -> dict[str, object]:
+    return {
+        "command": "fix-optimize",
+        "passed": False,
+        "status": "discovery-failed",
+        "base": opts.base,
+        "budget": opts.budget_name,
+        "error": "ruff discovery failed",
+        "returncode": error.returncode,
+        "stderr_excerpt": _stderr_excerpt(error.stderr, limit=800),
+    }
+
+
+def _system_exit_code(exc: SystemExit) -> int:
+    return exc.code if isinstance(exc.code, int) else 1
+
+
+def _stderr_excerpt(stderr: str, *, limit: int) -> str:
+    cleaned = stderr.strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1] + "…"
 
 
 def _apply_selection(
@@ -379,7 +588,4 @@ def _write_optimize_json(project_root: Path, payload: dict[str, Any]) -> Path:
 
 
 def _verify_cmd_argv() -> tuple[str, ...]:
-    raw = arg_value("--verify-cmd=", "")
-    if raw:
-        return tuple(shlex.split(raw))
-    return _DEFAULT_VERIFY_CMD
+    return verify_cmd_from_argv("fix-optimize")

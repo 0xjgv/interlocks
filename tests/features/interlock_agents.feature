@@ -9,6 +9,8 @@ Feature: Register interlocks usage via `interlocks agents`
     Given an empty directory
     When I run "interlocks agents" there
     Then the command exits successfully
+    And the output contains "[agent docs]"
+    And the output contains "registered"
     And the file "AGENTS.md" exists
     And the file "CLAUDE.md" exists
     And "AGENTS.md" contains "interlocks check"
@@ -19,6 +21,7 @@ Feature: Register interlocks usage via `interlocks agents`
     Given a directory with AGENTS.md "# Existing" and CLAUDE.md "# Project"
     When I run "interlocks agents" there
     Then the command exits successfully
+    And the output contains "[agent docs]"
     And "AGENTS.md" starts with "# Existing"
     And "AGENTS.md" contains "interlocks check"
     And "CLAUDE.md" starts with "# Project"
@@ -29,6 +32,7 @@ Feature: Register interlocks usage via `interlocks agents`
     Given a directory with AGENTS.md "already runs interlocks check" and CLAUDE.md "uses il check"
     When I run "interlocks agents" there
     Then the command exits successfully
+    And the output contains "[agent docs]"
     And "AGENTS.md" equals "already runs interlocks check"
     And "CLAUDE.md" equals "uses il check"
 

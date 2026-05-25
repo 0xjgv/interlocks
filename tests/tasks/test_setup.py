@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from interlocks.tasks import setup as setup_mod
+
 _PYPROJECT_BODY = '[project]\nname = "probe"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
 
 
@@ -67,6 +69,23 @@ def test_setup_check_fails_when_artifacts_missing(
     assert "Run `interlocks setup`" in out
 
 
+def test_setup_check_default_mode_prints_fix_and_progressive_next_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--check")
+
+    out = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "── Next Steps" not in out
+    assert "next: Run `interlocks setup`" in out
+    assert "next: Run `interlocks presets set progressive`" in out
+    assert 'preset = "progressive"' in out
+
+
 def test_setup_refuses_non_git_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -97,6 +116,88 @@ def test_setup_default_mode_prints_per_artifact_summary(
     # A fresh install reports every artifact as installed.
     assert "installed" in out
     assert "missing/stale" not in out
+
+
+def test_setup_json_installs_local_integrations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from interlocks.setup_state import SETUP_ARTIFACTS
+
+    _write_pyproject(tmp_path)
+
+    _run_setup(monkeypatch, tmp_path, "--json")
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "setup"
+    assert payload["mode"] == "local"
+    assert payload["check"] is False
+    assert payload["passed"] is True
+    assert payload["status"] == "installed"
+    assert [artifact["label"] for artifact in payload["artifacts"]] == [
+        artifact.label for artifact in SETUP_ARTIFACTS
+    ]
+    assert all(artifact["installed"] is True for artifact in payload["artifacts"])
+    assert "Run `interlocks check` after edits." in payload["next_actions"]
+
+
+def test_setup_check_json_reports_missing_integrations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--check", "--json")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "setup"
+    assert payload["mode"] == "local"
+    assert payload["check"] is True
+    assert payload["passed"] is False
+    assert payload["status"] == "missing/stale"
+    assert any(artifact["installed"] is False for artifact in payload["artifacts"])
+    assert payload["next_actions"][0] == (
+        "Run `interlocks setup` to install or refresh local integrations."
+    )
+
+
+def test_setup_json_refuses_non_git_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject_no_git(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--json")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "setup"
+    assert payload["status"] == "error"
+    assert "not a git repository" in payload["error"]
+    assert payload["next_actions"] == ["Run `git init`, then rerun `interlocks setup`."]
+    assert not (tmp_path / ".git").exists()
+
+
+def test_fail_setup_error_json_payload_uses_default_help_action(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(setup_mod.ui, "is_json", lambda: True)
+
+    with pytest.raises(SystemExit) as exc:
+        setup_mod._fail_setup_error("unsupported option")
+
+    assert exc.value.code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "command": "setup",
+        "passed": False,
+        "status": "error",
+        "error": "unsupported option",
+        "usage": "usage: interlocks setup [--check] [--ci=github]",
+        "next_actions": ["Run `interlocks help setup` for supported flags."],
+    }
 
 
 def test_setup_check_prints_full_rows_on_mixed_state(
@@ -160,12 +261,17 @@ def test_setup_installs_hooks_agent_docs_and_skill(
     assert "interlocks check" in claude_md
     assert "unblock" in agents_md
     assert "unblock" in claude_md
+    assert "optional acceptance/properties" in agents_md
+    assert "coverage/properties/audit/mutation" in agents_md
 
     from interlocks.defaults_path import path as defaults_path
 
     installed = tmp_path / ".claude" / "skills" / "interlocks" / "SKILL.md"
     assert installed.read_bytes() == defaults_path("skill/SKILL.md").read_bytes()
-    assert b"unblock" in installed.read_bytes()
+    installed_text = installed.read_text(encoding="utf-8")
+    assert "unblock" in installed_text
+    assert "properties run in `check`" in installed_text
+    assert "il properties --profile=check" in installed_text
 
 
 def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -240,6 +346,41 @@ def test_setup_ci_check_reports_missing_when_no_workflow(
     assert "missing/stale" in out
 
 
+def test_setup_ci_check_json_reports_missing_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--ci=github", "--check", "--json")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["mode"] == "github-ci"
+    assert payload["check"] is True
+    assert payload["passed"] is False
+    assert payload["artifacts"][0]["label"] == "github ci"
+    assert payload["next_actions"][0] == (
+        "Run `interlocks setup --ci=github` to install a GitHub Actions workflow."
+    )
+
+
+def test_setup_ci_check_default_mode_prints_fix_and_progressive_next_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
+
+    with pytest.raises(SystemExit) as exc:
+        _run_setup(monkeypatch, tmp_path, "--ci=github", "--check")
+
+    out = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "── Next Steps" not in out
+    assert "next: Run `interlocks setup --ci=github`" in out
+    assert "next: Run `interlocks presets set progressive`" in out
+
+
 def test_setup_ci_installs_github_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -268,6 +409,29 @@ def test_setup_ci_installs_github_workflow(
     assert "missing/stale" not in capsys.readouterr().out
 
 
+def test_setup_ci_json_installs_github_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+
+    _run_setup(monkeypatch, tmp_path, "--ci=github", "--json")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "setup"
+    assert payload["mode"] == "github-ci"
+    assert payload["check"] is False
+    assert payload["passed"] is True
+    assert payload["artifacts"] == [
+        {
+            "label": "github ci",
+            "target": ".github/workflows/*.yml",
+            "installed": True,
+            "status": "installed",
+        }
+    ]
+    assert (tmp_path / ".github" / "workflows" / "interlocks.yml").is_file()
+
+
 def test_setup_plain_check_does_not_require_ci(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -293,6 +457,24 @@ def test_setup_check_succeeds_after_setup(
     out = capsys.readouterr().out
     assert "missing/stale" not in out
     assert "Local integrations are installed and current." in out
+
+
+def test_setup_check_default_mode_recommends_progressive_after_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_pyproject(tmp_path)
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
+
+    _run_setup(monkeypatch, tmp_path)
+    capsys.readouterr()
+
+    _run_setup(monkeypatch, tmp_path, "--check")
+
+    out = capsys.readouterr().out
+    assert "missing/stale" not in out
+    assert "Local integrations are installed and current." not in out
+    assert "next: Run `interlocks presets set progressive`" in out
+    assert 'preset = "progressive"' in out
 
 
 def _write_pyproject_with_preset(project: Path, preset: str | None) -> None:

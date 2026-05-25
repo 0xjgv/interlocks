@@ -99,10 +99,15 @@ def _encode_body_within_cap(body: str, *, local_path: Path | None) -> str:
 
     suffix = f"\n\n(full payload at {local_path})" if local_path is not None else "\n\n(truncated)"
     encoded_suffix_len = len(quote(suffix, safe=""))
-    target_encoded = _BODY_ENCODED_CAP - encoded_suffix_len
+    if encoded_suffix_len >= _BODY_ENCODED_CAP:
+        suffix = "\n\n(truncated)"
+        encoded_suffix_len = len(quote(suffix, safe=""))
+    target_encoded = max(0, _BODY_ENCODED_CAP - encoded_suffix_len)
 
     truncated = body
     while len(quote(truncated, safe="")) > target_encoded:
+        if not truncated:
+            break
         shrink = max(1, len(truncated) // 20)
         truncated = truncated[:-shrink]
 

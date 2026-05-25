@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from interlocks.config import clear_cache, load_config
 from tests.conftest import TmpProjectFactory, stub_project_venv
 
 _PYPROJECT = textwrap.dedent(
@@ -166,6 +167,29 @@ def test_ci_writes_runtime_evidence(tmp_project: Path) -> None:
     assert data["elapsed_seconds"] > 0
 
 
+def test_ci_evidence_records_skipped_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "ci-evidence"\nversion = "0.0.0"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    clear_cache()
+
+    from interlocks.stages import ci as ci_mod
+
+    ci_mod._write_ci_evidence(
+        load_config(),
+        elapsed_seconds=1.25,
+        passed=True,
+        skipped=["coverage", "mutation"],
+    )
+
+    data = json.loads((tmp_path / ".interlocks" / "ci.json").read_text(encoding="utf-8"))
+    assert data["skipped"] == ["coverage", "mutation"]
+
+
 def _run_ci_json(cwd: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-P", "-m", "interlocks.cli", "ci", "--json", *extra],
@@ -272,17 +296,22 @@ def test_ci_in_process_queues_all_tasks(
     plus the sequential post-coverage gates."""
     from interlocks.config import load_config
     from interlocks.stages import ci as ci_mod
+    from interlocks.tasks import coverage as coverage_mod
+    from interlocks.tasks import typecheck as typecheck_mod
 
     parallel: list[str] = []
     sequential: list[str] = []
+    monkeypatch.setattr(ci_mod, "project_env_ready", lambda _cfg: True)
+    monkeypatch.setattr(coverage_mod, "project_env_ready", lambda _cfg: True)
+    monkeypatch.setattr(typecheck_mod, "project_env_ready", lambda _cfg: True)
     monkeypatch.setattr(
         ci_mod, "run_tasks", lambda tasks: parallel.extend(t.description for t in tasks)
     )
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: sequential.append("CRAP"))
     monkeypatch.setattr(
         ci_mod,
         "cmd_behavior_attribution",
-        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+        lambda refresh=False, **_kw: sequential.append(f"Attribution:{refresh}"),
     )
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
 
@@ -330,11 +359,11 @@ def test_ci_skip_coverage_warns_and_skips_crap(
 
     sequential: list[str] = []
     monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: sequential.append("CRAP"))
     monkeypatch.setattr(
         ci_mod,
         "cmd_behavior_attribution",
-        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+        lambda refresh=False, **_kw: sequential.append(f"Attribution:{refresh}"),
     )
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
 
@@ -375,8 +404,8 @@ def test_ci_skips_typecheck_and_coverage_without_project_env(
     monkeypatch.setattr(
         ci_mod, "run_tasks", lambda tasks: parallel.extend(t.description for t in tasks)
     )
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: None)
-    monkeypatch.setattr(ci_mod, "cmd_behavior_attribution", lambda refresh=False: None)
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: None)
+    monkeypatch.setattr(ci_mod, "cmd_behavior_attribution", lambda refresh=False, **_kw: None)
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: None)
 
     ci_mod.cmd_ci()  # must not raise SystemExit
@@ -466,11 +495,11 @@ def test_ci_reports_sequential_gate_failure_in_verdict(
             raise SystemExit(1)
 
     monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: fail_if_gate("crap"))
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: fail_if_gate("crap"))
     monkeypatch.setattr(
         ci_mod,
         "cmd_behavior_attribution",
-        lambda refresh=False: fail_if_gate("attribution"),
+        lambda refresh=False, **_kw: fail_if_gate("attribution"),
     )
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: fail_if_gate("mutation"))
 
@@ -511,11 +540,11 @@ def test_ci_in_process_includes_mutation_when_enabled(
 
     sequential: list[str] = []
     monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: sequential.append("CRAP"))
     monkeypatch.setattr(
         ci_mod,
         "cmd_behavior_attribution",
-        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+        lambda refresh=False, **_kw: sequential.append(f"Attribution:{refresh}"),
     )
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: sequential.append("Mutation"))
 
@@ -575,11 +604,11 @@ def test_ci_mode_dispatches_mutation(
     sequential: list[str] = []
     captured_kwargs: list[dict[str, object]] = []
     monkeypatch.setattr(ci_mod, "run_tasks", lambda tasks: None)
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: sequential.append("CRAP"))
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: sequential.append("CRAP"))
     monkeypatch.setattr(
         ci_mod,
         "cmd_behavior_attribution",
-        lambda refresh=False: sequential.append(f"Attribution:{refresh}"),
+        lambda refresh=False, **_kw: sequential.append(f"Attribution:{refresh}"),
     )
 
     def fake_mutation(**kwargs: object) -> None:
@@ -627,7 +656,7 @@ def _capture_ci_task_descriptions(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(
         ci_mod, "run_tasks", lambda tasks: captured.extend(t.description for t in tasks)
     )
-    monkeypatch.setattr(ci_mod, "cmd_crap", lambda: None)
+    monkeypatch.setattr(ci_mod, "cmd_crap", lambda **_kw: None)
     monkeypatch.setattr(ci_mod, "cmd_mutation", lambda **_kw: None)
     ci_mod.cmd_ci()
     return captured

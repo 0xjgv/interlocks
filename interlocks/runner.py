@@ -36,6 +36,8 @@ VERBOSE = ui.is_verbose()
 # stream. `INTERLOCK_DUMP_LINES=all` bypasses for CI debugging.
 _DUMP_HEAD_LINES = 40
 _DUMP_TAIL_LINES = 20
+_CONFIG_PATH_FLAGS = ("--config", "--project", "--rcfile")
+_INLINE_CONFIG_FLAG_MARKERS = tuple(f"{flag}=" for flag in _CONFIG_PATH_FLAGS)
 
 # Commands that must work without a project — diagnostics, scaffolding, meta.
 PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
@@ -56,10 +58,11 @@ PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
 
 _BIN = Path(sys.executable).parent
 
-_UNITTEST_SUMMARY = re.compile(r"Ran (\d+) tests? in ([\d.]+s)")
+_UNITTEST_SUMMARY = re.compile(r"Ran (\d+) (tests?) in ([\d.]+s)")
 _PYTEST_SUMMARY = re.compile(r"(\d+) passed[^\n]*?\s+in\s+([\d.]+)s")
 
 _PRINT_LOCK = threading.Lock()
+_JSON_PROGRESS_COMMAND_MAX = 96
 
 
 @dataclass(frozen=True)
@@ -92,9 +95,12 @@ def reset_results() -> None:
     _SKIPS.clear()
 
 
-def record_skip(name: str, reason: str) -> None:
+def record_skip(name: str, reason: str, *, next_action: str | None = None) -> None:
     """Record one skipped gate for the stage JSON `skipped` array."""
-    _SKIPS.append({"name": name, "reason": reason})
+    entry = {"name": name, "reason": reason}
+    if next_action is not None:
+        entry["next_action"] = next_action
+    _SKIPS.append(entry)
 
 
 def skips_snapshot() -> list[dict[str, str]]:
@@ -163,6 +169,21 @@ def stage_json(
     if evidence_path is not None:
         obj["evidence_path"] = evidence_path
     return obj
+
+
+def run_task_json(command: str, task: Task, extra: dict[str, object] | None = None) -> None:
+    """Run one standalone task and emit the shared runner JSON payload."""
+    reset_results()
+    start = time.monotonic()
+    run(task, no_exit=True)
+    elapsed = time.monotonic() - start
+    passed = all(gate.status == "ok" for gate in results_snapshot())
+    payload = stage_json(command, passed=passed, elapsed=elapsed)
+    if extra:
+        payload.update(extra)
+    ui.print_json(payload)
+    if not passed:
+        sys.exit(1)
 
 
 def _gate_json_entry(result: GateResult) -> dict[str, object]:
@@ -344,8 +365,21 @@ def preflight(command: str) -> None:
     try:
         require_pyproject(load_config())
     except InterlockUserError as exc:
+        if ui.is_json():
+            ui.print_json(_preflight_error_payload(command, str(exc)))
+            sys.exit(2)
         print(f"interlocks: {exc}", file=sys.stderr)
         sys.exit(2)
+
+
+def _preflight_error_payload(command: str, error: str) -> dict[str, object]:
+    next_action = "Run `interlocks init` for a new project, or invoke from a Python project root."
+    return {
+        "command": command,
+        "passed": False,
+        "error": error,
+        "next_action": next_action,
+    }
 
 
 def _has_changed_flag() -> bool:
@@ -369,6 +403,10 @@ class Task:
     display: str | None = None
     # Environment overrides merged into os.environ for this task's subprocesses.
     env: tuple[tuple[str, str], ...] = ()
+    # Optional pre-execution status row for long-running standalone tasks.
+    start_status: str | None = None
+    # Optional JSON-mode phase labels for compound tasks with pre_cmds.
+    progress_steps: tuple[str, ...] = ()
 
 
 @dataclass
@@ -383,8 +421,11 @@ class RunResult:
 
 def run(task: Task, *, no_exit: bool = False) -> None:
     """Run ``task`` silently; print a status row. Exit on failure unless ``no_exit``."""
-    if not filter_tasks([task]):
+    tasks = filter_tasks([task])
+    if not tasks:
         return
+    task = tasks[0]
+    _print_start_status(task)
     result = _execute(task)
     _print_status(result, elapsed_suffix=False)
     if result.returncode in task.allowed_rcs:
@@ -406,6 +447,7 @@ def run_tasks(tasks: list[Task]) -> None:
         return
     results: list[RunResult | None] = [None] * len(tasks)
     max_workers = min(len(tasks), (os.cpu_count() or 4) * 2)
+    _print_parallel_json_start_statuses(tasks)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(_execute, t): idx for idx, t in enumerate(tasks)}
         for fut in as_completed(futures):
@@ -426,7 +468,9 @@ def _execute(task: Task) -> RunResult:
     stderr_parts: list[str] = []
     rc = 0
     failed_cmd: list[str] | None = None
-    for cmd in (*task.pre_cmds, task.cmd):
+    commands = (*task.pre_cmds, task.cmd)
+    for index, cmd in enumerate(commands):
+        _print_progress_step(task, index, len(commands))
         rc, out, err = _run_one(cmd, task.description, env=task.env)
         stdout_parts.append(out)
         stderr_parts.append(err)
@@ -512,6 +556,44 @@ def _print_status(result: RunResult, *, elapsed_suffix: bool) -> None:
         ui.gate_row(label, command, status, detail=detail, state=state)
 
 
+def _print_start_status(task: Task) -> None:
+    if task.start_status is None:
+        return
+    label = task.label or _default_label(task.description)
+    command = task.display or _default_display(task.cmd)
+    with _PRINT_LOCK:
+        if ui.is_json():
+            progress_command = _json_progress_command(command)
+            print(f"interlocks: [{label}] {progress_command} {task.start_status}", file=sys.stderr)
+            sys.stderr.flush()
+            return
+        ui.gate_row(label, command, task.start_status, state="ok")
+        sys.stdout.flush()
+
+
+def _print_progress_step(task: Task, index: int, total: int) -> None:
+    if not ui.is_json() or not task.progress_steps:
+        return
+    label = task.label or _default_label(task.description)
+    step = task.progress_steps[index] if index < len(task.progress_steps) else f"step {index + 1}"
+    with _PRINT_LOCK:
+        print(f"interlocks: [{label}] {step} running ({index + 1}/{total})", file=sys.stderr)
+        sys.stderr.flush()
+
+
+def _print_parallel_json_start_statuses(tasks: list[Task]) -> None:
+    if not ui.is_json():
+        return
+    for task in tasks:
+        _print_start_status(task)
+
+
+def _json_progress_command(command: str) -> str:
+    if len(command) <= _JSON_PROGRESS_COMMAND_MAX:
+        return command
+    return command[: _JSON_PROGRESS_COMMAND_MAX - 1] + "…"
+
+
 def _failure_detail(result: RunResult) -> str | None:
     """Short failure detail for the JSON `gates[].detail` field.
 
@@ -547,10 +629,26 @@ def _default_display(cmd: list[str]) -> str:
         return ""
     head, rest = _display_head_and_rest(cmd)
     # Drop config-path flags that carry absolute paths — noise in the demo row.
-    cleaned = [a for a in rest if not a.startswith(("--config=", "--project=", "--rcfile="))]
+    cleaned = _clean_display_args([head, *rest])
     # Collapse whitespace so inline scripts and embedded newlines don't tear the row.
-    joined = " ".join([head, *cleaned]).strip()
+    joined = " ".join(cleaned).strip()
     return re.sub(r"\s+", " ", joined)
+
+
+def _clean_display_args(args: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in _CONFIG_PATH_FLAGS:
+            skip_next = True
+            continue
+        if any(marker in arg for marker in _INLINE_CONFIG_FLAG_MARKERS):
+            continue
+        cleaned.append(arg)
+    return cleaned
 
 
 def _display_head_and_rest(cmd: list[str]) -> tuple[str, list[str]]:
@@ -605,7 +703,7 @@ def _parse_test_summary(output: str) -> str:
     """Extract a short test summary from unittest or pytest output."""
     m = _UNITTEST_SUMMARY.search(output)
     if m:
-        return f"{m.group(1)} tests in {m.group(2)}"
+        return f"{m.group(1)} {m.group(2)} in {m.group(3)}"
     m = _PYTEST_SUMMARY.search(output)
     if m:
         return f"{m.group(1)} passed in {m.group(2)}s"

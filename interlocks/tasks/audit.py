@@ -4,10 +4,22 @@ from __future__ import annotations
 
 import re
 import sys
+import time
 import tomllib
 
+from interlocks import ui
 from interlocks.config import find_project_root, load_config
-from interlocks.runner import Task, capture, dump_and_exit, fail, ok, run, uvx_tool, warn_skip
+from interlocks.runner import (
+    Task,
+    capture,
+    dump_and_exit,
+    fail,
+    ok,
+    run,
+    run_task_json,
+    uvx_tool,
+    warn_skip,
+)
 
 # pip-audit emits one of these IDs only when it actually finds a vulnerability;
 # absence of all three means the non-zero exit is environmental (network failure,
@@ -33,6 +45,7 @@ def _pip_audit_task() -> Task:
         uvx_tool("pip-audit", ".", version=cfg.tool_version("pip-audit")),
         label="audit",
         display="pip-audit .",
+        start_status="running",
     )
 
 
@@ -48,6 +61,9 @@ def cmd_audit(*, allow_network_skip: bool = False) -> None:
     if cfg.audit_severity_threshold is not None:
         ok(f"Audit severity policy: fail on {cfg.audit_severity_threshold}+ vulnerabilities")
     task = _pip_audit_task()
+    if ui.is_json():
+        _cmd_audit_json(task, allow_network_skip=allow_network_skip)
+        return
     if not allow_network_skip:
         run(task)
         return
@@ -67,3 +83,53 @@ def _project_has_dependencies() -> bool:
     with (find_project_root() / "pyproject.toml").open("rb") as f:
         deps = tomllib.load(f).get("project", {}).get("dependencies", [])
     return isinstance(deps, list) and bool(deps)
+
+
+def _cmd_audit_json(task: Task, *, allow_network_skip: bool) -> None:
+    if not allow_network_skip:
+        run_task_json("audit", task)
+        return
+    start = time.monotonic()
+    result = capture(task.cmd)
+    elapsed = time.monotonic() - start
+    output = (result.stdout or "") + (result.stderr or "")
+    if result.returncode == 0:
+        ui.print_json(_audit_network_payload(passed=True, status="ok", elapsed=elapsed))
+        return
+    if not _VULN_ID_PATTERN.search(output):
+        ui.print_json(
+            _audit_network_payload(
+                passed=True,
+                status="skipped",
+                elapsed=elapsed,
+                reason="pip-audit failed without a vulnerability ID — treating as transient",
+            )
+        )
+        return
+    ui.print_json(
+        _audit_network_payload(
+            passed=False,
+            status="failed",
+            elapsed=elapsed,
+            reason="pip-audit reported known vulnerabilities",
+        )
+    )
+    sys.exit(result.returncode)
+
+
+def _audit_network_payload(
+    *,
+    passed: bool,
+    status: str,
+    elapsed: float,
+    reason: str | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "command": "audit",
+        "passed": passed,
+        "status": status,
+        "elapsed_seconds": round(elapsed, 3),
+    }
+    if reason is not None:
+        payload["reason"] = reason
+    return payload

@@ -67,8 +67,8 @@ def print_json(obj: object) -> None:
     """Write one compact JSON object + newline to stdout (machine-readable mode).
 
     Single line, `(",", ":")` separators, `sort_keys=False` so insertion order is
-    preserved (`command` stays first). The six command schemas are the stable
-    contract — see the JSON output tests.
+    preserved (`command` stays first). Command schemas are pinned by JSON output
+    tests.
     """
     print(json.dumps(obj, separators=(",", ":"), sort_keys=False))
 

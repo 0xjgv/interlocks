@@ -109,6 +109,44 @@ def test_summarize_replay_lists_pareto_and_recommendations() -> None:
     assert summary["pareto_frontier"] == ["I001", "W292"]
 
 
+def test_summarize_replay_defaults_missing_counts_and_rule_fields() -> None:
+    replay = {
+        "rules": [
+            {"on_pareto_frontier": True},
+            {"recommended_mode": "", "rule": "", "on_pareto_frontier": True},
+            {"recommended_mode": None, "rule": None, "on_pareto_frontier": True},
+        ],
+    }
+
+    summary = fix_metrics._summarize_replay(replay)
+
+    assert summary["n_replayed"] == 0
+    assert summary["n_with_error"] == 0
+    assert summary["rules_total"] == 3
+    assert summary["by_recommendation"] == {"": 3}
+    assert summary["pareto_frontier"] == ["", "", ""]
+
+
+def test_sources_detail_handles_missing_and_empty_sources() -> None:
+    assert fix_metrics._sources_detail({}) == "sources=none"
+    assert fix_metrics._sources_detail({"sources": []}) == "sources=none"
+    assert fix_metrics._sources_detail({"sources": {"plan": False, "replay": False}}) == (
+        "sources=none"
+    )
+
+
+def test_sources_detail_lists_partial_sources_in_mapping_order() -> None:
+    payload = {"sources": {"plan": True, "optimize": False, "replay": True}}
+
+    assert fix_metrics._sources_detail(payload) == "sources=plan,replay"
+
+
+def test_sources_detail_collapses_all_sources() -> None:
+    payload = {"sources": {"plan": True, "optimize": True, "replay": True}}
+
+    assert fix_metrics._sources_detail(payload) == "sources=all"
+
+
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "pyproject.toml").write_text(
@@ -120,7 +158,9 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_missing_all_inputs_writes_empty_metrics(project: Path) -> None:
+def test_missing_all_inputs_writes_empty_metrics(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     fix_metrics.cmd_fix_metrics()
     metrics_path = project / ".lintfix" / "metrics.json"
     assert metrics_path.is_file()
@@ -129,6 +169,40 @@ def test_missing_all_inputs_writes_empty_metrics(project: Path) -> None:
     assert "plan" not in payload
     assert "optimize" not in payload
     assert "replay" not in payload
+    out = capsys.readouterr().out
+    assert "[fix-metrics]" in out
+    assert ".lintfix/metrics.json" in out
+    assert "sources=none" in out
+
+
+def test_fix_metrics_json_writes_and_emits_metrics(
+    project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-metrics", "--json"])
+
+    fix_metrics.cmd_fix_metrics()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "fix-metrics"
+    assert payload["passed"] is True
+    assert payload["metrics_path"] == ".lintfix/metrics.json"
+    assert payload["sources"] == {"plan": False, "optimize": False, "replay": False}
+    assert payload["metrics"]["sources"] == payload["sources"]
+    assert (project / ".lintfix" / "metrics.json").is_file()
+
+
+def test_fix_metrics_payload_defaults_missing_sources_to_empty_mapping(project: Path) -> None:
+    missing_path = project / ".lintfix" / "missing-metrics.json"
+
+    assert fix_metrics._fix_metrics_payload(project, missing_path) == {
+        "command": "fix-metrics",
+        "passed": True,
+        "metrics_path": ".lintfix/missing-metrics.json",
+        "sources": {},
+        "metrics": {},
+    }
 
 
 def test_plan_only_produces_plan_section(project: Path) -> None:
@@ -194,3 +268,5 @@ def test_cli_entrypoint_writes_metrics(project: Path) -> None:
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert (project / ".lintfix" / "metrics.json").is_file()
+    assert "[fix-metrics]" in result.stdout
+    assert ".lintfix/metrics.json" in result.stdout

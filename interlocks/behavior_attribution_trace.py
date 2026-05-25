@@ -247,7 +247,7 @@ def _feature_path(feature: object) -> Path:
 def _scenario_line(scenario: object) -> int:
     for attr in ("line_number", "line"):
         value = getattr(scenario, attr, None)
-        if isinstance(value, int):
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
             return value
     return 0
 
@@ -263,7 +263,12 @@ def _decode_scenario_key(raw: str) -> tuple[Path, int] | None:
         return None
     feature_path = data.get("feature_path")
     scenario_line = data.get("scenario_line")
-    if not isinstance(feature_path, str) or not isinstance(scenario_line, int):
+    if (
+        not isinstance(feature_path, str)
+        or not isinstance(scenario_line, int)
+        or isinstance(scenario_line, bool)
+        or scenario_line <= 0
+    ):
         return None
     return (Path(feature_path), scenario_line)
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from interlocks.behavior_attribution import (
     AttributionEvidence,
     ScenarioReach,
+    _attribution_inputs,
     evidence_is_fresh,
     format_attribution_failure,
     load_evidence,
@@ -120,7 +121,10 @@ def test_symbol_less_behavior_is_informational_only(tmp_path: Path) -> None:
 
     assert result.is_complete
     assert result.informational_symbol_less[0].behavior_id == "task-symbol-less"
-    assert "informational symbol-less behaviors" in format_attribution_failure(result)
+    assert format_attribution_failure(result).splitlines()[-2:] == [
+        "  informational symbol-less behaviors:",
+        "    - task-symbol-less — no public symbol",
+    ]
 
 
 def test_aggregate_trace_is_diagnostic_only(tmp_path: Path) -> None:
@@ -176,3 +180,33 @@ def test_evidence_is_fresh_handles_missing_stale_and_fresh_evidence(tmp_path: Pa
     os.utime(evidence, (future, future))
 
     assert evidence_is_fresh(cfg, evidence)
+
+
+def test_attribution_inputs_include_features_step_defs_and_lowercase_pyproject(
+    tmp_path: Path,
+) -> None:
+    features_dir = tmp_path / "tests" / "features"
+    feature = _feature(tmp_path, "# req: task-coverage")
+    step_dir = tmp_path / "tests" / "step_defs"
+    step_dir.mkdir(parents=True)
+    step_a = step_dir / "test_a.py"
+    step_b = step_dir / "test_b.py"
+    ignored = step_dir / "notes.txt"
+    step_b.write_text("def b(): pass\n", encoding="utf-8")
+    ignored.write_text("not python\n", encoding="utf-8")
+    step_a.write_text("def a(): pass\n", encoding="utf-8")
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+        features_dir=features_dir,
+    )
+
+    assert _attribution_inputs(cfg) == (
+        feature,
+        step_a,
+        step_b,
+        tmp_path / "pyproject.toml",
+    )

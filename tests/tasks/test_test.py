@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -82,6 +83,49 @@ def test_test_failing_in_process(tmp_project: Path, monkeypatch: pytest.MonkeyPa
     assert exc.value.code != 0
 
 
+def test_test_json_passing_in_process(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.tasks.test import cmd_test
+
+    (tmp_project / "tests" / "test_sample.py").write_text(PASSING, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+
+    cmd_test()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "test"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "test"
+    assert payload["skipped"] == []
+    assert captured.err.startswith("interlocks: [test]")
+
+
+def test_test_json_failing_in_process(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.tasks.test import cmd_test
+
+    (tmp_project / "tests" / "test_sample.py").write_text(FAILING, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_test()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "test"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
+
+
 @pytest.fixture
 def tmp_project_no_tests(tmp_path: Path) -> Path:
     """Greenfield layout: pyproject + src/, no tests/ dir on disk."""
@@ -118,6 +162,30 @@ def test_cmd_test_skips_without_test_dir(
     assert "no test dir detected" in captured.out
 
 
+def test_cmd_test_json_skips_without_test_dir(
+    tmp_project_no_tests: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.test import cmd_test
+
+    monkeypatch.chdir(tmp_project_no_tests)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    clear_cache()
+
+    cmd_test()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "command": "test",
+        "passed": True,
+        "status": "skipped",
+        "reason": "no test dir detected",
+        "next_actions": ["Run `interlocks init` to scaffold tests/."],
+    }
+
+
 def test_cmd_check_skips_tests_without_test_dir(
     tmp_project_no_tests: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -152,6 +220,30 @@ def test_cmd_test_skips_without_project_env(
     assert "no test dir detected" not in out
 
 
+def test_cmd_test_json_skips_without_project_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.test import cmd_test
+
+    (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    clear_cache()
+
+    cmd_test()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "test"
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert "no project environment" in payload["reason"]
+    assert payload["next_actions"] == [
+        "Create or sync the project environment, then rerun `interlocks test`."
+    ]
+
+
 def test_task_test_unchanged_when_env_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -166,3 +258,23 @@ def test_task_test_unchanged_when_env_absent(
     clear_cache()
 
     assert task_test() is not None
+
+
+def test_task_test_appends_extra_pytest_args(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.test import task_test
+
+    (tmp_project / "pyproject.toml").write_text(
+        PYPROJECT + '\n[tool.interlocks]\ntest_runner = "pytest"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    clear_cache()
+
+    task = task_test(extra_pytest_args=("--ignore=tests/step_defs",))
+
+    assert task is not None
+    assert task.cmd[-1] == "--ignore=tests/step_defs"
+    assert task.start_status == "running"

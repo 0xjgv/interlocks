@@ -46,7 +46,7 @@ Feature: per-command coverage of the fix-* harness
     And no selected candidate is unsafe
 
   # req: fix-annotate-missing-plan
-  Scenario: fix-annotate exits 0 with no output when the plan is missing
+  Scenario: fix-annotate exits 0 with no annotations when the plan is missing
     When I run "interlocks fix-annotate" in the greenfield project
     Then the greenfield command exits 0
     And the greenfield output has no annotation lines

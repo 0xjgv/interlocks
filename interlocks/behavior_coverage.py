@@ -799,7 +799,7 @@ def _parse_feature_behaviors(path: Path) -> FeatureBehaviorParse:
                 scenarios.append(ScenarioBehavior(behavior_id, path, title, line_number))
             pending_ids = []
             continue
-        ids = _marker_ids(stripped)
+        ids = _marker_ids(stripped) if stripped.startswith(("@", "#")) else ()
         if ids:
             pending_ids.extend(ids)
             continue
@@ -812,7 +812,7 @@ def _marker_ids(stripped: str) -> tuple[str, ...]:
     ids: list[str] = []
     comment = _REQ_COMMENT_RE.search(stripped)
     if comment is not None:
-        ids.extend(_ID_RE.findall(comment.group("body")))
+        ids.extend(_ID_RE.findall(comment.group("body").replace("@req-", " ")))
     ids.extend(match.group("id") for match in _REQ_TAG_RE.finditer(stripped))
     return tuple(_dedupe_preserve_order(ids))
 

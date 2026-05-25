@@ -14,14 +14,19 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 _SUPPRESSION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("noqa", re.compile(r"#\s*noqa(?::\s*([A-Z][A-Z0-9]+(?:\s*,\s*[A-Z][A-Z0-9]+)*))?")),
+    (
+        "noqa",
+        re.compile(r"#\s*noqa(?:(?!\s*:)|\s*:\s*([A-Z][A-Z0-9]+(?:\s*,\s*[A-Z][A-Z0-9]+)*))"),
+    ),
     (
         "type_ignore",
-        re.compile(r"#\s*type:\s*ignore(?:\[([a-zA-Z0-9_-]+(?:\s*,\s*[a-zA-Z0-9_-]+)*)\])?"),
+        re.compile(r"#\s*type:\s*ignore(?:(?!\[)|\[([a-zA-Z0-9_-]+(?:\s*,\s*[a-zA-Z0-9_-]+)*)\])"),
     ),
     (
         "pyright_ignore",
-        re.compile(r"#\s*pyright:\s*ignore(?:\[([a-zA-Z0-9_-]+(?:\s*,\s*[a-zA-Z0-9_-]+)*)\])?"),
+        re.compile(
+            r"#\s*pyright:\s*ignore(?:(?!\[)|\[([a-zA-Z0-9_-]+(?:\s*,\s*[a-zA-Z0-9_-]+)*)\])"
+        ),
     ),
 ]
 

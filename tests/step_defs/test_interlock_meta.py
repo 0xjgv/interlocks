@@ -100,6 +100,13 @@ def _file_exists(project: Path, relpath: str) -> None:
     assert path.is_file(), f"expected {path} to exist"
 
 
+@then(parsers.parse('the output contains "{needle}"'))
+def _output_contains(cli_results: list[subprocess.CompletedProcess[str]], needle: str) -> None:
+    result = cli_results[-1]
+    combined = result.stdout + result.stderr
+    assert needle in combined, f"expected {needle!r} in:\n{combined}"
+
+
 @then("the pre-commit hook exists in the tmp project")
 def _pre_commit_exists(project: Path) -> None:
     hook = project / ".git" / "hooks" / "pre-commit"

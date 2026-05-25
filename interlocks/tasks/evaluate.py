@@ -23,13 +23,22 @@ from interlocks.behavior_coverage import (
 )
 from interlocks.config import InterlockConfig, coerce_float, load_optional_config
 from interlocks.defaults_path import has_project_config
+from interlocks.metrics import (
+    MUTATION_EVIDENCE,
+    coverage_inputs,
+    mutation_evidence_is_stale,
+    mutation_evidence_no_results,
+    newer_than,
+    read_mutation_evidence,
+)
 from interlocks.setup_state import CI_ACTION_NEEDLES, iter_workflow_bodies
+from interlocks.tasks.properties import domain_property_test_files, property_test_files
 
 Status = Literal["ok", "warn", "fail"]
 ClosureKind = Literal["task", "stage"]
 
 _CONTRACT_TYPES = frozenset({"forbidden", "layers", "acyclic", "independence"})
-_ITEM_COUNT = 11
+_ITEM_COUNT = 12
 _MAX_TOTAL = _ITEM_COUNT * 3
 
 
@@ -64,6 +73,7 @@ class CIEvidence:
     elapsed_seconds: float
     created_at: float
     passed: bool
+    skipped: tuple[str, ...] = ()
 
 
 _EVALUATE = ClosurePath("interlocks evaluate", "task", "static config and metadata checklist")
@@ -79,6 +89,12 @@ _INIT_ACCEPTANCE = ClosurePath(
 )
 _ACCEPTANCE_RUNNER = ClosurePath(
     "interlocks acceptance", "task", "executes Gherkin scenarios outside evaluate"
+)
+_INIT_PROPERTIES = ClosurePath(
+    "interlocks init-properties", "task", "scaffolds Hypothesis property-test files"
+)
+_PROPERTIES = ClosurePath(
+    "interlocks properties", "task", "executes generated-input property tests"
 )
 _AUDIT = ClosurePath("interlocks audit", "task", "vulnerability audit owns severity policy")
 
@@ -102,15 +118,7 @@ def cmd_evaluate() -> None:
             "command": "evaluate",
             "score": {"earned": report.total, "max": report.max_total},
             "verdict": report.verdict,
-            "checks": [
-                {
-                    "name": item.category,
-                    "earned": item.score,
-                    "max": item.max_score,
-                    "rationale": item.detail,
-                }
-                for item in report.items
-            ],
+            "checks": [_check_json(item) for item in report.items],
         })
         return
 
@@ -145,6 +153,7 @@ def evaluate(cfg: InterlockConfig) -> EvaluationReport:
     items = [
         _acceptance_item(cfg),
         _unit_tests_item(cfg),
+        _properties_item(cfg),
         _coverage_item(cfg),
         _mutation_item(cfg),
         _complexity_item(cfg),
@@ -302,6 +311,36 @@ def _unit_tests_item(cfg: InterlockConfig) -> EvaluationItem:
     return _item("unit-tests", 1, detail, "Wire test execution into `interlocks ci`.")
 
 
+def _properties_item(cfg: InterlockConfig) -> EvaluationItem:
+    files = property_test_files(cfg)
+    if not files:
+        return _item(
+            "properties",
+            0,
+            "no property tests detected",
+            "Run `interlocks init-properties` and replace the example with domain invariants.",
+            closure=_INIT_PROPERTIES,
+        )
+    if not domain_property_test_files(cfg):
+        properties_dir = cfg.properties_dir_arg or "properties"
+        return _item(
+            "properties",
+            1,
+            "only scaffold example property detected",
+            f"Replace {properties_dir}/test_example_properties.py with domain invariants.",
+            closure=_PROPERTIES,
+        )
+    if _ci_source_contains("task_properties("):
+        return _item("properties", 3, "domain properties in CI")
+    return _item(
+        "properties",
+        1,
+        "domain properties present but not wired into CI",
+        "Wire task_properties() into `interlocks ci`.",
+        closure=_PROPERTIES,
+    )
+
+
 def _coverage_item(cfg: InterlockConfig) -> EvaluationItem:
     threshold_positive = cfg.coverage_min > 0
     threshold_strong = cfg.coverage_min >= 80
@@ -334,9 +373,24 @@ def _mutation_item(cfg: InterlockConfig) -> EvaluationItem:
     configured = _has_mutmut_config(cfg)
     ci_enabled = cfg.run_mutation_in_ci or cfg.mutation_ci_mode != "off"
     enforced = cfg.enforce_mutation and cfg.mutation_min_score > 0
-    detail = "mutmut configured + enforced"
+    detail = "mutation policy configured + enforced"
 
     if configured and ci_enabled and enforced:
+        if _latest_mutation_completed(cfg) is False:
+            no_results = _latest_mutation_no_results(cfg)
+            evidence_detail = (
+                "latest evidence had no checked mutants"
+                if no_results
+                else "latest evidence partial"
+            )
+            action = _mutation_rerun_action(cfg, no_results=no_results)
+            return _item(
+                "mutation",
+                2,
+                f"{detail}; {evidence_detail}",
+                action,
+                closure=_NIGHTLY_STAGE,
+            )
         return _item("mutation", 3, detail)
     if not configured:
         return _item(
@@ -361,6 +415,35 @@ def _mutation_item(cfg: InterlockConfig) -> EvaluationItem:
         "Set enforce_mutation = true and mutation_min_score > 0.",
         closure=_NIGHTLY_STAGE,
     )
+
+
+def _latest_mutation_completed(cfg: InterlockConfig) -> bool | None:
+    evidence_path = cfg.project_root / MUTATION_EVIDENCE
+    if mutation_evidence_is_stale(cfg.project_root):
+        return False
+    try:
+        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    completed = payload.get("completed")
+    return completed if isinstance(completed, bool) else None
+
+
+def _latest_mutation_no_results(cfg: InterlockConfig) -> bool:
+    return mutation_evidence_no_results(read_mutation_evidence(cfg.project_root))
+
+
+def _mutation_rerun_action(cfg: InterlockConfig, *, no_results: bool) -> str:
+    command = (
+        "interlocks mutation "
+        f"--min-score={cfg.mutation_min_score:.0f} "
+        f"--max-runtime={cfg.mutation_max_runtime}"
+    )
+    if no_results:
+        return f"Rerun `{command}` with more runtime, or use `--changed-only` for a bounded pass."
+    return f"Rerun `{command}`."
 
 
 def _complexity_item(cfg: InterlockConfig) -> EvaluationItem:
@@ -469,7 +552,7 @@ def _audit_severity_item(cfg: InterlockConfig) -> EvaluationItem:
 
 
 def _pr_speed_item(cfg: InterlockConfig) -> EvaluationItem:
-    detail = "CI runtime budget + fresh evidence"
+    detail = "CI runtime budget + timing evidence"
     if cfg.pr_ci_runtime_budget_seconds <= 0:
         return _item(
             "pr-speed",
@@ -492,27 +575,9 @@ def _pr_speed_item(cfg: InterlockConfig) -> EvaluationItem:
             closure=_CI_STAGE,
         )
 
-    age_hours = _evidence_age_hours(evidence)
-    if age_hours > cfg.pr_ci_evidence_max_age_hours:
-        return _item(
-            "pr-speed",
-            1,
-            detail,
-            (
-                "Refresh stale CI timing evidence; "
-                f"current age is {age_hours:.1f}h and max is "
-                f"{cfg.pr_ci_evidence_max_age_hours}h."
-            ),
-            closure=_CI_STAGE,
-        )
-    if not evidence.passed:
-        return _item(
-            "pr-speed",
-            1,
-            detail,
-            "Fix failing `interlocks ci` evidence before scoring PR speed.",
-            closure=_CI_STAGE,
-        )
+    evidence_action = _pr_speed_evidence_action(cfg, evidence, detail)
+    if evidence_action is not None:
+        return evidence_action
     if evidence.elapsed_seconds <= cfg.pr_ci_runtime_budget_seconds:
         return _item("pr-speed", 3, detail)
     return _item(
@@ -525,6 +590,31 @@ def _pr_speed_item(cfg: InterlockConfig) -> EvaluationItem:
         ),
         closure=_CI_STAGE,
     )
+
+
+def _pr_speed_evidence_action(
+    cfg: InterlockConfig, evidence: CIEvidence, detail: str
+) -> EvaluationItem | None:
+    refresh_action = _ci_evidence_refresh_action(cfg, evidence)
+    if refresh_action is not None:
+        return _item("pr-speed", 1, detail, refresh_action, closure=_CI_STAGE)
+    if not evidence.passed:
+        return _item(
+            "pr-speed",
+            1,
+            detail,
+            "Fix failing `interlocks ci` evidence before scoring PR speed.",
+            closure=_CI_STAGE,
+        )
+    if evidence.skipped:
+        return _item(
+            "pr-speed",
+            1,
+            detail,
+            "Run `interlocks ci` without --skip to write full timing evidence.",
+            closure=_CI_STAGE,
+        )
+    return None
 
 
 def _ci_item(cfg: InterlockConfig) -> EvaluationItem:
@@ -574,6 +664,25 @@ def _item(
     )
 
 
+def _check_json(item: EvaluationItem) -> dict[str, object]:
+    closure = None
+    if item.closure is not None:
+        closure = {
+            "command": item.closure.command,
+            "kind": item.closure.kind,
+            "rationale": item.closure.rationale,
+        }
+    return {
+        "name": item.category,
+        "earned": item.score,
+        "max": item.max_score,
+        "status": item.status,
+        "rationale": item.detail,
+        "next_action": item.next_action,
+        "closure": closure,
+    }
+
+
 def _format_action(item: EvaluationItem) -> str:
     action = f"[{item.category}] {item.next_action}"
     if item.closure is None:
@@ -596,7 +705,42 @@ def _read_ci_evidence(cfg: InterlockConfig) -> CIEvidence | None:
     passed = data.get("passed")
     if elapsed is None or created_at is None or not isinstance(passed, bool):
         return None
-    return CIEvidence(elapsed_seconds=elapsed, created_at=created_at, passed=passed)
+    return CIEvidence(
+        elapsed_seconds=elapsed,
+        created_at=created_at,
+        passed=passed,
+        skipped=_ci_evidence_skipped(data),
+    )
+
+
+def _ci_evidence_skipped(data: dict[str, object]) -> tuple[str, ...]:
+    skipped = data.get("skipped")
+    if not isinstance(skipped, list):
+        return ()
+    return tuple(sorted({label for label in skipped if isinstance(label, str)}))
+
+
+def _ci_evidence_refresh_action(cfg: InterlockConfig, evidence: CIEvidence) -> str | None:
+    if _ci_evidence_inputs_are_stale(cfg):
+        return (
+            "Refresh stale CI timing evidence; source, test, or property inputs "
+            "changed since the last `interlocks ci` run."
+        )
+    age_hours = _evidence_age_hours(evidence)
+    if age_hours > cfg.pr_ci_evidence_max_age_hours:
+        return (
+            "Refresh stale CI timing evidence; "
+            f"current age is {age_hours:.1f}h and max is {cfg.pr_ci_evidence_max_age_hours}h."
+        )
+    return None
+
+
+def _ci_evidence_inputs_are_stale(cfg: InterlockConfig) -> bool:
+    try:
+        evidence_mtime = cfg.ci_evidence_path.stat().st_mtime
+    except OSError:
+        return True
+    return any(newer_than(path, evidence_mtime) for path in coverage_inputs(cfg))
 
 
 def _evidence_age_hours(evidence: CIEvidence) -> float:
@@ -704,6 +848,7 @@ def _verdict(total: int, max_total: int) -> str:
 
 _CI_CATEGORIES = frozenset({
     "unit-tests",
+    "properties",
     "coverage",
     "complexity",
     "deps",

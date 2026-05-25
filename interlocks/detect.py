@@ -44,7 +44,8 @@ _SKIP_SRC_DIRS = frozenset({
 
 
 def _has_pytest_config(project_root: Path, pyproject: dict[str, Any], test_dir: Path) -> bool:
-    if "pytest" in pyproject.get("tool", {}):
+    tool = pyproject.get("tool", {})
+    if isinstance(tool, dict) and "pytest" in tool:
         return True
     if (project_root / "pytest.ini").is_file() or (project_root / "pytest.cfg").is_file():
         return True
@@ -52,12 +53,24 @@ def _has_pytest_config(project_root: Path, pyproject: dict[str, Any], test_dir: 
 
 
 def _iter_declared_deps(pyproject: dict[str, Any]) -> Iterator[str]:
-    yield from pyproject.get("project", {}).get("dependencies", []) or []
-    for group in (pyproject.get("dependency-groups", {}) or {}).values():
-        yield from group or []
-    uv_tool = pyproject.get("tool", {}).get("uv", {}) or {}
+    project = pyproject.get("project", {})
+    if isinstance(project, dict):
+        yield from _iter_dep_list(project.get("dependencies"))
+    groups = pyproject.get("dependency-groups", {})
+    if isinstance(groups, dict):
+        for group in groups.values():
+            yield from _iter_dep_list(group)
+    tool = pyproject.get("tool", {})
+    uv_tool = tool.get("uv", {}) if isinstance(tool, dict) else {}
+    if not isinstance(uv_tool, dict):
+        return
     for key in ("dev-dependencies", "dependencies"):
-        yield from uv_tool.get(key, []) or []
+        yield from _iter_dep_list(uv_tool.get(key))
+
+
+def _iter_dep_list(value: object) -> Iterator[str]:
+    if isinstance(value, list):
+        yield from (item for item in value if isinstance(item, str))
 
 
 def _deps_mention(pattern: re.Pattern[str], pyproject: dict[str, Any]) -> bool:
@@ -92,7 +105,7 @@ def detect_src_dir(project_root: Path, pyproject: dict[str, Any]) -> Path:
       2. Hatch wheel packages: ``[tool.hatch.build.targets.wheel] packages``.
       3. Setuptools flat packages: ``[tool.setuptools] packages`` (list form).
       4. ``src/<pkg>`` layout — first sub-dir of ``src/`` with ``__init__.py``.
-      5. First top-level dir with ``__init__.py`` that isn't a tests/tooling dir.
+      5. First top-level dir with ``__init__.py`` that isn't test/tooling infrastructure.
       6. ``[project] name`` turned into an importable directory, if it exists.
       7. ``project_root`` itself (flat script layout — tools just scan the whole tree).
     """
@@ -123,11 +136,25 @@ def _top_level_package_dir(project_root: Path) -> Path | None:
     for entry in sorted(project_root.iterdir()):
         if not entry.is_dir() or entry.name.startswith("."):
             continue
-        if entry.name in _SKIP_SRC_DIRS:
+        if _skip_source_dir(entry):
             continue
         if (entry / "__init__.py").is_file():
             return entry.resolve()
     return None
+
+
+def _skip_source_dir(entry: Path) -> bool:
+    if entry.name in _SKIP_SRC_DIRS:
+        return True
+    return entry.name == "properties" and _looks_like_property_tests_dir(entry)
+
+
+def _looks_like_property_tests_dir(entry: Path) -> bool:
+    return (
+        (entry / "conftest.py").is_file()
+        or any(entry.glob("test_*.py"))
+        or any(entry.glob("*_test.py"))
+    )
 
 
 def _project_name_dir(project_root: Path, pyproject: dict[str, Any]) -> Path | None:

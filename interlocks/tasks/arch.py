@@ -10,11 +10,12 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from interlocks import ui
 from interlocks.config import InterlockConfig, load_config
 from interlocks.defaults.tools import entrypoint
 from interlocks.defaults_path import has_project_config
 from interlocks.defaults_path import path as defaults_path
-from interlocks.runner import Task, run, uvx_tool, warn_skip
+from interlocks.runner import Task, run, run_task_json, uvx_tool, warn_skip
 
 _DEFAULT_DISPLAY = "lint-imports (default: src ↛ tests)"
 _LAYERED_DISPLAY = "lint-imports (default: layered)"
@@ -30,6 +31,7 @@ def task_arch() -> Task | None:
             uvx_tool("import-linter", version=version, entrypoint=script),
             label="arch",
             display="lint-imports",
+            start_status="running",
         )
     default_cfg = _write_default_config(cfg)
     if default_cfg is None:
@@ -46,6 +48,7 @@ def task_arch() -> Task | None:
         ),
         label="arch",
         display=display,
+        start_status="running",
     )
 
 
@@ -53,9 +56,27 @@ def cmd_arch() -> None:
     cfg = load_config()
     task = task_arch()
     if task is None:
+        if ui.is_json():
+            ui.print_json(_arch_skip_payload(_skip_reason(cfg)))
+            return
         warn_skip(_skip_reason(cfg))
         return
+    if ui.is_json():
+        run_task_json("arch", task)
+        return
     run(task)
+
+
+def _arch_skip_payload(reason: str) -> dict[str, object]:
+    return {
+        "command": "arch",
+        "passed": True,
+        "status": "skipped",
+        "reason": reason,
+        "next_actions": [
+            "Add import-linter contracts or make the configured source and test dirs packages."
+        ],
+    }
 
 
 def _bundled_descriptions(cfg: InterlockConfig) -> tuple[str, str]:

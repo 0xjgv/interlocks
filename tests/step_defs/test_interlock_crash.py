@@ -21,6 +21,8 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from tests.step_defs.conftest import interlocks_pythonpath_env
 
+pytestmark = pytest.mark.mutmut_incompatible
+
 scenarios(str(Path(__file__).parent.parent / "features" / "interlock_crash.feature"))
 
 
@@ -114,20 +116,10 @@ def _invoke_interactive(
 ) -> CrashRun:
     master_fd, slave_fd = pty.openpty()
     try:
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "interlocks.cli", *args],
-            cwd=session.project_root,
-            stdin=slave_fd,
-            stdout=subprocess.PIPE,
-            stderr=slave_fd,
-            env=env,
-        )
+        proc = _open_interactive_process(session, args, env, slave_fd)
         os.close(slave_fd)
         slave_fd = -1
-        os.write(master_fd, response.encode())
-        stderr = _read_pty(master_fd, proc)
-        stdout_bytes = proc.stdout.read() if proc.stdout is not None else b""
-        returncode = proc.wait()
+        stdout_bytes, stderr, returncode = _complete_interactive_process(proc, master_fd, response)
     finally:
         if slave_fd != -1:
             os.close(slave_fd)
@@ -135,6 +127,28 @@ def _invoke_interactive(
     run = CrashRun(returncode, stdout_bytes.decode(errors="replace"), stderr)
     session.last_run = run
     return run
+
+
+def _open_interactive_process(
+    session: CrashSession, args: list[str], env: dict[str, str], slave_fd: int
+) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(
+        [sys.executable, "-m", "interlocks.cli", *args],
+        cwd=session.project_root,
+        stdin=slave_fd,
+        stdout=subprocess.PIPE,
+        stderr=slave_fd,
+        env=env,
+    )
+
+
+def _complete_interactive_process(
+    proc: subprocess.Popen[bytes], master_fd: int, response: str
+) -> tuple[bytes, str, int]:
+    os.write(master_fd, response.encode())
+    stderr = _read_pty(master_fd, proc)
+    stdout = proc.stdout.read() if proc.stdout is not None else b""
+    return stdout, stderr, proc.wait()
 
 
 _CRASH_PYPROJECT = textwrap.dedent(

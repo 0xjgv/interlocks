@@ -32,6 +32,7 @@ from interlocks.setup_state import (
     is_git_repo,
     setup_artifact_statuses,
 )
+from interlocks.tasks.properties import domain_property_test_files, property_test_files
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -108,7 +109,7 @@ def _build_doctor_report() -> _DoctorReport:
 
     rows = _collect_setup_rows(project_root, cfg, pyproject_path)
     is_blocked = bool(blockers or failures or any(r.state == "fail" for r in rows))
-    gap_count = sum(1 for r in rows if r.state == "warn")
+    gap_count = len(_actionable_gap_rows(rows))
     return _DoctorReport(
         project_root=project_root,
         cfg=cfg,
@@ -129,9 +130,13 @@ def _render_doctor_json(report: _DoctorReport) -> None:
         "command": "doctor",
         "status": status,
         "blockers": [{"message": m} for m in (*report.failures, *report.blockers)],
-        "warnings": [{"message": m} for m in report.warnings],
+        "warnings": [{"message": m} for m in _warning_lines(report)],
         "detected": _detected_json(report.project_root, report.cfg, report.pyproject_path),
-        "setup_checklist": [{"name": r.label, "state": r.state} for r in report.rows],
+        "setup_checklist": [
+            {"name": r.label, "target": r.target, "detail": r.detail, "state": r.state}
+            for r in report.rows
+        ],
+        "next_steps": [{"message": step} for step in _next_steps(report.rows, report.is_blocked)],
     })
 
 
@@ -146,7 +151,7 @@ def _render_doctor_verbose(report: _DoctorReport) -> None:
     ui.section("Blockers")
     ui.message_list([*report.failures, *report.blockers], empty="none")
     ui.section("Warnings")
-    ui.message_list(report.warnings, empty="none")
+    ui.message_list(_warning_lines(report), empty="none")
     ui.section("Next Steps")
     ui.message_list(
         _next_steps(report.rows, report.is_blocked),
@@ -186,10 +191,19 @@ def _gap_lines(rows: list[CheckRow]) -> list[str]:
     """One formatted line per ``warn``-state ``CheckRow``, in row order.
 
     These are the advisory gaps the ``ready (N gap[s])`` count is built from
-    (``gap_count = sum(1 for r in rows if r.state == "warn")``), so the printed
-    detail and the verdict count always agree.
+    (``gap_count = len(_actionable_gap_rows(rows))``), so the printed detail
+    and the verdict count always agree.
     """
-    return [f"{row.label}: {row.detail}" for row in rows if row.state == "warn"]
+    return [f"{row.label}: {row.detail}" for row in _actionable_gap_rows(rows)]
+
+
+def _actionable_gap_rows(rows: list[CheckRow]) -> list[CheckRow]:
+    """Warn rows that need user action; inert placeholders are not gaps."""
+    return [row for row in rows if row.state == "warn" and row.detail != _INERT_DETAIL]
+
+
+def _warning_lines(report: _DoctorReport) -> list[str]:
+    return [*report.warnings, *_gap_lines(report.rows)]
 
 
 def _safe_load_config(pyproject_path: Path, failures: list[str]) -> InterlockConfig | None:
@@ -246,6 +260,7 @@ def _collect_setup_rows(
         *_local_integration_rows(project_root),
         _ci_workflow_row(project_root),
         _acceptance_row(cfg),
+        _properties_row(cfg),
         _crash_report_cache_row(),
     ])
     return rows
@@ -260,7 +275,7 @@ def _pyproject_row(pyproject_path: Path) -> CheckRow:
 def _preset_row(cfg: InterlockConfig) -> CheckRow:
     if cfg.preset:
         return CheckRow("preset", cfg.preset, "configured", "ok")
-    return CheckRow("preset", "(none)", "using dataclass defaults", "warn")
+    return CheckRow("preset", "(none)", "run `interlocks presets set progressive`", "warn")
 
 
 def _interlock_cfg_row(cfg: InterlockConfig) -> CheckRow:
@@ -321,7 +336,7 @@ def _ci_workflow_row(project_root: Path) -> CheckRow:
     target = ".github/workflows/*.yml"
     if ci_workflow_present(project_root):
         return CheckRow("ci workflow", target, "present", "ok")
-    return CheckRow("ci workflow", target, "not detected", "warn")
+    return CheckRow("ci workflow", target, "run `interlocks setup --ci=github`", "warn")
 
 
 def _acceptance_row(cfg: InterlockConfig) -> CheckRow:
@@ -333,6 +348,16 @@ def _acceptance_row(cfg: InterlockConfig) -> CheckRow:
     if cfg.acceptance_runner is not None:
         return CheckRow("acceptance", features_target, "run `interlocks init-acceptance`", "warn")
     return CheckRow("acceptance", features_target, "not wired", "warn")
+
+
+def _properties_row(cfg: InterlockConfig) -> CheckRow:
+    target = cfg.properties_dir_arg or "properties"
+    files = property_test_files(cfg)
+    if domain_property_test_files(cfg):
+        return CheckRow("properties", target, "detected", "ok")
+    if files:
+        return CheckRow("properties", target, "replace scaffold example", "warn")
+    return CheckRow("properties", target, "run `interlocks init-properties`", "warn")
 
 
 def _crash_report_cache_row() -> CheckRow:
@@ -377,10 +402,15 @@ _NEXT_STEP_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     ),
     (
         ("interlocks cfg", "preset"),
-        "Run `interlocks presets` to pick a preset (baseline, strict, legacy).",
+        "Run `interlocks presets set progressive` to enable ratcheting defaults.",
     ),
     (("acceptance",), "Run `interlocks init-acceptance` to scaffold Gherkin tests."),
-    (("ci workflow",), "Wire CI via `interlocks ci` or the reusable interlocks GitHub Action."),
+    (("properties",), "Run `interlocks init-properties` to scaffold property tests."),
+    (
+        ("ci workflow",),
+        "Run `interlocks setup --ci=github` to install a GitHub Actions workflow, "
+        "or wire `interlocks ci` manually.",
+    ),
     (("venv",), "Create a venv (`uv sync` or `python -m venv .venv`)."),
 )
 
@@ -389,11 +419,14 @@ def _next_steps(rows: list[CheckRow], is_blocked: bool) -> list[str]:
     if is_blocked:
         return ["Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."]
     by_label = {r.label: r for r in rows}
-    steps = [
-        step
-        for labels, step in _NEXT_STEP_RULES
-        if any(_is_warn(by_label, label) for label in labels)
-    ]
+    steps: list[str] = []
+    for labels, step in _NEXT_STEP_RULES:
+        for label in labels:
+            row = by_label.get(label)
+            if row is None or not _is_warn(by_label, label):
+                continue
+            steps.append(_properties_next_step(row) if label == "properties" else step)
+            break
     return steps or ["Run `interlocks check` locally."]
 
 
@@ -401,6 +434,15 @@ def _is_warn(by_label: dict[str, CheckRow], label: str) -> bool:
     """True when ``label`` row is an actionable gap (warn, excluding inert placeholders)."""
     row = by_label.get(label)
     return row is not None and row.state == "warn" and row.detail != _INERT_DETAIL
+
+
+def _properties_next_step(row: CheckRow) -> str:
+    if row.detail == "replace scaffold example":
+        return (
+            f"Replace {row.target}/test_example_properties.py with domain invariants, "
+            "then run `interlocks properties --profile=check`."
+        )
+    return "Run `interlocks init-properties` to scaffold property tests."
 
 
 def _detected_json(
@@ -445,6 +487,7 @@ _DERIVED_CFG_KEYS: tuple[str, ...] = (
     "enforce_mutation",
     "mutation_ci_mode",
     "run_acceptance_in_check",
+    "run_properties_in_check",
 )
 
 
@@ -456,6 +499,10 @@ def _cfg_rows(cfg: InterlockConfig) -> list[tuple[str, object]]:
         ("test_runner", cfg.test_runner),
         ("test_invoker", cfg.test_invoker),
         ("features_dir", cfg.features_dir_arg if cfg.features_dir_arg is not None else "(none)"),
+        (
+            "properties_dir",
+            cfg.properties_dir_arg if cfg.properties_dir_arg is not None else "(none)",
+        ),
         (
             "acceptance_runner",
             cfg.acceptance_runner if cfg.acceptance_runner is not None else "(auto)",

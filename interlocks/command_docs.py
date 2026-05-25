@@ -24,7 +24,7 @@ class FlagSpec:
     """
 
     name: str  # "--min=" for value flags, "--apply" for boolean flags
-    kind: str  # "value" | "boolean"
+    kind: str  # "value" | "boolean" | "optional"
     default: str  # rendered default, e.g. "cfg.coverage_min" or "off"
     description: str
 
@@ -45,6 +45,8 @@ class CommandDoc:
     outputs: tuple[str, ...]
     exit_codes: tuple[tuple[int, str], ...]
     flags: tuple[FlagSpec, ...] = ()
+    usage: str = ""
+    mutates_note: str = ""
 
 
 # Lives here, not in ``cli.py``, so ``tasks/explain.py`` can resolve aliases
@@ -57,14 +59,68 @@ ALIASES: dict[str, str] = {
 
 def alias_suffix(name: str) -> str:
     """Render `` (alias: x)`` / `` (aliases: x, y)`` for a canonical command name."""
-    aliases = sorted(alias for alias, canonical in ALIASES.items() if canonical == name)
+    aliases = aliases_for(name)
     if not aliases:
         return ""
     label = "alias" if len(aliases) == 1 else "aliases"
     return f" ({label}: {', '.join(aliases)})"
 
 
+def aliases_for(name: str) -> list[str]:
+    """Return aliases that resolve to a canonical command name."""
+    return sorted(alias for alias, canonical in ALIASES.items() if canonical == name)
+
+
+def command_index_payload(doc: CommandDoc) -> dict[str, object]:
+    """Return the compact JSON row used by command discovery surfaces."""
+    return {
+        "name": doc.name,
+        "summary": doc.summary,
+        "aliases": aliases_for(doc.name),
+    }
+
+
+def command_doc_payload(doc: CommandDoc) -> dict[str, object]:
+    """Return one command's full machine-readable contract."""
+    return {
+        "command": doc.name,
+        "usage": f"usage: interlocks {command_usage(doc)}",
+        "summary": doc.summary,
+        "when_to_use": doc.when_to_use,
+        "mutates": doc.mutates,
+        "mutates_note": command_mutation_summary(doc),
+        "outputs": list(doc.outputs),
+        "aliases": aliases_for(doc.name),
+        "flags": [
+            {
+                "name": flag.name,
+                "kind": flag.kind,
+                "default": flag.default,
+                "description": flag.description,
+            }
+            for flag in doc.flags
+        ],
+        "exit_codes": [{"code": code, "meaning": meaning} for code, meaning in doc.exit_codes],
+    }
+
+
+def command_usage(doc: CommandDoc) -> str:
+    """Return the command-specific usage tail for `interlocks <tail>`."""
+    return doc.usage or doc.name
+
+
+def command_mutation_summary(doc: CommandDoc) -> str:
+    """Return human-facing mutation impact for `interlocks explain`."""
+    return doc.mutates_note or ("yes" if doc.mutates else "no")
+
+
 _NO_PYPROJECT = (2, "no pyproject.toml found")
+_SKIP_FLAG = FlagSpec(
+    "--skip=",
+    "value",
+    "",
+    "comma-separated gate labels to skip, e.g. mutation or coverage",
+)
 
 
 COMMAND_DOCS: tuple[CommandDoc, ...] = (
@@ -80,6 +136,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "unfixable errors found"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "fix-rule",
@@ -100,6 +157,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             FlagSpec("--budget=", "value", "unblock", "named budget profile"),
             FlagSpec("--rule=", "value", "", "the single ruff rule to fix (e.g. I001)"),
             FlagSpec("--verify-cmd=", "value", "", "command used to verify an apply"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -117,6 +175,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--base=", "value", "origin/main", "git ref to diff against"),
             FlagSpec("--budget=", "value", "unblock", "named budget profile"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -135,6 +194,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             FlagSpec("--base=", "value", "origin/main", "git ref to diff against"),
             FlagSpec("--budget=", "value", "unblock", "named budget profile"),
             FlagSpec("--n=", "value", "25", "number of commits to replay"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -163,6 +223,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             FlagSpec("--annotate", "boolean", "off", "emit GitHub Actions annotations"),
             FlagSpec("--metrics", "boolean", "off", "write .lintfix/metrics.json"),
             FlagSpec("--no-stats", "boolean", "off", "skip reading replay stats"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -178,6 +239,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--input=", "value", "", "path to the plan JSON to annotate"),
             FlagSpec("--source=", "value", "plan", "which .lintfix/ artifact to read"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -191,6 +253,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "aggregation failed"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "format",
@@ -203,6 +266,20 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "ruff reported an error"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+    ),
+    CommandDoc(
+        "format-check",
+        "Check formatting with ruff (read-only)",
+        "Read-only formatting check for CI parity or to inspect drift without mutating source.",
+        mutates=False,
+        outputs=(),
+        exit_codes=(
+            (0, "formatting clean"),
+            (1, "formatting drift found"),
+            _NO_PYPROJECT,
+        ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "lint",
@@ -215,6 +292,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "violations found"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "typecheck",
@@ -227,6 +305,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "type errors found"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "test",
@@ -239,6 +318,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "a test failed"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "audit",
@@ -251,6 +331,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "vulnerabilities found"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "deps",
@@ -263,6 +344,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "unused/missing/transitive issues found"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "deps-freshness",
@@ -276,6 +358,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "outdated dependencies found"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "arch",
@@ -288,6 +371,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "a contract was violated"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "acceptance",
@@ -299,6 +383,15 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "all scenarios passed"),
             (1, "a scenario failed"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec(
+                "--trace",
+                "boolean",
+                "off",
+                "collect advisory runtime public-symbol trace evidence",
+            ),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -313,6 +406,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "attribution failed and enforcement is on"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "init-acceptance",
@@ -325,12 +419,52 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "target files already exist"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+    ),
+    CommandDoc(
+        "properties",
+        "Property tests via pytest + Hypothesis profiles",
+        "Run generated-input property tests; use `init-properties` to scaffold "
+        "them, `--profile=check` for local edits, and `--profile=ci|nightly` "
+        "for deeper sweeps. Skips cleanly when no property tests are present.",
+        mutates=False,
+        outputs=(),
+        exit_codes=(
+            (0, "all property tests passed, or no property tests were present"),
+            (1, "a property test failed or the selected profile is invalid"),
+            _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec(
+                "--profile=",
+                "value",
+                "ci",
+                "Hypothesis profile: check, ci, nightly, default",
+            ),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+        ),
+    ),
+    CommandDoc(
+        "init-properties",
+        "Scaffold the configured property-test dir",
+        "Create a replaceable example in the configured property-test directory "
+        "when no domain property tests exist; defaults to root-level properties/, "
+        "preserves existing files, and no-ops once domain properties are present.",
+        mutates=True,
+        outputs=("<properties_dir>/test_example_properties.py (when needed)",),
+        exit_codes=(
+            (0, "scaffold written, or domain property tests already present"),
+            _NO_PYPROJECT,
+        ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        mutates_note="creates scaffold only when no domain property tests exist",
     ),
     CommandDoc(
         "coverage",
-        "Tests with coverage threshold (--min=N)",
+        "Tests with coverage threshold (--min=N, optional properties)",
         "Run tests under coverage.py and enforce a fail-under threshold; `--min=N` "
-        "overrides the configured `coverage_min`.",
+        "overrides the configured `coverage_min`. Pass `--properties[=profile]` "
+        "to append property tests before the coverage report.",
         mutates=False,
         outputs=(),
         exit_codes=(
@@ -338,7 +472,16 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "coverage below threshold"),
             _NO_PYPROJECT,
         ),
-        flags=(FlagSpec("--min=", "value", "cfg.coverage_min", "coverage fail-under percentage"),),
+        flags=(
+            FlagSpec("--min=", "value", "cfg.coverage_min", "coverage fail-under percentage"),
+            FlagSpec(
+                "--properties",
+                "optional",
+                "off",
+                "append property tests before reporting (profile default: ci)",
+            ),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+        ),
     ),
     CommandDoc(
         "complexity",
@@ -351,6 +494,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "one or more functions exceeded a complexity threshold"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "crap",
@@ -366,6 +510,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--max=", "value", "cfg.crap_max", "max allowed CRAP score"),
             FlagSpec("--changed-only", "boolean", "off", "limit to files changed vs main"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -376,8 +521,8 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=False,
         outputs=(),
         exit_codes=(
-            (0, "score at or above threshold, or advisory skip"),
-            (1, "score below threshold and enforce_mutation is on"),
+            (0, "complete score at or above threshold, or advisory skip"),
+            (1, "score below threshold, or enforced run timed out before completion"),
             _NO_PYPROJECT,
         ),
         flags=(
@@ -394,15 +539,17 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
                 "--max-runtime=", "value", "cfg.mutation_max_runtime", "per-run timeout in seconds"
             ),
             FlagSpec("--changed-only", "boolean", "off", "limit to files changed vs main"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     # ── Stages ───────────────────────────────────────────────────────────
     CommandDoc(
         "check",
-        "Budgeted lint/format mutation + typecheck + test (full repo)",
+        "Local edit loop: fix/format, typecheck/tests, optional acceptance/properties",
         "The local edit loop — run after edits, before pushing; default mutation is "
-        "budgeted from the author diff and broad cleanup requires `--renovate` or "
-        "`--mutation-budget=renovation`.",
+        "budgeted from the author diff, strict projects can include acceptance and "
+        "property tests, and `--changed` skips broad test/acceptance/property gates "
+        "with follow-up next actions.",
         mutates=True,
         outputs=(),
         exit_codes=(
@@ -411,10 +558,17 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             _NO_PYPROJECT,
         ),
         flags=(
-            FlagSpec("--changed", "boolean", "cfg.changed_ref", "scope to git-changed files"),
+            FlagSpec(
+                "--changed",
+                "optional",
+                "cfg.changed_ref",
+                "scope file-level gates; skips test, acceptance, properties; "
+                "accepts --changed=REF",
+            ),
             FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
             FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
             FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            _SKIP_FLAG,
         ),
     ),
     CommandDoc(
@@ -433,11 +587,13 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
             FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            _SKIP_FLAG,
         ),
     ),
     CommandDoc(
         "ci",
-        "Full verification: lint, audit, typecheck, tests, coverage, CRAP",
+        "Full verification: lint, audit, typecheck, tests, coverage, properties, CRAP",
         "The PR / protected-branch verification stage; read-only, writes timing "
         "evidence to .interlocks/ci.json.",
         mutates=False,
@@ -447,11 +603,14 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (1, "a gate failed"),
             _NO_PYPROJECT,
         ),
-        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        flags=(
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            _SKIP_FLAG,
+        ),
     ),
     CommandDoc(
         "nightly",
-        "Long-running gates: coverage + mutation (blocking)",
+        "Long-running gates: coverage + properties + audit + mutation (blocking)",
         "The scheduled-job stage for slow gates; mutation always runs the full "
         "suite and blocks on `mutation_min_score`.",
         mutates=False,
@@ -460,6 +619,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "all gates passed"),
             (1, "a gate failed"),
             _NO_PYPROJECT,
+        ),
+        flags=(
+            _SKIP_FLAG,
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),
     CommandDoc(
@@ -473,6 +636,8 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--renovate", "boolean", "off", "use the broad-cleanup renovation profile"),
             FlagSpec("--mutation-budget=", "value", "", "named or numeric mutation budget"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            _SKIP_FLAG,
         ),
     ),
     CommandDoc(
@@ -483,6 +648,8 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=True,
         outputs=(".git/hooks/pre-commit",),
         exit_codes=((0, "hooks installed"),),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        mutates_note="installs or refreshes git pre-commit and Claude Stop hooks",
     ),
     CommandDoc(
         "clean",
@@ -493,8 +660,11 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         outputs=(),
         exit_codes=(
             (0, "artifacts removed"),
+            (1, "ruff clean failed"),
             _NO_PYPROJECT,
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        mutates_note="deletes known cache/build/generated artifacts",
     ),
     # ── Reports ──────────────────────────────────────────────────────────
     CommandDoc(
@@ -517,12 +687,42 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
     CommandDoc(
         "evaluate",
         "Score automatable quality checklist items",
-        "Score the automatable quality checklist for a 0-33 verdict without "
+        "Score the automatable quality checklist for a 0-36 verdict without "
         "running tests, audits, or mutation; advisory.",
         mutates=False,
         outputs=(),
         exit_codes=((0, "report rendered (advisory; never fails)"),),
         flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+    ),
+    CommandDoc(
+        "property-candidates",
+        "Rank functions for property-test hardening",
+        "Static, agent-readable report that ranks source functions likely to "
+        "benefit from generated-input property tests; use `--changed=REF` to "
+        "scope the next pass and `--uncovered` to hide already referenced units. "
+        "It writes no tests.",
+        mutates=False,
+        outputs=(),
+        exit_codes=(
+            (0, "candidate report rendered"),
+            _NO_PYPROJECT,
+        ),
+        flags=(
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+            FlagSpec(
+                "--changed",
+                "optional",
+                "cfg.changed_ref",
+                "scope to git-changed files; accepts --changed=REF",
+            ),
+            FlagSpec(
+                "--uncovered",
+                "boolean",
+                "off",
+                "hide candidates already referenced by property tests",
+            ),
+            FlagSpec("--limit=", "value", "20", "maximum candidates to show; 0 means all"),
+        ),
     ),
     CommandDoc(
         "explain",
@@ -535,7 +735,11 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "explanation printed"),
             (1, "unknown command or unexpected option"),
         ),
-        flags=(FlagSpec("--all", "boolean", "off", "render every command's full prose block"),),
+        flags=(
+            FlagSpec("--all", "boolean", "off", "render every command's full prose block"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+        ),
+        usage="explain [--all | <command>]",
     ),
     # ── Utility ──────────────────────────────────────────────────────────
     CommandDoc(
@@ -558,6 +762,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
                 "show only the bundled tool config (config show)",
             ),
         ),
+        usage="config [show <tool> [--bundled-only] [--json]]",
     ),
     CommandDoc(
         "doctor",
@@ -594,7 +799,10 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         flags=(
             FlagSpec("--check", "boolean", "off", "verify integrations read-only"),
             FlagSpec("--ci=", "value", "", "install a CI workflow (github)"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
+        usage="setup [--check] [--ci=github] [--json]",
+        mutates_note="yes; --check is read-only",
     ),
     CommandDoc(
         "init",
@@ -607,6 +815,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "project scaffolded"),
             (1, "target files already exist"),
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "agents",
@@ -615,6 +824,8 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=True,
         outputs=("AGENTS.md or CLAUDE.md",),
         exit_codes=((0, "block registered"),),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        mutates_note="creates or appends only docs missing check-stage guidance",
     ),
     CommandDoc(
         "setup-skill",
@@ -624,26 +835,33 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=True,
         outputs=(".claude/skills/interlocks/SKILL.md",),
         exit_codes=((0, "skill installed"),),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        mutates_note="installs or refreshes the managed bundled skill file",
     ),
     CommandDoc(
         "presets",
         "Show preset options or set one with `presets set <preset>`",
-        "Show preset options, current values, and copyable config; `presets set "
-        "<preset>` writes the preset into pyproject.toml.",
+        "Show preset options, current values, and copyable progressive config; "
+        "listing is read-only, while `presets set <preset>` writes the preset "
+        "into pyproject.toml.",
         mutates=True,
         outputs=("pyproject.toml",),
         exit_codes=(
             (0, "options shown, or preset set"),
             (1, "invalid preset or usage"),
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        usage="presets [set <preset>]",
+        mutates_note="listing is read-only; set writes pyproject.toml",
     ),
     CommandDoc(
         "baseline",
         "Read/init/advance the progressive-preset quality floor (`show|init|advance|check`)",
         "Read, initialize, advance, or check the progressive-preset quality floor "
-        "stored in .interlocks/baseline.json.",
+        "stored in .interlocks/baseline.json; `show`/`check` are read-only, "
+        "while `init`/`advance` write the floor.",
         mutates=True,
-        outputs=(".interlocks/baseline.json",),
+        outputs=(".interlocks/baseline.json (init/advance)",),
         exit_codes=(
             (0, "succeeded, or check passed"),
             (1, "check found a regression"),
@@ -653,6 +871,8 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
             FlagSpec("--auto-pr", "boolean", "off", "open a PR when advancing the baseline"),
         ),
+        usage="baseline [show|init|advance|check] [--json] [--auto-pr]",
+        mutates_note="show/check are read-only; init/advance write baseline.json",
     ),
     CommandDoc(
         "version",
@@ -661,6 +881,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=False,
         outputs=(),
         exit_codes=((0, "version printed"),),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     CommandDoc(
         "warm",
@@ -672,6 +893,7 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             (0, "wheels cached"),
             (1, "a wheel failed to fetch or verify"),
         ),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
     ),
     # ── Other ────────────────────────────────────────────────────────────
     CommandDoc(
@@ -682,6 +904,11 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         mutates=False,
         outputs=(),
         exit_codes=((0, "help printed"),),
+        flags=(
+            FlagSpec("--advanced", "boolean", "off", "list every command"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+        ),
+        usage="help [--advanced | <command>]",
     ),
 )
 
@@ -700,6 +927,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "fix-annotate",
             "fix-metrics",
             "format",
+            "format-check",
             "lint",
             "typecheck",
             "test",
@@ -710,6 +938,8 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "acceptance",
             "behavior-attribution",
             "init-acceptance",
+            "properties",
+            "init-properties",
             "coverage",
             "complexity",
             "crap",
@@ -720,7 +950,7 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Stages",
         ("check", "pre-commit", "ci", "nightly", "post-edit", "setup-hooks", "clean"),
     ),
-    ("Reports", ("trust", "evaluate", "explain")),
+    ("Reports", ("trust", "evaluate", "property-candidates", "explain")),
     (
         "Utility",
         (
@@ -741,9 +971,10 @@ COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 
 # Dispatcher-level tokens that are valid on every command and must never be
-# matched against a task's declared FlagSpec set. `--skip` carries a value and
-# needs a prefix check; it is handled separately in `unknown_task_flags`.
-GLOBAL_FLAGS: frozenset[str] = frozenset({"--help", "-h", "--verbose", "--advanced", "--quiet"})
+# matched against a task's declared FlagSpec set. Command-specific help flags
+# such as `help --advanced` stay documented on that command. `--skip` carries a
+# value and needs a prefix check; it is handled separately in `unknown_task_flags`.
+GLOBAL_FLAGS: frozenset[str] = frozenset({"--help", "-h", "--verbose", "--quiet"})
 
 
 def unknown_task_flags(task_name: str, raw_args: list[str]) -> list[str]:
@@ -753,24 +984,38 @@ def unknown_task_flags(task_name: str, raw_args: list[str]) -> list[str]:
     (:data:`GLOBAL_FLAGS` or a ``--skip`` / ``--skip=…`` token), or when it
     matches a declared :class:`FlagSpec` for the task. Value flags
     (``FlagSpec.name`` ends with ``=``) match a ``--flag=value`` token by
-    prefix; boolean flags match the bare token, or its optional ``--flag=value``
-    form (``arg_flag_value`` accepts both). The first positional token (the task
-    name itself) is ignored — it never starts with ``-``.
+    prefix; optional flags match either ``--flag`` or ``--flag=value``; boolean
+    flags match only the bare token. The first positional token (the task name
+    itself) is ignored — it never starts with ``-``.
     """
-    doc = COMMAND_DOCS_BY_NAME.get(task_name)
-    declared = doc.flags if doc is not None else ()
-    value_prefixes = tuple(spec.name for spec in declared if spec.name.endswith("="))
-    boolean_names = frozenset(spec.name for spec in declared if not spec.name.endswith("="))
+    boolean_names, optional_names, value_prefixes = _flag_sets_for_task(task_name)
     bad: list[str] = []
     for arg in raw_args:
-        if _unknown_flag(arg, boolean_names, value_prefixes):
+        if _unknown_flag(arg, boolean_names, optional_names, value_prefixes):
             bad.append(arg)
     return bad
+
+
+def _flag_sets_for_task(
+    task_name: str,
+) -> tuple[frozenset[str], frozenset[str], tuple[str, ...]]:
+    doc = COMMAND_DOCS_BY_NAME.get(task_name)
+    declared = doc.flags if doc is not None else ()
+    return (
+        frozenset(
+            spec.name
+            for spec in declared
+            if spec.kind == "boolean" and not spec.name.endswith("=")
+        ),
+        frozenset(spec.name for spec in declared if spec.kind == "optional"),
+        tuple(spec.name for spec in declared if spec.name.endswith("=")),
+    )
 
 
 def _unknown_flag(
     arg: str,
     boolean_names: frozenset[str],
+    optional_names: frozenset[str],
     value_prefixes: tuple[str, ...],
 ) -> bool:
     if not arg.startswith("-"):
@@ -779,7 +1024,8 @@ def _unknown_flag(
         return False
     if arg == "--skip" or arg.startswith("--skip="):
         return False
-    # Boolean flags match the bare token or its `--flag=value` form.
-    if arg.split("=", 1)[0] in boolean_names:
+    if arg in boolean_names or arg in optional_names:
+        return False
+    if arg.split("=", 1)[0] in optional_names:
         return False
     return not any(arg.startswith(prefix) for prefix in value_prefixes)

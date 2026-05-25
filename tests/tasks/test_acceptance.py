@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -133,6 +134,7 @@ def test_task_acceptance_pytest_bdd_allows_rc_5(
     assert task is not None
     assert task.description == "Acceptance (pytest-bdd)"
     assert 5 in task.allowed_rcs
+    assert task.start_status == "running"
 
 
 def test_task_acceptance_off_override_skips(
@@ -173,6 +175,29 @@ def test_task_acceptance_wraps_trace_when_enabled(
     assert task.cmd[:3] == [sys.executable, "-m", "interlocks.acceptance_trace"]
 
 
+def test_task_acceptance_trace_flag_wraps_without_hidden_env(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    _scaffold_feature(tmp_project, _PASSING_FEATURE)
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT.replace('name = "acc-probe"', 'name = "interlocks"'),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE", raising=False)
+    monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE_IN_PROCESS", raising=False)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--trace"])
+    monkeypatch.chdir(tmp_project)
+    clear_cache()
+
+    task = mod.task_acceptance()
+
+    assert task is not None
+    assert task.cmd[:3] == [sys.executable, "-m", "interlocks.acceptance_trace"]
+
+
 def test_task_acceptance_behave_branch(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from interlocks.config import clear_cache
     from interlocks.tasks import acceptance as mod
@@ -187,6 +212,7 @@ def test_task_acceptance_behave_branch(tmp_project: Path, monkeypatch: pytest.Mo
     assert task is not None
     assert task.description == "Acceptance (behave)"
     assert "behave" in task.cmd
+    assert task.start_status == "running"
 
 
 def test_cmd_acceptance_optional_missing_warns_and_exits_zero(
@@ -212,6 +238,66 @@ def test_cmd_acceptance_optional_missing_warns_and_exits_zero(
     assert called == []
 
 
+def test_cmd_acceptance_optional_missing_json_skip(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    clear_cache()
+
+    called: list[object] = []
+    monkeypatch.setattr(mod, "run", called.append)
+
+    mod.cmd_acceptance()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "command": "acceptance",
+        "passed": True,
+        "status": "skipped",
+        "acceptance_status": "optional_missing",
+        "reason": (
+            "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
+        ),
+        "next_actions": ["Run `interlocks init-acceptance` to scaffold feature files."],
+    }
+    assert called == []
+
+
+def test_cmd_acceptance_disabled_json_skip(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + '\n[tool.interlocks]\nacceptance_runner = "off"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    clear_cache()
+
+    mod.cmd_acceptance()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "command": "acceptance",
+        "passed": True,
+        "status": "skipped",
+        "acceptance_status": "disabled",
+        "reason": "acceptance: disabled via acceptance_runner = 'off'",
+        "next_actions": [],
+    }
+
+
 def test_cmd_acceptance_required_missing_exits_one(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -232,6 +318,149 @@ def test_cmd_acceptance_required_missing_exits_one(
         mod.cmd_acceptance()
     assert exc.value.code == 1
     assert "interlocks init-acceptance" in capsys.readouterr().out
+
+
+def test_cmd_acceptance_required_missing_json_exits_one(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks import acceptance as mod
+
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + "\n[tool.interlocks]\nrequire_acceptance = true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    clear_cache()
+
+    with pytest.raises(SystemExit) as exc:
+        mod.cmd_acceptance()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload == {
+        "command": "acceptance",
+        "passed": False,
+        "acceptance_status": "missing_features_dir",
+        "error": (
+            "acceptance: features directory not found — "
+            "run `interlocks init-acceptance` to scaffold one"
+        ),
+        "next_actions": ["Run `interlocks init-acceptance` to scaffold feature files."],
+    }
+
+
+def test_acceptance_failure_next_actions_are_status_specific() -> None:
+    from interlocks.acceptance_status import AcceptanceStatus
+    from interlocks.tasks import acceptance as mod
+
+    assert (
+        mod._acceptance_failure_next_action(AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE)
+        == "Add or update Gherkin behavior markers, then rerun `interlocks acceptance`."
+    )
+    assert mod._acceptance_failure_next_action(AcceptanceStatus.MISSING_SCENARIOS) == (
+        "Add at least one scenario, then rerun `interlocks acceptance`."
+    )
+    assert mod._acceptance_failure_next_action(AcceptanceStatus.MISSING_FEATURES_DIR) == (
+        "Run `interlocks init-acceptance` to scaffold feature files."
+    )
+
+
+def test_acceptance_failure_payload_uses_status_specific_action() -> None:
+    from interlocks.acceptance_status import AcceptanceStatus
+    from interlocks.tasks import acceptance as mod
+
+    payload = mod._acceptance_failure_payload(
+        AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE,
+        "coverage gap",
+    )
+
+    assert payload == {
+        "command": "acceptance",
+        "passed": False,
+        "acceptance_status": "missing_behavior_coverage",
+        "error": "coverage gap",
+        "next_actions": [
+            "Add or update Gherkin behavior markers, then rerun `interlocks acceptance`."
+        ],
+    }
+
+
+def test_emit_acceptance_failure_json_routes_remediation_inputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.acceptance_status import AcceptanceClassification, AcceptanceStatus
+    from interlocks.behavior_coverage import (
+        BehaviorCoverageResult,
+        BehaviorCoverageValidationResult,
+    )
+    from interlocks.tasks import acceptance as mod
+
+    observed: list[tuple[AcceptanceStatus, Path | None, object | None]] = []
+    behavior_result = BehaviorCoverageValidationResult(BehaviorCoverageResult((), ()))
+
+    def fake_remediation_message(
+        status: AcceptanceStatus,
+        features_dir: Path | None,
+        result: object | None = None,
+    ) -> str:
+        observed.append((status, features_dir, result))
+        return "exact remediation"
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    monkeypatch.setattr(mod, "remediation_message", fake_remediation_message)
+    classification = AcceptanceClassification(
+        AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE,
+        tmp_path / "tests" / "features",
+        behavior_result,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        mod._emit_acceptance_failure(classification)
+
+    assert exc.value.code == 1
+    assert observed == [
+        (
+            AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE,
+            tmp_path / "tests" / "features",
+            behavior_result,
+        )
+    ]
+    assert json.loads(capsys.readouterr().out)["error"] == "exact remediation"
+
+
+def test_emit_acceptance_failure_human_passes_exact_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from interlocks.acceptance_status import AcceptanceClassification, AcceptanceStatus
+    from interlocks.tasks import acceptance as mod
+
+    messages: list[str | None] = []
+
+    def fake_fail_skip(message: str | None) -> None:
+        messages.append(message)
+        raise SystemExit(1)
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance"])
+    monkeypatch.setattr(mod, "remediation_message", lambda *_args: "exact human remediation")
+    monkeypatch.setattr(mod, "fail_skip", fake_fail_skip)
+
+    with pytest.raises(SystemExit) as exc:
+        mod._emit_acceptance_failure(
+            AcceptanceClassification(
+                AcceptanceStatus.MISSING_FEATURE_FILES,
+                tmp_path / "tests" / "features",
+            )
+        )
+
+    assert exc.value.code == 1
+    assert messages == ["exact human remediation"]
 
 
 def test_cmd_acceptance_required_behavior_gap_exits_one(
@@ -280,3 +509,26 @@ def test_cmd_acceptance_runnable_calls_run(
     task = called[0]
     assert hasattr(task, "description")
     assert task.description == "Acceptance (pytest-bdd)"  # type: ignore[attr-defined]
+
+
+def test_cmd_acceptance_runnable_json_calls_shared_runner(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.runner import Task
+    from interlocks.tasks import acceptance as mod
+
+    _scaffold_feature(tmp_project, _PASSING_FEATURE)
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    clear_cache()
+
+    called: list[tuple[str, Task]] = []
+    monkeypatch.setattr(mod, "run_task_json", lambda command, task: called.append((command, task)))
+
+    mod.cmd_acceptance()
+
+    assert len(called) == 1
+    command, task = called[0]
+    assert command == "acceptance"
+    assert task.description == "Acceptance (pytest-bdd)"

@@ -9,6 +9,8 @@ import pytest
 from interlocks import ui
 from interlocks.config import InterlockConfig
 
+_REAL_IS_VERBOSE = ui.is_verbose
+
 
 def _cfg(tmp_path: Path) -> InterlockConfig:
     return InterlockConfig(
@@ -132,6 +134,18 @@ def test_is_json_true_when_flag_present(monkeypatch: pytest.MonkeyPatch) -> None
 def test_is_json_false_when_flag_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
     assert ui.is_json() is False
+
+
+def test_is_verbose_true_when_flag_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ui, "is_verbose", _REAL_IS_VERBOSE)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--verbose"])
+    assert ui.is_verbose() is True
+
+
+def test_is_verbose_false_when_flag_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ui, "is_verbose", _REAL_IS_VERBOSE)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci"])
+    assert ui.is_verbose() is False
 
 
 def test_print_json_single_line_compact_with_newline(

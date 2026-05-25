@@ -24,15 +24,16 @@ def test_ci_runs_attribution_after_crap_before_mutation(monkeypatch: pytest.Monk
     calls: list[str] = []
 
     monkeypatch.setattr("interlocks.stages.ci.load_config", lambda: _CFG)
+    monkeypatch.setattr("interlocks.stages.ci.project_env_ready", lambda _cfg: True)
     monkeypatch.setattr(
         "interlocks.stages.ci.classify_acceptance_with_details",
         lambda cfg: _acceptance_off(),
     )
     monkeypatch.setattr("interlocks.stages.ci.run_tasks", lambda tasks: calls.append("parallel"))
-    monkeypatch.setattr("interlocks.stages.ci.cmd_crap", lambda: calls.append("crap"))
+    monkeypatch.setattr("interlocks.stages.ci.cmd_crap", lambda **_: calls.append("crap"))
     monkeypatch.setattr(
         "interlocks.stages.ci.cmd_behavior_attribution",
-        lambda refresh=False: calls.append(f"attribution:{refresh}"),
+        lambda refresh=False, emit_json=True: calls.append(f"attribution:{refresh}:{emit_json}"),
     )
     monkeypatch.setattr("interlocks.stages.ci.cmd_mutation", lambda **_: calls.append("mutation"))
     monkeypatch.setattr("interlocks.stages.ci._should_run_mutation", lambda *_, **__: True)
@@ -40,7 +41,7 @@ def test_ci_runs_attribution_after_crap_before_mutation(monkeypatch: pytest.Monk
 
     cmd_ci()
 
-    assert calls == ["parallel", "crap", "attribution:False", "mutation"]
+    assert calls == ["parallel", "crap", "attribution:False:False", "mutation"]
 
 
 def test_check_cached_advisory_skips_missing_evidence(

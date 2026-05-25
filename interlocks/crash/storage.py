@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -99,11 +100,18 @@ def _read_dedup(directory: Path) -> dict[str, float]:
     if not isinstance(data, dict):
         return {}
     # Only keep entries that match the schema; drop the rest silently.
-    return {
-        key: float(value)
-        for key, value in data.items()
-        if isinstance(key, str) and isinstance(value, (int, float))
-    }
+    clean: dict[str, float] = {}
+    for key, value in data.items():
+        if (
+            not isinstance(key, str)
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float))
+        ):
+            continue
+        timestamp = float(value)
+        if math.isfinite(timestamp):
+            clean[key] = timestamp
+    return clean
 
 
 def should_suppress_transport(fingerprint: str, *, now: float) -> bool:

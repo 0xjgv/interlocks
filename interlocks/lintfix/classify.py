@@ -19,8 +19,11 @@ if TYPE_CHECKING:
     from interlocks.lintfix.diff import FileHunks
     from interlocks.lintfix.rules import Mode, RulePolicy
 
-# ``git diff`` emits ``+++ b/path``; ``ruff --diff`` emits ``+++ path``. Accept both.
-_DIFF_FILE = re.compile(r"^\+\+\+ (?:b/)?(.+?)(?:\t.*)?$")
+# ``git diff`` emits ``--- a/path`` / ``+++ b/path``; ``ruff --diff`` emits
+# plain paths. Do not strip a leading ``b/`` unless the paired old header proves
+# it is Git's post-image prefix; projects can contain real ``b/...`` paths.
+_DIFF_OLD_FILE = re.compile(r"^--- (.+?)(?:\t.*)?$")
+_DIFF_FILE = re.compile(r"^\+\+\+ (.+?)(?:\t.*)?$")
 _HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _COMMENT_DELETE = re.compile(r"^\s*#")
 _CONTROL_FLOW = re.compile(
@@ -48,6 +51,7 @@ class _MeasureState:
     control_flow_edits: int = 0
     current_path: str | None = None
     old_line: int = 0
+    old_header_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -173,6 +177,8 @@ def _measure(patch_text: str, hunks: dict[str, FileHunks]) -> CandidateMetrics:
 
 
 def _measure_line(state: _MeasureState, line: str, hunks: dict[str, FileHunks]) -> None:
+    if _capture_old_file(state, line):
+        return
     if _capture_file(state, line):
         return
     if _capture_hunk_start(state, line):
@@ -182,15 +188,32 @@ def _measure_line(state: _MeasureState, line: str, hunks: dict[str, FileHunks]) 
     _measure_body_line(state, line, hunks)
 
 
+def _capture_old_file(state: _MeasureState, line: str) -> bool:
+    match = _DIFF_OLD_FILE.match(line)
+    if match is None:
+        return False
+    state.old_header_path = match.group(1)
+    return True
+
+
 def _capture_file(state: _MeasureState, line: str) -> bool:
     match = _DIFF_FILE.match(line)
     if match is None:
         return False
-    captured = match.group(1)
+    captured = _normalize_post_image_path(state.old_header_path, match.group(1))
+    state.old_header_path = None
     if captured is not None:
         state.current_path = captured
         state.files.append(captured)
     return True
+
+
+def _normalize_post_image_path(old_path: str | None, new_path: str) -> str | None:
+    if new_path == "/dev/null":
+        return None
+    if new_path.startswith("b/") and (old_path == "/dev/null" or old_path == f"a/{new_path[2:]}"):
+        return new_path[2:]
+    return new_path
 
 
 def _capture_hunk_start(state: _MeasureState, line: str) -> bool:

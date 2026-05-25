@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -12,6 +13,8 @@ import pytest
 import interlocks
 from interlocks.config import InterlockConfig, InterlockConfigError, clear_cache, require_pyproject
 from interlocks.runner import preflight
+
+_MUTMUT_INCOMPATIBLE = pytest.mark.mutmut_incompatible
 
 # Package root of the interlocks under test — forced onto ``PYTHONPATH`` for subprocess
 # probes so they always exercise the current source, not a stale editable install.
@@ -86,6 +89,26 @@ def test_preflight_exits_two_when_gated_command_has_no_pyproject(
     assert "no pyproject.toml" in captured.err
 
 
+def test_preflight_json_error_is_parseable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--json"])
+    clear_cache()
+
+    with pytest.raises(SystemExit) as exc:
+        preflight("check")
+
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "check"
+    assert payload["passed"] is False
+    assert "no pyproject.toml" in payload["error"]
+    assert "interlocks init" in payload["next_action"]
+
+
 @pytest.mark.parametrize("changed_arg", ["--changed", "--changed=origin/main"])
 def test_preflight_allows_check_changed_without_pyproject(
     tmp_path: Path,
@@ -103,9 +126,25 @@ def test_preflight_allows_check_changed_without_pyproject(
     assert captured.err == ""
 
 
+def test_preflight_allows_check_changed_before_command_without_pyproject(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The dispatcher accepts task flags before or after the command token."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "--changed", "check"])
+    clear_cache()
+    preflight("check")  # must not raise or exit
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
 # ─────────────── end-to-end via subprocess ──────────────────────────
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_cli_check_exits_two_without_pyproject(tmp_path: Path) -> None:
     """Running ``interlocks check`` outside any project surfaces a clear error, exit 2."""
     result = subprocess.run(
@@ -120,6 +159,7 @@ def test_cli_check_exits_two_without_pyproject(tmp_path: Path) -> None:
     assert "no pyproject.toml" in result.stderr
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_cli_help_works_without_pyproject(tmp_path: Path) -> None:
     """Help is exempt — users need it to recover from a missing pyproject."""
     result = subprocess.run(

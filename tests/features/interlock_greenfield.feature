@@ -52,11 +52,14 @@ Feature: interlocks unblock flow on a legacy greenfield project
 
   # req: greenfield-setup-check
   Scenario: `interlocks setup --check` reports missing local integrations
-    When I run "interlocks setup --check" in the greenfield project
+    When I run "interlocks setup --check" in the greenfield project in default mode
     Then the greenfield command exits non-zero
     And the greenfield output contains "missing/stale"
+    And the greenfield output contains "next: Run `interlocks setup`"
+    And the greenfield output contains "interlocks presets set progressive"
 
   # req: setup-refuses-non-git
+  @mutmut_incompatible
   Scenario: `interlocks setup` refuses a directory that is not a git repository
     Given a project directory that is not a git repo
     When I run "interlocks setup" in the non-git project
@@ -79,6 +82,7 @@ Feature: interlocks unblock flow on a legacy greenfield project
     Then the greenfield command exits 0
     And the greenfield output contains "[git hook]"
     And the greenfield output contains "installed"
+    And the greenfield output contains "interlocks presets set progressive"
 
   # req: greenfield-doctor
   Scenario: `interlocks doctor` flags the unadopted project

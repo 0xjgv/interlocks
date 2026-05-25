@@ -157,6 +157,19 @@ def test_deleted_python_files_count_in_author_cost_but_not_changed_files(repo: P
     assert cost.total == 5
 
 
+def test_scoped_author_edit_cost_does_not_double_count_explicit_deleted_file(
+    repo: Path,
+) -> None:
+    (repo / "base.py").unlink()
+    base = resolve_base("HEAD")
+
+    cost = author_edit_cost(base, files=("base.py",))
+
+    assert cost.deleted_file_lines == 5
+    assert cost.deletions == 5
+    assert cost.total == 5
+
+
 def test_changed_line_ranges_from_patch_accepts_ruff_and_git_paths() -> None:
     patch = """\
 --- a/a.py
@@ -173,6 +186,31 @@ def test_changed_line_ranges_from_patch_accepts_ruff_and_git_paths() -> None:
     ranges = changed_line_ranges_from_patch(patch)
     assert ranges["a.py"] == (Hunk(1, 2),)
     assert ranges["b.py"] == (Hunk(10, 12),)
+
+
+def test_changed_line_ranges_from_patch_preserves_plain_b_directory_paths() -> None:
+    patch = """\
+--- b/tool.py
++++ b/tool.py
+@@ -1,1 +1,2 @@
+ x = 1
++y = 2
+"""
+
+    assert changed_line_ranges_from_patch(patch) == {"b/tool.py": (Hunk(1, 2),)}
+
+
+def test_changed_line_ranges_from_patch_strips_git_b_prefix_for_renames() -> None:
+    patch = """\
+diff --git a/old.py b/new.py
+--- a/old.py
++++ b/new.py
+@@ -1,1 +1,2 @@
+ x = 1
++y = 2
+"""
+
+    assert changed_line_ranges_from_patch(patch) == {"new.py": (Hunk(1, 2),)}
 
 
 def test_hunk_overlap_detection() -> None:

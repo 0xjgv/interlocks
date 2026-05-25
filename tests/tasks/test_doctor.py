@@ -11,7 +11,10 @@ from pathlib import Path
 import pytest
 
 import interlocks
+from interlocks.defaults_path import path as defaults_path
 from tests.conftest import stub_project_venv
+
+_MUTMUT_INCOMPATIBLE = pytest.mark.mutmut_incompatible
 
 # When running under an outer interpreter whose site-packages .pth shadows
 # this checkout (e.g. a parent-repo pre-commit hook), point the subprocess's
@@ -68,6 +71,7 @@ def _run_doctor_strict(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     result = _run_doctor(tmp_path)
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
@@ -76,6 +80,7 @@ def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     assert "missing pyproject.toml" in result.stdout
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_tmpdir_verbose_full_report(tmp_path: Path) -> None:
     env = os.environ.copy()
     existing = env.get("PYTHONPATH", "")
@@ -102,6 +107,7 @@ def test_doctor_tmpdir_verbose_full_report(tmp_path: Path) -> None:
     assert "── Next Steps" in result.stdout
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_json_is_parseable(tmp_path: Path) -> None:
     # Missing pyproject → status "blocked", exit 0 (doctor exits 1 only on failures).
     result = _run_doctor_json(tmp_path)
@@ -111,10 +117,13 @@ def test_doctor_json_is_parseable(tmp_path: Path) -> None:
     assert payload["status"] == "blocked"
     assert isinstance(payload["blockers"], list)
     assert isinstance(payload["warnings"], list)
+    assert payload["next_steps"] == [
+        {"message": "Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."}
+    ]
     assert {"project_root", "preset", "src_dir", "test_dir"} <= payload["detected"].keys()
     assert isinstance(payload["setup_checklist"], list)
     for entry in payload["setup_checklist"]:
-        assert {"name", "state"} == entry.keys()
+        assert {"name", "target", "detail", "state"} == entry.keys()
 
 
 def test_doctor_json_well_formed_project(
@@ -182,8 +191,8 @@ def test_doctor_in_process_reports_sections(
     assert "status                 ready" in captured.out
     assert "ready (" in captured.out  # "ready (N gaps)"
     # Derived Next Steps flags the missing preset + CI, not the generic line.
-    assert "Run `interlocks presets`" in captured.out
-    assert "Wire CI via `interlocks ci`" in captured.out
+    assert "Run `interlocks presets set progressive`" in captured.out
+    assert "Run `interlocks setup --ci=github`" in captured.out
     # The budgeted-mutation note is documentation (`explain check` / `check
     # --help`), not a doctor warning — it no longer appears in the report.
     assert "default check mutation is budgeted by author diff" not in captured.out
@@ -347,7 +356,7 @@ def test_doctor_default_mode_names_warn_gaps(
     assert out.startswith("doctor: ready (")
     # ...and the warn-row gaps are now named inline (no --verbose needed).
     # The bare probe project's first warn rows are preset + interlocks cfg.
-    assert "preset: using dataclass defaults" in out
+    assert "preset: run `interlocks presets set progressive`" in out
     assert "interlocks cfg: defaults apply" in out
 
 
@@ -367,6 +376,24 @@ def test_doctor_default_mode_caps_gaps_at_three(
     # 3 capped gap bullets (the bare probe project has >3 warn rows).
     assert len(gap_bullets) == 3, out
     assert "more, run --verbose for the full list" in out
+
+
+def test_doctor_json_next_steps_recommend_progressive_and_ci_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_probe_project(tmp_path)
+    stub_project_venv(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "doctor", "--json"])
+
+    out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+
+    payload = json.loads(out)
+    next_steps = [entry["message"] for entry in payload["next_steps"]]
+    warnings = [entry["message"] for entry in payload["warnings"]]
+    assert "Run `interlocks presets set progressive` to enable ratcheting defaults." in next_steps
+    assert any(step.startswith("Run `interlocks setup --ci=github`") for step in next_steps)
+    assert "preset: run `interlocks presets set progressive`" in warnings
+    assert "ci workflow: run `interlocks setup --ci=github`" in warnings
 
 
 def test_doctor_default_mode_blockers_uncapped(
@@ -397,6 +424,7 @@ def test_doctor_default_mode_blockers_uncapped(
     )
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_strict_exits_two_when_blocked(tmp_path: Path) -> None:
     """--strict + a blocked verdict (no pyproject) exits code 2."""
     result = _run_doctor_strict(tmp_path)
@@ -404,6 +432,7 @@ def test_doctor_strict_exits_two_when_blocked(tmp_path: Path) -> None:
     assert result.stdout.startswith("doctor: blocked")
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_strict_exits_zero_when_ready(tmp_path: Path) -> None:
     """--strict on a healthy project stays exit 0 — strict only escalates `blocked`."""
     (tmp_path / "probe").mkdir()
@@ -418,6 +447,7 @@ def test_doctor_strict_exits_zero_when_ready(tmp_path: Path) -> None:
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_without_strict_exits_zero_when_blocked(tmp_path: Path) -> None:
     """Plain doctor stays advisory: a blocked verdict still exits 0."""
     result = _run_doctor(tmp_path)
@@ -445,6 +475,7 @@ def test_doctor_strict_in_process_raises_system_exit_two(
     _ = capsys.readouterr()  # drain captured output
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_strict_unreadable_pyproject_still_exits_one(tmp_path: Path) -> None:
     """failures-path precedence: an unreadable pyproject exits 1 even with --strict."""
     # Invalid TOML -> tomllib.TOMLDecodeError -> failures populated -> sys.exit(1) first.
@@ -453,6 +484,7 @@ def test_doctor_strict_unreadable_pyproject_still_exits_one(tmp_path: Path) -> N
     assert result.returncode == 1, f"stdout={result.stdout}\nstderr={result.stderr}"
 
 
+@_MUTMUT_INCOMPATIBLE
 def test_doctor_verbose_omits_uvx_path_warnings(tmp_path: Path) -> None:
     """doctor --verbose no longer warns that uvx-dispatched tools are off PATH."""
     env = os.environ.copy()
@@ -518,7 +550,7 @@ def test_doctor_detects_ci_workflow(
 
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
     # CI row flips to `ok`; no Next-Steps bullet about wiring CI.
-    assert "Wire CI via `interlocks ci`" not in out
+    assert "Run `interlocks setup --ci=github`" not in out
 
 
 def test_doctor_warns_on_acceptance_configured_without_scaffold(
@@ -529,6 +561,77 @@ def test_doctor_warns_on_acceptance_configured_without_scaffold(
 
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
     assert "Run `interlocks init-acceptance`" in out
+
+
+def test_doctor_warns_on_missing_properties_scaffold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_probe_project(tmp_path)
+    stub_project_venv(tmp_path)
+
+    out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+    assert "Run `interlocks init-properties`" in out
+
+
+def test_doctor_detects_property_tests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_probe_project(tmp_path)
+    stub_project_venv(tmp_path)
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "test_probe_properties.py").write_text(
+        "def test_probe():\n    assert True\n", encoding="utf-8"
+    )
+
+    out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+    assert "[properties]" in out
+    assert "detected" in out
+    assert "Run `interlocks init-properties`" not in out
+
+
+def test_doctor_warns_when_only_property_scaffold_example_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_probe_project(tmp_path)
+    stub_project_venv(tmp_path)
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "test_example_properties.py").write_bytes(
+        defaults_path("properties_test_example.py").read_bytes()
+    )
+
+    out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+
+    assert "[properties]" in out
+    assert "replace scaffold example" in out
+    assert "Replace properties/test_example_properties.py with domain invariants" in out
+    assert "Run `interlocks init-properties`" not in out
+
+
+def test_doctor_json_next_steps_distinguish_scaffold_only_properties(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_probe_project(tmp_path)
+    stub_project_venv(tmp_path)
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "test_example_properties.py").write_bytes(
+        defaults_path("properties_test_example.py").read_bytes()
+    )
+    monkeypatch.setattr(sys, "argv", ["interlocks", "doctor", "--json"])
+
+    out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
+    payload = json.loads(out)
+    next_steps = [entry["message"] for entry in payload["next_steps"]]
+    warnings = [entry["message"] for entry in payload["warnings"]]
+
+    assert any(
+        step.startswith("Replace properties/test_example_properties.py with domain invariants")
+        for step in next_steps
+    )
+    assert "Run `interlocks init-properties` to scaffold property tests." not in next_steps
+    assert "properties: replace scaffold example" in warnings
 
 
 def test_doctor_blocks_when_no_project_env(
@@ -578,6 +681,11 @@ def test_doctor_ready_state_when_all_artifacts_wired(
     features = tmp_path / "tests" / "features"
     features.mkdir(parents=True)
     (features / "probe.feature").write_text("Feature: probe\n", encoding="utf-8")
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "test_probe_properties.py").write_text(
+        "def test_probe():\n    assert True\n", encoding="utf-8"
+    )
     (tmp_path / "AGENTS.md").write_text("Use interlocks check.\n", encoding="utf-8")
     (tmp_path / "CLAUDE.md").write_text("Use interlocks check.\n", encoding="utf-8")
 

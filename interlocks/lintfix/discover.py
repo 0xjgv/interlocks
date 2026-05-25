@@ -14,11 +14,14 @@ the returncode; anything below 2 is parsed.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 
 from interlocks.config import load_config
 from interlocks.runner import capture, uvx_tool
 from interlocks.tasks._ruff import ruff_config_args
+
+_RULE_CODE_RE = re.compile(r"[A-Z][A-Z0-9]*[0-9]")
 
 
 @dataclass(frozen=True)
@@ -93,14 +96,23 @@ def parse_diagnostics(raw: str) -> tuple[RuleCandidate, ...]:
 def _bucket_diagnostic(by_rule: dict[str, _RuleBucket], diag: object) -> None:
     if not isinstance(diag, dict):
         return
-    code = diag.get("code")
+    code = _rule_code(diag.get("code"))
     fix = diag.get("fix")
-    if not isinstance(code, str) or not isinstance(fix, dict):
+    if code is None or not isinstance(fix, dict):
         return
     bucket = by_rule.setdefault(code, _RuleBucket())
     bucket.count += 1
     _record_filename(bucket, diag.get("filename"))
     _record_applicability(bucket, fix.get("applicability"))
+
+
+def _rule_code(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    code = value.strip()
+    if _RULE_CODE_RE.fullmatch(code):
+        return code
+    return None
 
 
 def _record_filename(bucket: _RuleBucket, filename: object) -> None:

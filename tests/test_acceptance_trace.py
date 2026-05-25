@@ -26,8 +26,14 @@ def _frame(name: str, globals_: dict[str, object]) -> SimpleNamespace:
 def test_trace_can_wrap_command_requires_env_and_module_runner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE", raising=False)
     monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE_IN_PROCESS", raising=False)
     assert not trace_can_wrap_command([sys.executable, "-m", "pytest"])
+    assert trace_can_wrap_command([sys.executable, "-m", "pytest"], force_in_process=True)
+
+    monkeypatch.setenv("INTERLOCKS_ACCEPTANCE_TRACE", "1")
+    assert trace_can_wrap_command([sys.executable, "-m", "pytest"])
+    monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE", raising=False)
 
     monkeypatch.setenv("INTERLOCKS_ACCEPTANCE_TRACE_IN_PROCESS", "1")
     assert trace_can_wrap_command([sys.executable, "-m", "pytest"])

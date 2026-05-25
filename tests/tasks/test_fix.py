@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -59,6 +60,54 @@ def test_fix_cli_modifies_fixable_file(tmp_project: Path) -> None:
         check=False,
     )
     assert "import os" not in f.read_text(encoding="utf-8")
+
+
+def test_fix_json_reports_clean_run(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.fix import cmd_fix
+
+    f = tmp_project / "sample.py"
+    f.write_text(CLEAN, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "--json"])
+    clear_cache()
+
+    cmd_fix()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "fix"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "fix"
+    assert captured.err.startswith("interlocks: [fix]")
+    assert f.read_text(encoding="utf-8") == CLEAN
+
+
+def test_fix_json_exits_nonzero_for_unfixable_error(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.fix import cmd_fix
+
+    (tmp_project / "sample.py").write_text("x = undefined_name\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "--json"])
+    clear_cache()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_fix()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "fix"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
 
 
 def test_fix_no_exit_does_not_raise(

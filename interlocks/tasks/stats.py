@@ -18,11 +18,15 @@ from interlocks.metrics import (
     CrapRow,
     MutationSummary,
     compute_crap_rows,
+    coverage_cache_is_stale,
     iter_py_files,
     lizard_functions,
+    mutation_evidence_is_stale,
     parse_coverage,
+    read_mutation_evidence,
     read_mutation_summary,
 )
+from interlocks.metrics import mutation_evidence_no_results as _mutation_evidence_no_results
 from interlocks.runner import GREEN, RED, RESET, VERBOSE, YELLOW, generate_coverage_xml, warn_skip
 from interlocks.tasks.coverage import cmd_coverage
 
@@ -42,6 +46,7 @@ TRUST_HISTORY_CAP = 20
 TRUST_GREEN = 85
 TRUST_YELLOW = 65
 CRAP_RED_MARGIN = 5.0
+TRUST_ACTION_TARGET_LIMIT = 20
 
 # (min_score, color, emoji, word) — highest tier first; the first match wins.
 _TIERS: tuple[tuple[float, str, str, str], ...] = (
@@ -76,8 +81,23 @@ class TrustReport:
     mutation: MutationSummary | None
     coverage_pct: float | None
     crap_max: float
+    coverage_min: float = 0.0
+    mutation_min_score: float = 0.0
+    mutation_max_runtime: int = 0
+    mutation_evidence_stale: bool = False
+    mutation_evidence_no_results: bool = False
     diff_changed: set[str] = field(default_factory=set)
     diff_new_crap: list[CrapRow] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _VerdictSignals:
+    suspicious_count: int
+    crap_count: int
+    mutation: MutationSummary | None
+    mutation_min_score: float = 0.0
+    coverage_pct: float | None = None
+    coverage_min: float = 0.0
 
 
 # ─────────────── trust formula ──────────────────────────────────
@@ -98,7 +118,14 @@ def _compute_trust(
     """Start at 100, subtract capped penalties for each signal. Floor at 0."""
     max_crap = max((r.crap for r in crap_rows), default=0.0)
     crap_overrun = max(0.0, max_crap - cfg.crap_max)
-    mutation_short = (cfg.mutation_min_score - mutation.score) if mutation is not None else 0.0
+    if mutation is not None and mutation.completed is False and cfg.mutation_min_score > 0:
+        mutation_short = cfg.mutation_min_score
+    else:
+        mutation_short = (
+            cfg.mutation_min_score - mutation.score
+            if mutation is not None
+            else cfg.mutation_min_score
+        )
     coverage_short = (cfg.coverage_min - coverage_pct) if coverage_pct is not None else 0.0
     penalty = (
         _clamp(crap_overrun * CRAP_OVERRUN_WEIGHT, 0, CRAP_MAX_PENALTY)
@@ -110,11 +137,16 @@ def _compute_trust(
 
 
 def _tier(score: float) -> tuple[float, str, str, str]:
-    return next(t for t in _TIERS if score >= t[0])
+    return next((t for t in _TIERS if score >= t[0]), _TIERS[-1])
 
 
 def _emoji(score: float) -> str:
     return _tier(score)[2]
+
+
+def _score_points(score: float) -> int:
+    """Conservative whole-number score for human/JSON display."""
+    return int(_clamp(score, 0.0, 100.0))
 
 
 # ─────────────── AST walker: assertion-light tests ──────────────
@@ -292,16 +324,12 @@ def _render(report: TrustReport, *, verbose: bool) -> None:
 
 def _render_header(report: TrustReport) -> None:
     _, color, emoji, word = _tier(report.score)
-    score_txt = f"{color}{report.score:.0f}/100{RESET}"
+    score_txt = f"{color}{_score_points(report.score)}/100{RESET}"
     delta_txt = ""
     if report.prev_score is not None:
         delta = report.score - report.prev_score
         delta_txt = f"  {_delta_arrow(delta)} {delta:+.1f} since last run"
-    sentence = _verdict_sentence(
-        suspicious_count=len(report.suspicious),
-        crap_count=len(report.crap_rows),
-        mutation=report.mutation,
-    )
+    sentence = _verdict_sentence(_verdict_signals(report))
     ui.section("Trust")
     ui.kv_block([
         ("score", f"{score_txt}{delta_txt}  {emoji} {word}"),
@@ -374,14 +402,39 @@ def _render_diff(report: TrustReport) -> None:
 
 def _render_next_actions(report: TrustReport, *, verbose: bool) -> None:
     ui.section("Next Actions")
-    if not report.suspicious and not report.crap_rows:
+    if not _has_next_actions(report):
         print("    (none)")
         return
     if report.suspicious:
         _render_suspicious_actions(report.suspicious, verbose=verbose)
     if report.crap_rows:
         _render_crap_actions(report.crap_rows, verbose=verbose)
-    print("    Refresh with `interlocks trust --refresh --no-trend` or `interlocks ci`.")
+    _render_mutation_next_action(report, verbose=verbose)
+    if _coverage_below_floor(report):
+        print(f"    Raise coverage to {report.coverage_min:.0f}% or lower coverage_min.")
+
+
+def _has_next_actions(report: TrustReport) -> bool:
+    return (
+        bool(report.suspicious)
+        or bool(report.crap_rows)
+        or _mutation_missing(report)
+        or _mutation_below_floor(report)
+        or _coverage_below_floor(report)
+    )
+
+
+def _render_mutation_next_action(report: TrustReport, *, verbose: bool) -> None:
+    if _mutation_missing(report):
+        print(f"    {_missing_mutation_action_message(report)}")
+        return
+    if _mutation_below_floor(report):
+        _render_mutation_actions(
+            report.mutation,
+            report.mutation_min_score,
+            report.mutation_max_runtime,
+            verbose=verbose,
+        )
 
 
 def _render_suspicious_actions(rows: list[TestInspection], *, verbose: bool) -> None:
@@ -403,6 +456,25 @@ def _render_crap_actions(rows: list[CrapRow], *, verbose: bool) -> None:
         limit=3,
         indent="      ",
         formatter=lambda r: f"      {r.path}::{r.name}  cov {r.coverage * 100:.0f}%",
+    )
+
+
+def _render_mutation_actions(
+    mutation: MutationSummary | None,
+    mutation_min_score: float,
+    mutation_max_runtime: int,
+    *,
+    verbose: bool,
+) -> None:
+    print(f"    {_mutation_action_message(mutation, mutation_min_score, mutation_max_runtime)}")
+    if mutation is None or mutation.completed is False or not mutation.survivors:
+        return
+    _print_truncated(
+        mutation.survivors,
+        verbose=verbose,
+        limit=3,
+        indent="      ",
+        formatter=lambda survivor: f"      {survivor}",
     )
 
 
@@ -446,16 +518,55 @@ def cmd_trust() -> None:
     no_trend = "--no-trend" in sys.argv
 
     if "--refresh" in sys.argv:
-        cmd_coverage(min_pct=0)
+        _refresh_trust_coverage()
 
-    if not Path(".coverage").exists():
-        _trust_unavailable("no coverage data — run `interlocks coverage` first", start)
+    cov_file = _trust_coverage_xml(cfg, start, no_trend=no_trend)
+    if cov_file is None:
         return
+
+    report, cache = _build_trust_report(cfg, cov_file, no_trend=no_trend)
+    _emit_trust_report(report, cache, start=start, no_trend=no_trend)
+
+
+def _refresh_trust_coverage() -> None:
+    try:
+        cmd_coverage(min_pct=0, include_properties=True, property_profile="ci", emit_json=False)
+    except SystemExit as exc:
+        if ui.is_json():
+            code = exc.code if isinstance(exc.code, int) else 1
+            ui.print_json({
+                "command": "trust",
+                "error": "coverage refresh failed",
+                "exit_code": code,
+                "next_actions": [
+                    {
+                        "kind": "coverage",
+                        "message": "Run `interlocks coverage --properties=ci` for details.",
+                    }
+                ],
+            })
+        raise
+
+
+def _trust_coverage_xml(cfg: InterlockConfig, start: float, *, no_trend: bool) -> Path | None:
+    cov_cache = Path(".coverage")
+    if not cov_cache.exists():
+        _trust_unavailable("no coverage data — run `interlocks coverage` first", start)
+        return None
+    if coverage_cache_is_stale(cov_cache, cfg):
+        command = _trust_refresh_command(json_mode=ui.is_json(), no_trend=no_trend)
+        _trust_unavailable(f"coverage data is stale — run `{command}`", start)
+        return None
     cov_file = generate_coverage_xml()
     if not cov_file.exists():
         _trust_unavailable("coverage.xml not generated — run `interlocks coverage` first", start)
-        return
+        return None
+    return cov_file
 
+
+def _build_trust_report(
+    cfg: InterlockConfig, cov_file: Path, *, no_trend: bool
+) -> tuple[TrustReport, Path]:
     cov_map = parse_coverage(cov_file)
     cov_pct = _coverage_pct(cov_map)
 
@@ -464,6 +575,7 @@ def cmd_trust() -> None:
     crap_rows.sort(key=lambda r: r.crap, reverse=True)
 
     mutation = read_mutation_summary()
+    mutation_evidence = read_mutation_evidence(cfg.project_root)
     suspicious = _flag_suspicious(_collect_test_inspections(cfg.test_dir, cfg))
     diff_changed = changed_py_files_vs("HEAD~1")
 
@@ -485,28 +597,50 @@ def cmd_trust() -> None:
         mutation=mutation,
         coverage_pct=cov_pct,
         crap_max=cfg.crap_max,
+        coverage_min=float(cfg.coverage_min),
+        mutation_min_score=cfg.mutation_min_score,
+        mutation_max_runtime=cfg.mutation_max_runtime,
+        mutation_evidence_stale=mutation_evidence_is_stale(cfg.project_root),
+        mutation_evidence_no_results=_mutation_evidence_no_results(mutation_evidence),
         diff_changed=diff_changed,
         diff_new_crap=[r for r in crap_rows if r.path in diff_changed],
     )
+    return report, cache
+
+
+def _emit_trust_report(report: TrustReport, cache: Path, *, start: float, no_trend: bool) -> None:
     if ui.is_json():
         ui.print_json(_trust_json(report))
         if not no_trend:
-            _write_trust(cache, score)
+            _write_trust(cache, report.score)
         return
     _render(report, verbose=VERBOSE)
 
     if not no_trend:
-        _write_trust(cache, score)
+        _write_trust(cache, report.score)
     ui.command_footer(start)
 
 
 def _trust_unavailable(reason: str, start: float) -> None:
     """Emit the trust-unavailable result in the active output mode."""
     if ui.is_json():
-        ui.print_json({"command": "trust", "error": reason})
+        ui.print_json({
+            "command": "trust",
+            "error": reason,
+            "next_actions": [{"kind": "coverage", "message": reason}],
+        })
         return
     warn_skip(f"trust: {reason}")
     ui.command_footer(start)
+
+
+def _trust_refresh_command(*, json_mode: bool, no_trend: bool) -> str:
+    command = "interlocks trust --refresh"
+    if json_mode:
+        command += " --json"
+    if no_trend:
+        command += " --no-trend"
+    return command
 
 
 def _trust_json(report: TrustReport) -> dict[str, object]:
@@ -514,9 +648,10 @@ def _trust_json(report: TrustReport) -> dict[str, object]:
     _, _, _, verdict = _tier(report.score)
     return {
         "command": "trust",
-        "score": {"earned": round(report.score), "max": 100},
+        "score": {"earned": _score_points(report.score), "max": 100},
         "verdict": verdict,
         "coverage_pct": (round(report.coverage_pct) if report.coverage_pct is not None else None),
+        "next_actions": _trust_next_actions(report),
         "crap_offenders": [
             {
                 "symbol": f"{r.path}::{r.name}",
@@ -538,6 +673,126 @@ def _trust_json(report: TrustReport) -> dict[str, object]:
     }
 
 
+def _trust_next_actions(report: TrustReport) -> list[dict[str, object]]:
+    actions: list[dict[str, object]] = []
+    if report.suspicious:
+        actions.append(
+            _trust_action(
+                "suspicious-tests",
+                "Add behavioral assertions, or shorten/mark intentional smoke tests.",
+                [f"{t.file}::{t.name}" for t in report.suspicious],
+            )
+        )
+    if report.crap_rows:
+        actions.append(
+            _trust_action(
+                "crap",
+                "Cover or simplify hot functions.",
+                [f"{r.path}::{r.name}" for r in report.crap_rows],
+            )
+        )
+    if _mutation_missing(report):
+        actions.append({
+            "kind": "mutation",
+            "message": _missing_mutation_action_message(report),
+            "targets": [],
+        })
+    elif _mutation_incomplete(report) or _mutation_below_floor(report):
+        actions.append(_trust_mutation_action(report))
+    if _coverage_below_floor(report):
+        actions.append({
+            "kind": "coverage",
+            "message": f"Raise coverage to {report.coverage_min:.0f}% or lower coverage_min.",
+            "targets": [],
+        })
+    return actions
+
+
+def _trust_action(kind: str, message: str, targets: list[str]) -> dict[str, object]:
+    action: dict[str, object] = {
+        "kind": kind,
+        "message": message,
+        "targets": targets[:TRUST_ACTION_TARGET_LIMIT],
+    }
+    if len(targets) > TRUST_ACTION_TARGET_LIMIT:
+        action["omitted_targets"] = len(targets) - TRUST_ACTION_TARGET_LIMIT
+    return action
+
+
+def _trust_mutation_action(report: TrustReport) -> dict[str, object]:
+    message = _mutation_action_message(
+        report.mutation,
+        report.mutation_min_score,
+        report.mutation_max_runtime,
+    )
+    if report.mutation is not None and report.mutation.completed is False:
+        return {"kind": "mutation", "message": message}
+    targets = list(report.mutation.survivors) if report.mutation is not None else []
+    return _trust_action("mutation", message, targets)
+
+
+def _mutation_action_message(
+    mutation: MutationSummary | None, mutation_min_score: float, mutation_max_runtime: int = 0
+) -> str:
+    command = _mutation_retry_command(mutation_min_score, mutation_max_runtime)
+    if mutation is not None and mutation.completed is False:
+        return (
+            f"Last mutation run timed out; rerun `{command}` with more runtime, "
+            "then cover or simplify surviving mutants."
+        )
+    return (
+        f"Run `{command}`; cover or simplify surviving mutants, or lower "
+        "mutation_min_score after review."
+    )
+
+
+def _missing_mutation_action_message(report: TrustReport) -> str:
+    command = _mutation_retry_command(report.mutation_min_score, report.mutation_max_runtime)
+    if report.mutation_evidence_no_results:
+        return (
+            "Last mutation run timed out before any mutants were checked; "
+            f"rerun `{command}` with more runtime, or use `--changed-only` for a bounded pass."
+        )
+    if report.mutation_evidence_stale:
+        return f"Cached mutation evidence is stale after a newer mutmut run; rerun `{command}`."
+    return f"Run `{command}`."
+
+
+def _mutation_retry_command(mutation_min_score: float, mutation_max_runtime: int) -> str:
+    command = f"interlocks mutation --min-score={mutation_min_score:.0f}"
+    if mutation_max_runtime > 0:
+        command += f" --max-runtime={mutation_max_runtime}"
+    return command
+
+
+def _mutation_below_floor(report: TrustReport) -> bool:
+    return (
+        report.mutation is not None
+        and report.mutation_min_score > 0
+        and report.mutation.score < report.mutation_min_score
+    )
+
+
+def _mutation_incomplete(report: TrustReport) -> bool:
+    return (
+        report.mutation is not None
+        and report.mutation_min_score > 0
+        and report.mutation.completed is False
+    )
+
+
+def _mutation_missing(report: TrustReport) -> bool:
+    return report.mutation is None and report.mutation_min_score > 0
+
+
+def _coverage_below_floor(report: TrustReport) -> bool:
+    return (
+        report.coverage_pct is not None
+        and report.coverage_min > 0
+        and report.coverage_pct < report.coverage_min
+    )
+
+
 def _coverage_pct(cov_map: dict[str, dict[int, int]]) -> float | None:
     """Line hit rate (%) across every tracked file, or None when nothing tracked."""
     total = 0
@@ -548,14 +803,47 @@ def _coverage_pct(cov_map: dict[str, dict[int, int]]) -> float | None:
     return (hit / total * 100) if total else None
 
 
-def _verdict_sentence(
-    *, suspicious_count: int, crap_count: int, mutation: MutationSummary | None
-) -> str:
-    bits: list[str] = []
-    if suspicious_count:
-        bits.append(f"{suspicious_count} suspicious test(s)")
-    if crap_count:
-        bits.append(f"{crap_count} hot fn(s)")
-    if mutation is not None and mutation.survived:
-        bits.append(f"{mutation.survived} surviving mutant(s)")
-    return ", ".join(bits) if bits else "all clear"
+def _verdict_signals(report: TrustReport) -> _VerdictSignals:
+    return _VerdictSignals(
+        suspicious_count=len(report.suspicious),
+        crap_count=len(report.crap_rows),
+        mutation=report.mutation,
+        mutation_min_score=report.mutation_min_score,
+        coverage_pct=report.coverage_pct,
+        coverage_min=report.coverage_min,
+    )
+
+
+def _verdict_sentence(signals: _VerdictSignals) -> str:
+    bits = (
+        _count_sentence(signals.suspicious_count, "suspicious test(s)"),
+        _count_sentence(signals.crap_count, "hot fn(s)"),
+        _coverage_gap_sentence(signals.coverage_pct, signals.coverage_min),
+        _mutation_gap_sentence(signals.mutation, signals.mutation_min_score),
+    )
+    parts = tuple(bit for bit in bits if bit)
+    return ", ".join(parts) if parts else "all clear"
+
+
+def _count_sentence(count: int, label: str) -> str:
+    return f"{count} {label}" if count else ""
+
+
+def _coverage_gap_sentence(coverage_pct: float | None, coverage_min: float) -> str:
+    if coverage_pct is None or coverage_min <= 0 or coverage_pct >= coverage_min:
+        return ""
+    return f"coverage {coverage_pct:.0f}% below {coverage_min:.0f}%"
+
+
+def _mutation_gap_sentence(mutation: MutationSummary | None, mutation_min_score: float) -> str:
+    if mutation_min_score <= 0:
+        return ""
+    if mutation is None:
+        return "mutation unavailable"
+    if mutation.completed is False:
+        if mutation.score < mutation_min_score:
+            return f"partial mutation {mutation.score:.0f}% below {mutation_min_score:.0f}%"
+        return "partial mutation evidence"
+    if mutation.score >= mutation_min_score:
+        return ""
+    return f"mutation {mutation.score:.0f}% below {mutation_min_score:.0f}%"

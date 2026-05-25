@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -69,6 +70,29 @@ def test_lint_clean_in_process(
     assert "ok" in out
 
 
+def test_lint_json_clean_in_process(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.lint import cmd_lint
+
+    (tmp_project / "sample.py").write_text(CLEAN, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    clear_cache()
+
+    cmd_lint()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "lint"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "lint"
+    assert captured.err.startswith("interlocks: [lint]")
+
+
 def test_lint_violating_in_process(tmp_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from interlocks.tasks.lint import cmd_lint
 
@@ -77,6 +101,29 @@ def test_lint_violating_in_process(tmp_project: Path, monkeypatch: pytest.Monkey
     with pytest.raises(SystemExit) as exc:
         cmd_lint()
     assert exc.value.code != 0
+
+
+def test_lint_json_violating_in_process(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.lint import cmd_lint
+
+    (tmp_project / "sample.py").write_text(VIOLATING, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    clear_cache()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_lint()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["command"] == "lint"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
 
 
 # ─────────────── bundled ruff defaults fallback ─────────────────────
@@ -178,6 +225,26 @@ def test_progressive_lint_records_count_and_passes_with_no_cap(
     assert run_summary.current().lint_violations == 3
 
 
+def test_progressive_lint_json_reports_count_with_no_cap(
+    progressive_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(lint_mod, "capture", _stub_capture(_THREE_VIOLATIONS))
+
+    lint_mod.cmd_lint_progressive()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "lint"
+    assert payload["mode"] == "progressive"
+    assert payload["passed"] is True
+    assert payload["violations"] == 3
+    assert payload["limit"] is None
+    assert "interlocks: [lint] ruff check running" in captured.err
+
+
 @pytest.mark.parametrize(("cap", "exit_code"), [(5, None), (2, 1)])
 def test_progressive_lint_gates_on_cap(
     progressive_project: Path,
@@ -195,12 +262,51 @@ def test_progressive_lint_gates_on_cap(
     assert exc.value.code == exit_code
 
 
+def test_progressive_lint_json_fails_over_cap(
+    progressive_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_lint_baseline(2)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(lint_mod, "capture", _stub_capture(_THREE_VIOLATIONS))
+
+    with pytest.raises(SystemExit) as exc:
+        lint_mod.cmd_lint_progressive()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert payload["passed"] is False
+    assert payload["status"] == "failed"
+    assert payload["violations"] == 3
+    assert payload["limit"] == 2
+    assert payload["examples"] == _THREE_VIOLATIONS.splitlines()
+    assert payload["next_actions"]
+
+
 def test_progressive_lint_warns_when_ruff_crashes(
     progressive_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(lint_mod, "capture", _stub_capture("", returncode=2))
     lint_mod.cmd_lint_progressive()
     assert run_summary.current().lint_violations is None
+
+
+def test_progressive_lint_json_skips_when_ruff_crashes(
+    progressive_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(lint_mod, "capture", _stub_capture("", returncode=2))
+
+    lint_mod.cmd_lint_progressive()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert payload["violations"] is None
+    assert payload["reason"] == "ruff rc=2"
 
 
 def test_cmd_lint_dispatches_to_progressive_under_preset(

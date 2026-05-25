@@ -164,9 +164,11 @@ changed_ref = "main"
 
 File-level gates include fix, format, typecheck, and CRAP. Graph-wide gates
 such as dependency checks, behavior attribution, and acceptance are skipped
-with a banner, and the test suite is skipped because running it would re-open
-pre-existing failures the flag is meant to filter out. Run `interlocks test`
-separately when you want the full suite. `pre-commit` and `ci` are unchanged.
+with a banner. Property tests are skipped too because they are property-wide
+rather than file-level, and the test suite is skipped because running it would
+re-open pre-existing failures the flag is meant to filter out. Run
+`interlocks test` and `interlocks properties --profile=check` separately when
+you want the full suite. `pre-commit` and `ci` are unchanged.
 
 ## Debugging Failing Gates
 
@@ -176,7 +178,7 @@ When `interlocks check` or `interlocks ci` fails, run the failing gate directly:
 il lint
 il typecheck
 il test
-il coverage --min=80
+il coverage --min=80 --properties
 il deps
 il audit
 il arch
@@ -206,14 +208,17 @@ Unknown skip labels exit 1, and skipped gates print warnings. `fix` and
 ## Advanced Evidence Gates
 
 For mature repositories and AI-authored review, use `crap`, `mutation`,
-`trust`, and `evaluate` beyond the local edit loop.
+`properties`, `trust`, and `evaluate` beyond the local edit loop.
 
 - `crap` catches complex code without matching tests.
 - `mutation` catches tests that execute code without checking behavior.
+- `properties` catches invariant breaks across generated inputs.
+- `property-candidates --json --uncovered` ranks source functions for the next
+  property-test slice, suppressing functions already referenced by property tests.
 - `coverage` and complexity trends expose drift before users notice.
 - `trust` combines coverage, CRAP, mutation, suspicious-test inspection, recent
   git diff, and next actions into one report.
-- `evaluate` gives a read-only 11-check scorecard for policy and evidence gaps.
+- `evaluate` gives a read-only 12-check scorecard for policy and evidence gaps.
 
 interlocks complements LLM-based reviewers such as CodeRabbit, Greptile, or
 Diamond. They catch style, design, and intent. interlocks catches

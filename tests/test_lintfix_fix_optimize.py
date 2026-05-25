@@ -123,6 +123,25 @@ def test_fix_optimize_writes_optimize_json_with_selected_and_not_selected(repo: 
         assert c["reason"], c
 
 
+def test_fix_optimize_json_writes_compact_summary(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+
+    result = _run(repo, "--json")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "fix-optimize"
+    assert payload["passed"] is True
+    assert payload["status"] == "planned"
+    assert payload["plan_path"] == ".lintfix/plan.json"
+    assert payload["optimize_path"] == ".lintfix/optimize.json"
+    assert payload["candidate_count"] >= 2
+    assert payload["selected_count"] >= 1
+    assert "I001" in payload["selected_rules"]
+    assert payload["apply"] == {"requested": False, "status": "not-requested"}
+
+
 def test_fix_optimize_never_selects_unsafe_in_unblock(repo: Path) -> None:
     (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
     result = _run(repo)
@@ -162,6 +181,28 @@ def test_fix_optimize_apply_restores_tree_on_verify_failure(repo: Path) -> None:
     assert f.read_text(encoding="utf-8") == original
     # Failed patch is written for review.
     assert (repo / ".lintfix" / "failed.patch").is_file()
+
+
+def test_fix_optimize_apply_failure_json_reports_before_exit(repo: Path) -> None:
+    f = repo / "sample.py"
+    original = _DIRTY
+    f.write_text(original, encoding="utf-8")
+
+    result = _run(
+        repo,
+        "--apply",
+        "--json",
+        f'--verify-cmd={sys.executable} -c "import sys;sys.exit(1)"',
+    )
+
+    assert result.returncode != 0
+    assert f.read_text(encoding="utf-8") == original
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "fix-optimize"
+    assert payload["passed"] is False
+    assert payload["status"] == "apply-failed"
+    assert payload["apply"]["status"] == "failed"
+    assert payload["apply"]["failed_patch"] == ".lintfix/failed.patch"
 
 
 def test_fix_optimize_no_changed_files_exits_clean(repo: Path) -> None:
@@ -222,6 +263,18 @@ def test_fix_optimize_annotate_emits_annotation_lines(repo: Path) -> None:
     assert result.returncode == 0, result.stderr + result.stdout
     assert "::notice file=" in result.stdout
     assert "[I001]" in result.stdout
+
+
+def test_fix_optimize_annotate_json_suppresses_workflow_commands(repo: Path) -> None:
+    (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
+
+    result = _run(repo, "--annotate", "--json")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "::notice" not in result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["annotations"]["source"] == "optimize"
+    assert payload["annotations"]["annotation_count"] >= 1
 
 
 def test_fix_optimize_metrics_writes_metrics_json(repo: Path) -> None:
@@ -435,6 +488,66 @@ def _opts(base: str = "HEAD", budget_name: str = "unblock") -> fix_optimize_mod.
     )
 
 
+def test_standalone_json_requested_requires_json_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fix_optimize_mod.ui, "is_json", lambda: False)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--json"])
+
+    assert fix_optimize_mod._standalone_json_requested() is False
+
+
+def test_standalone_json_requested_accepts_alias_after_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fix_optimize_mod.ui, "is_json", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "--json", "unblock"])
+
+    assert fix_optimize_mod._standalone_json_requested() is True
+
+
+def test_standalone_json_requested_rejects_flag_only_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fix_optimize_mod.ui, "is_json", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "--json"])
+
+    assert fix_optimize_mod._standalone_json_requested() is False
+
+
+def test_fix_optimize_error_payload_is_exact() -> None:
+    payload = fix_optimize_mod._fix_optimize_error_payload(
+        _opts(base="feature", budget_name="renovation"),
+        plan_module.DiscoveryError(7, "ruff boom"),
+    )
+
+    assert payload == {
+        "command": "fix-optimize",
+        "passed": False,
+        "status": "discovery-failed",
+        "base": "feature",
+        "budget": "renovation",
+        "error": "ruff discovery failed",
+        "returncode": 7,
+        "stderr_excerpt": "ruff boom",
+    }
+
+
+def test_stderr_excerpt_trims_without_truncating_exact_limit() -> None:
+    assert fix_optimize_mod._stderr_excerpt("  abc  ", limit=3) == "abc"
+
+
+def test_fix_optimize_error_payload_truncates_stderr_at_contract_limit() -> None:
+    payload = fix_optimize_mod._fix_optimize_error_payload(
+        _opts(),
+        plan_module.DiscoveryError(2, "x" * 801),
+    )
+
+    assert payload["stderr_excerpt"] == ("x" * 799) + "\u2026"
+
+
+def test_stderr_excerpt_truncates_to_limit_with_ellipsis() -> None:
+    assert fix_optimize_mod._stderr_excerpt("abcdef", limit=4) == "abc\u2026"
+
+
 def test_print_summary_no_candidates(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
     fix_optimize_mod._print_summary(_plan(), _selection(), _opts(), ".lintfix/optimize.json")
     out = capsys.readouterr().out
@@ -562,6 +675,81 @@ def test_apply_selection_verify_failure_writes_failed_patch_and_exits(
     assert failed.read_text(encoding="utf-8") == "FAILED-DIFF"
 
 
+def test_write_failed_patch_joins_nonblank_diffs_with_newline(tmp_path: Path) -> None:
+    plan_by_rule = {
+        "I001": _planned_candidate(rule="I001", diff_text="FIRST"),
+        "F401": _planned_candidate(rule="F401", diff_text=""),
+        "UP007": _planned_candidate(rule="UP007", diff_text="SECOND"),
+    }
+
+    fix_optimize_mod._write_failed_patch_if_any(
+        tmp_path,
+        plan_by_rule,
+        (
+            ("lint", "I001", ("sample.py",)),
+            ("lint", "F401", ("sample.py",)),
+            ("lint", "UP007", ("sample.py",)),
+        ),
+    )
+
+    failed = tmp_path / ".lintfix" / "failed.patch"
+    assert failed.read_text(encoding="utf-8") == "FIRST\nSECOND"
+
+
+def test_fail_apply_reports_exact_row_and_defaults_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_row(*args: object, **kwargs: object) -> None:
+        rows.append((args, kwargs))
+
+    monkeypatch.setattr(fix_optimize_mod.ui, "row", fake_row)
+    result = BatchVerifyResult(
+        applied=False,
+        returncode=0,
+        stdout="",
+        stderr="boom",
+        restored=True,
+        applied_rules=(),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        fix_optimize_mod._fail_apply(result)
+
+    assert exc.value.code == 1
+    assert rows == [
+        (
+            ("fix-optimize", "apply", "verify failed; tree restored"),
+            {"state": "fail"},
+        )
+    ]
+
+
+def test_fail_apply_reports_failed_rule_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    rows: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    monkeypatch.setattr(
+        fix_optimize_mod.ui,
+        "row",
+        lambda *args, **kwargs: rows.append((args, kwargs)),
+    )
+    result = BatchVerifyResult(
+        applied=False,
+        returncode=9,
+        stdout="",
+        stderr="boom",
+        restored=True,
+        applied_rules=(),
+        failed_rule="I001",
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        fix_optimize_mod._fail_apply(result)
+
+    assert exc.value.code == 9
+    assert rows == [(("fix-optimize", "apply", "rule=I001"), {"state": "fail"})]
+
+
 def test_apply_selection_format_candidate_uses_candidate_verifier(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -672,6 +860,64 @@ def test_cmd_fix_optimize_discovery_error_exits(
             base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
         )
     assert exc.value.code == 2
+
+
+def test_exit_if_discovery_failed_human_branch_reports_row_and_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    dumps: list[tuple[object, str, str]] = []
+    discovery_error = plan_module.DiscoveryError(7, "ruff boom")
+
+    def fake_row(*args: object, **kwargs: object) -> None:
+        rows.append((args, kwargs))
+
+    def fake_dump_and_exit(code: object, stdout: str, stderr: str) -> None:
+        dumps.append((code, stdout, stderr))
+        raise SystemExit(code)
+
+    monkeypatch.setattr(fix_optimize_mod.ui, "row", fake_row)
+    monkeypatch.setattr(fix_optimize_mod, "dump_and_exit", fake_dump_and_exit)
+
+    with pytest.raises(SystemExit) as exc:
+        fix_optimize_mod._exit_if_discovery_failed(
+            _opts(),
+            _plan(discovery_error=discovery_error),
+            should_emit_json=False,
+        )
+
+    assert exc.value.code == 7
+    assert rows == [
+        (
+            ("fix-optimize", "discover", "ruff failed"),
+            {"detail": "rc=7", "state": "fail"},
+        )
+    ]
+    assert dumps == [(7, "", "ruff boom")]
+
+
+def test_cmd_fix_optimize_discovery_error_json(
+    project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--json"])
+    monkeypatch.setattr(
+        plan_module,
+        "build_plan",
+        lambda **_kw: _plan(discovery_error=plan_module.DiscoveryError(2, "ruff boom")),
+    )
+    with pytest.raises(SystemExit) as exc:
+        fix_optimize_mod.cmd_fix_optimize(
+            base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
+        )
+
+    assert exc.value.code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "fix-optimize"
+    assert payload["passed"] is False
+    assert payload["status"] == "discovery-failed"
+    assert payload["stderr_excerpt"] == "ruff boom"
 
 
 def test_cmd_fix_optimize_apply_path_invokes_verifier(

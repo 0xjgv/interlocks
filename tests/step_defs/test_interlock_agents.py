@@ -54,6 +54,13 @@ def _file_exists(ctx: AgentsContext, relpath: str) -> None:
     assert (ctx.project / relpath).is_file()
 
 
+@then(parsers.parse('the output contains "{needle}"'))
+def _output_contains(ctx: AgentsContext, needle: str) -> None:
+    assert ctx.result is not None
+    combined = ctx.result.stdout + ctx.result.stderr
+    assert needle in combined, f"expected {needle!r} in:\n{combined}"
+
+
 @then(parsers.parse('"{relpath}" contains "{needle}"'))
 def _file_contains(ctx: AgentsContext, relpath: str, needle: str) -> None:
     body = (ctx.project / relpath).read_text(encoding="utf-8")

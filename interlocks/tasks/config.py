@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from interlocks import ui
 from interlocks.config import (
@@ -47,7 +47,7 @@ def cmd_config() -> None:
         _cmd_config_show(args[1:])
         return
     if args:
-        fail_skip(_config_usage())
+        _fail_config_usage()
     project_root = find_project_root()
     pyproject = project_root / "pyproject.toml"
     cfg = load_optional_config()
@@ -85,6 +85,22 @@ def _config_usage() -> str:
     return f"usage: interlocks config [show <{tools}> [--bundled-only] [--json]]"
 
 
+def _config_usage_payload() -> dict[str, object]:
+    return {
+        "command": "config",
+        "error": "invalid usage",
+        "usage": _config_usage(),
+        "expected_tools": list(TOOL_CONFIG_SPECS),
+    }
+
+
+def _fail_config_usage() -> NoReturn:
+    if ui.is_json():
+        ui.print_json(_config_usage_payload())
+        raise SystemExit(1)
+    fail_skip(_config_usage())
+
+
 def _cmd_config_show(args: list[str]) -> None:
     bundled_only = False
     positional: list[str] = []
@@ -92,11 +108,11 @@ def _cmd_config_show(args: list[str]) -> None:
         if arg == "--bundled-only":
             bundled_only = True
         elif arg.startswith("-"):
-            fail_skip(_config_usage())
+            _fail_config_usage()
         else:
             positional.append(arg)
     if len(positional) != 1 or positional[0] not in TOOL_CONFIG_SPECS:
-        fail_skip(_config_usage())
+        _fail_config_usage()
 
     cfg = load_config()
     source = tool_config_source(cfg, positional[0])
@@ -199,6 +215,9 @@ _RESOLVED_RENDERERS: dict[str, Callable[[InterlockConfig], object]] = {
     "features_dir": lambda cfg: (
         cfg.features_dir_arg if cfg.features_dir_arg is not None else "(none)"
     ),
+    "properties_dir": lambda cfg: (
+        cfg.properties_dir_arg if cfg.properties_dir_arg is not None else "(none)"
+    ),
     "pytest_args": lambda cfg: list(cfg.pytest_args) if cfg.pytest_args else "[]",
     "acceptance_runner": lambda cfg: (
         cfg.acceptance_runner if cfg.acceptance_runner is not None else "(auto)"
@@ -246,10 +265,13 @@ def _print_config_json(cfg: InterlockConfig | None, pyproject: Path) -> None:
                 value = _json_value(cfg, name)
                 source = cfg.value_sources.get(name, "unknown")
             keys.append({
+                "default": key_doc.default,
+                "description": key_doc.description,
+                "group": group,
                 "key": name,
+                "type": key_doc.type,
                 "value": value,
                 "source": source,
-                "group": group,
             })
     ui.print_json({
         "command": "config",
@@ -331,15 +353,15 @@ def _source_label(cfg: InterlockConfig | None, key: str) -> str:
 _PRECEDENCE_LINES: tuple[str, ...] = (
     "  1. CLI flags (--min=, --max=, --max-runtime=, ...)",
     "  2. [tool.interlocks] in nearest pyproject.toml",
-    "  3. Preset defaults (baseline|strict|legacy)",
+    "  3. Preset defaults (baseline|strict|legacy|progressive)",
     "  4. Bundled defaults",
 )
 
 
 _EXAMPLE_LINES: tuple[str, ...] = (
-    "  Apply preset:        interlocks presets set baseline",
+    "  Apply preset:        interlocks presets set progressive",
     "  Override threshold:  [tool.interlocks]",
-    '                       preset = "baseline"',
+    '                       preset = "progressive"',
     "                       coverage_min = 85",
     '  Pin runner/invoker:  test_runner = "pytest"',
     '                       test_invoker = "uv"',
@@ -352,7 +374,7 @@ def _print_next_steps(cfg: InterlockConfig | None, *, pyproject_present: bool) -
         steps.append("Scaffold a project:  interlocks init")
     if cfg is not None and cfg.preset is None:
         steps.append("Pick a preset:       interlocks presets")
-        steps.append("Set one:             interlocks presets set baseline")
+        steps.append("Set one:             interlocks presets set progressive")
     steps.append("See full help:       interlocks help")
     for step in steps:
         print(f"  {step}")

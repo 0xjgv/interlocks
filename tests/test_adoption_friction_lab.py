@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tools import adoption_friction_lib, run_adoption_friction_lab
 
 
@@ -93,6 +95,7 @@ def test_write_report_contains_scenario_payload(tmp_path: Path) -> None:
     assert payload["scenarios"][0]["artifacts"] == [".interlocks/baseline.json"]
 
 
+@pytest.mark.mutmut_incompatible
 def test_runner_subprocess_smoke_bare_repo(tmp_path: Path) -> None:
     script = Path(__file__).resolve().parents[1] / "tools" / "run_adoption_friction_lab.py"
     result = subprocess.run(

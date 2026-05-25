@@ -14,7 +14,9 @@ from interlocks.runner import capture
 
 _HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 _FULL_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
-_DIFF_FILE = re.compile(r"^\+\+\+ (?:b/)?(.+?)(?:\t.*)?$")
+_DIFF_GIT_FILE = re.compile(r"^diff --git a/(.+?) b/(.+)$")
+_DIFF_OLD_FILE = re.compile(r"^--- (.+?)(?:\t.*)?$")
+_DIFF_FILE = re.compile(r"^\+\+\+ (.+?)(?:\t.*)?$")
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,13 @@ class _AuthorEditTotals:
         )
 
 
+@dataclass
+class _DiffParseState:
+    current_path: str | None = None
+    old_header_path: str | None = None
+    git_post_path: str | None = None
+
+
 def resolve_base(base: str) -> str:
     """Return ``merge-base(base, HEAD)`` or empty string when ``base`` is unknown."""
     return capture(["git", "merge-base", base, "HEAD"]).stdout.strip()
@@ -115,29 +124,44 @@ def author_edit_cost(base: str, files: tuple[str, ...] | None = None) -> AuthorE
     result = capture(args)
     deleted = set(deleted_files(base))
     totals = _AuthorEditTotals()
+    counted_deleted: set[str] = set()
     for line in result.stdout.splitlines():
-        _add_numstat_line(totals, line, deleted)
+        counted = _add_numstat_line(totals, line, deleted)
+        if counted is not None:
+            counted_deleted.add(counted)
     if files:
-        _add_scoped_deleted_lines(totals, base)
+        _add_scoped_deleted_lines(totals, base, counted_deleted=counted_deleted)
     return totals.as_cost()
 
 
-def _add_numstat_line(totals: _AuthorEditTotals, line: str, deleted: set[str]) -> None:
+def _add_numstat_line(totals: _AuthorEditTotals, line: str, deleted: set[str]) -> str | None:
     parts = line.split("\t")
     if len(parts) < 3 or parts[0] == "-" or parts[1] == "-":
-        return
-    added = int(parts[0])
-    removed = int(parts[1])
+        return None
+    try:
+        added = int(parts[0])
+        removed = int(parts[1])
+    except ValueError:
+        return None
+    if added < 0 or removed < 0:
+        return None
     totals.additions += added
     totals.deletions += removed
     totals.replacement_pairs += min(added, removed)
     if parts[-1] in deleted:
         totals.deleted_file_lines += removed
+        return parts[-1]
+    return None
 
 
-def _add_scoped_deleted_lines(totals: _AuthorEditTotals, base: str) -> None:
+def _add_scoped_deleted_lines(
+    totals: _AuthorEditTotals, base: str, *, counted_deleted: set[str]
+) -> None:
     deleted_result = capture(["git", "diff", "--numstat", "--diff-filter=D", base])
     for line in deleted_result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[-1] in counted_deleted:
+            continue
         removed = _deleted_numstat_removed(line)
         totals.deletions += removed
         totals.deleted_file_lines += removed
@@ -147,7 +171,10 @@ def _deleted_numstat_removed(line: str) -> int:
     parts = line.split("\t")
     if len(parts) < 3 or parts[1] == "-" or not parts[-1].endswith(".py"):
         return 0
-    return int(parts[1])
+    try:
+        return int(parts[1])
+    except ValueError:
+        return 0
 
 
 def changed_hunks(base: str, files: tuple[str, ...]) -> dict[str, FileHunks]:
@@ -168,51 +195,117 @@ def changed_hunks(base: str, files: tuple[str, ...]) -> dict[str, FileHunks]:
 
 
 def _parse_diff(text: str) -> dict[str, FileHunks]:
-    current_path: str | None = None
-    by_file: dict[str, list[Hunk]] = {}
-    for line in text.splitlines():
-        m_file = _DIFF_FILE.match(line)
-        if m_file:
-            captured = m_file.group(1)
-            if captured is None:
-                continue
-            current_path = captured
-            by_file.setdefault(captured, [])
-            continue
-        m_hunk = _HUNK_HEADER.match(line)
-        if m_hunk is None or current_path is None:
-            continue
-        start = int(m_hunk.group(1))
-        count = int(m_hunk.group(2) or "1")
-        if count == 0:
-            continue
-        by_file[current_path].append(Hunk(start, start + count - 1))
+    by_file = _parse_post_image_hunks(text, _HUNK_HEADER, start_group=1, count_group=2)
     return {path: FileHunks(path, tuple(hunks)) for path, hunks in by_file.items()}
 
 
 def changed_line_ranges_from_patch(text: str) -> dict[str, tuple[Hunk, ...]]:
     """Return post-image changed ranges from a unified patch."""
-    by_file: dict[str, list[Hunk]] = {}
-    current_path: str | None = None
-    for line in text.splitlines():
-        m_file = _DIFF_FILE.match(line)
-        if m_file:
-            captured = m_file.group(1)
-            # The widened `_DIFF_FILE` regex also matches a deletion hunk's
-            # `+++ /dev/null` line — it claims no post-image lines.
-            if captured is None or captured == "/dev/null":
-                continue
-            current_path = captured
-            by_file.setdefault(captured, [])
-            continue
-        m_hunk = _FULL_HUNK_HEADER.match(line)
-        if m_hunk is None or current_path is None:
-            continue
-        start = int(m_hunk.group(3))
-        count = int(m_hunk.group(4) or "1")
-        if count:
-            by_file[current_path].append(Hunk(start, start + count - 1))
+    by_file = _parse_post_image_hunks(text, _FULL_HUNK_HEADER, start_group=3, count_group=4)
     return {path: tuple(hunks) for path, hunks in by_file.items()}
+
+
+def _parse_post_image_hunks(
+    text: str,
+    hunk_header: re.Pattern[str],
+    *,
+    start_group: int,
+    count_group: int,
+) -> dict[str, list[Hunk]]:
+    by_file: dict[str, list[Hunk]] = {}
+    state = _DiffParseState()
+    for line in text.splitlines():
+        if _capture_diff_header(line, state, by_file):
+            continue
+        hunk = _hunk_from_header(
+            line, hunk_header, start_group=start_group, count_group=count_group
+        )
+        if hunk is None or state.current_path is None:
+            continue
+        by_file[state.current_path].append(hunk)
+    return by_file
+
+
+def _capture_diff_header(
+    line: str, state: _DiffParseState, by_file: dict[str, list[Hunk]]
+) -> bool:
+    is_git_header, git_path = _git_post_image_path(line)
+    if is_git_header:
+        state.git_post_path = git_path
+        return True
+    is_old_header, old_path = _pre_image_path(line)
+    if is_old_header:
+        state.old_header_path = old_path
+        return True
+    is_file_header, path = _post_image_path(line)
+    if not is_file_header:
+        return False
+    state.current_path = _normalize_post_image_path(
+        state.old_header_path, path, git_post_path=state.git_post_path
+    )
+    state.old_header_path = None
+    state.git_post_path = None
+    if state.current_path is not None:
+        by_file.setdefault(state.current_path, [])
+    return True
+
+
+def _hunk_from_header(
+    line: str,
+    hunk_header: re.Pattern[str],
+    *,
+    start_group: int,
+    count_group: int,
+) -> Hunk | None:
+    match = hunk_header.match(line)
+    if match is None:
+        return None
+    start = int(match.group(start_group))
+    count = int(match.group(count_group) or "1")
+    if count == 0:
+        return None
+    return Hunk(start, start + count - 1)
+
+
+def _git_post_image_path(line: str) -> tuple[bool, str | None]:
+    """Return whether ``line`` is a Git diff header and its post-image path."""
+    m_file = _DIFF_GIT_FILE.match(line)
+    if m_file is None:
+        return False, None
+    return True, m_file.group(2)
+
+
+def _pre_image_path(line: str) -> tuple[bool, str | None]:
+    """Return whether ``line`` is a pre-image file header and its raw path."""
+    m_file = _DIFF_OLD_FILE.match(line)
+    if m_file is None:
+        return False, None
+    return True, m_file.group(1)
+
+
+def _post_image_path(line: str) -> tuple[bool, str | None]:
+    """Return whether ``line`` is a post-image file header and its raw path."""
+    m_file = _DIFF_FILE.match(line)
+    if m_file is None:
+        return False, None
+    path = m_file.group(1)
+    if path == "/dev/null":
+        return True, None
+    return True, path
+
+
+def _normalize_post_image_path(
+    old_path: str | None, new_path: str | None, *, git_post_path: str | None = None
+) -> str | None:
+    """Strip Git's ``b/`` prefix only when paired header context proves it."""
+    if new_path is None:
+        return None
+    if not new_path.startswith("b/"):
+        return new_path
+    stripped = new_path[2:]
+    if old_path in ("/dev/null", f"a/{stripped}") or git_post_path == stripped:
+        return stripped
+    return new_path
 
 
 def _full_file_hunk(path: str) -> Hunk:

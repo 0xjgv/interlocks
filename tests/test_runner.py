@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 import textwrap
@@ -11,12 +12,16 @@ import pytest
 
 from interlocks.runner import (
     Task,
+    _preflight_error_payload,
     _truncate_dump,
+    dump_and_exit,
     generate_coverage_xml,
     print_stage_verdict,
     record_result,
     reset_results,
     results_snapshot,
+    run,
+    run_task_json,
     run_tasks,
     uv_run_with,
     uvx_tool,
@@ -47,6 +52,19 @@ def _row_has(out: str, label: str, status: str) -> bool:
     return any(tag in line and status in line for line in out.splitlines())
 
 
+def test_preflight_error_payload_has_exact_json_contract() -> None:
+    payload = _preflight_error_payload("check", "missing pyproject")
+
+    assert payload == {
+        "command": "check",
+        "passed": False,
+        "error": "missing pyproject",
+        "next_action": (
+            "Run `interlocks init` for a new project, or invoke from a Python project root."
+        ),
+    }
+
+
 def test_run_tasks_all_pass_streams_ok_and_no_exit(capsys: pytest.CaptureFixture[str]) -> None:
     run_tasks([
         _python_task("Alpha", "print('a')"),
@@ -56,6 +74,142 @@ def test_run_tasks_all_pass_streams_ok_and_no_exit(capsys: pytest.CaptureFixture
     assert _row_has(out, "alpha", "ok")
     assert _row_has(out, "bravo", "ok")
     assert "failed" not in out
+
+
+def test_run_can_print_start_status_before_final_status(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    task = Task(
+        "Long coverage",
+        [sys.executable, "-c", ""],
+        label="coverage",
+        display="coverage report + properties",
+        start_status="running",
+    )
+
+    run(task)
+    out = _strip(capsys.readouterr().out)
+
+    assert _row_has(out, "coverage", "running")
+    assert _row_has(out, "coverage", "ok")
+    assert out.index("running") < out.rindex("ok")
+
+
+def test_run_prints_json_start_status_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+    task = Task(
+        "Long coverage",
+        [sys.executable, "-c", ""],
+        label="coverage",
+        display="coverage report + properties",
+        start_status="running",
+    )
+
+    run(task)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "interlocks: [coverage] coverage report + properties running\n"
+
+
+def test_run_prints_json_progress_steps_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+    task = Task(
+        "Compound coverage",
+        [sys.executable, "-c", ""],
+        pre_cmds=([sys.executable, "-c", ""],),
+        label="coverage",
+        progress_steps=("unit tests under coverage", "coverage report"),
+    )
+
+    run(task)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "interlocks: [coverage] unit tests under coverage running (1/2)\n"
+        "interlocks: [coverage] coverage report running (2/2)\n"
+    )
+
+
+def test_run_task_json_emits_single_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    task = Task(
+        "Run tests",
+        [sys.executable, "-c", ""],
+        label="test",
+        display="pytest tests",
+        start_status="running",
+    )
+
+    run_task_json("test", task, {"scope": "unit"})
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "test"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "test"
+    assert payload["scope"] == "unit"
+    assert captured.err == "interlocks: [test] pytest tests running\n"
+
+
+def test_run_task_json_exits_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    task = Task("Run tests", [sys.executable, "-c", "import sys; sys.exit(7)"], label="test")
+
+    with pytest.raises(SystemExit) as exc:
+        run_task_json("test", task)
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "test"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
+
+
+def test_run_tasks_prints_json_start_statuses_to_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "ci", "--json"])
+    tasks = [
+        Task(
+            "Long coverage",
+            [sys.executable, "-c", ""],
+            label="coverage",
+            display="coverage report + properties",
+            start_status="running",
+        ),
+        Task("Quick format", [sys.executable, "-c", ""], label="format", display="ruff format"),
+        Task(
+            "Long tests",
+            [sys.executable, "-c", ""],
+            label="test",
+            display="pytest",
+            start_status="running",
+        ),
+    ]
+
+    run_tasks(tasks)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "interlocks: [coverage] coverage report + properties running\n"
+        "interlocks: [test] pytest running\n"
+    )
 
 
 def test_run_tasks_single_failure_exits_with_subprocess_returncode(
@@ -282,6 +436,26 @@ def test_truncate_dump_env_escape_disables_cap(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("INTERLOCK_DUMP_LINES", "all")
     text = "".join(f"line-{i}\n" for i in range(200))
     assert _truncate_dump(text) == text
+
+
+def test_dump_and_exit_concatenates_streams_and_preserves_newline(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        dump_and_exit(7, "OUT\n", "ERR\n")
+
+    assert exc.value.code == 7
+    assert capsys.readouterr().out == "OUT\nERR\n"
+
+
+def test_dump_and_exit_suppresses_empty_missing_streams(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        dump_and_exit(3, None, "")
+
+    assert exc.value.code == 3
+    assert capsys.readouterr().out == ""
 
 
 def test_minimal_default_shows_ok_gate_rows_and_records_results(

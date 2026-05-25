@@ -14,8 +14,32 @@ from pathlib import Path
 
 import pytest
 
-from interlocks.cli import TASK_GROUPS, TASKS, cmd_help, cmd_presets, main
-from interlocks.command_docs import COMMAND_DOCS, COMMAND_DOCS_BY_NAME, COMMAND_GROUPS, FlagSpec
+from interlocks.cli import (
+    TASK_GROUPS,
+    TASKS,
+    _available_preset_payload,
+    _current_preset_payload,
+    _fail_presets_error,
+    _fail_quiet_removed,
+    _fail_unknown_command,
+    _preset_current_values_payload,
+    _presets_error_payload,
+    _task_help_payload,
+    cmd_help,
+    cmd_help_from_argv,
+    cmd_presets,
+    cmd_task_help,
+    main,
+)
+from interlocks.command_docs import (
+    COMMAND_DOCS,
+    COMMAND_DOCS_BY_NAME,
+    COMMAND_GROUPS,
+    CommandDoc,
+    FlagSpec,
+    _flag_sets_for_task,
+    command_doc_payload,
+)
 from interlocks.config import (
     CONFIG_KEY_GROUP_ORDER,
     CONFIG_KEYS,
@@ -23,8 +47,9 @@ from interlocks.config import (
     clear_cache,
     load_config,
     preset_defaults,
+    preset_description,
 )
-from interlocks.tasks.config import cmd_config
+from interlocks.tasks.config import _json_value, cmd_config
 from interlocks.tasks.explain import cmd_explain
 
 _DEFAULT_HELP_GROUPS = (
@@ -39,6 +64,7 @@ _DEFAULT_HELP_GROUPS = (
             "typecheck",
             "test",
             "coverage",
+            "properties",
             "audit",
             "deps",
             "arch",
@@ -111,10 +137,89 @@ def test_cmd_help_advanced_prints_all_groups(capsys: pytest.CaptureFixture[str])
     cmd_help(advanced=True)
     out = capsys.readouterr().out
     assert "── Commands" in out
+    assert "Full verification: lint, audit, typecheck, tests, coverage, properties, CRAP" in out
+    assert "Long-running gates: coverage + properties + audit + mutation" in out
     for group_name, group in TASK_GROUPS:
         assert f"{group_name}:" in out
         for name in group:
             assert f"[{name}]" in out
+
+
+def test_cmd_help_json_prints_default_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_project_with_interlocks(
+        tmp_path,
+        monkeypatch,
+        'preset = "strict"\ntest_runner = "pytest"',
+    )
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "--json"])
+
+    cmd_help()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "help"
+    assert payload["advanced"] is False
+    assert payload["detected"] == {
+        "pyproject": True,
+        "preset": "strict",
+        "src": "pkg",
+        "tests": "tests",
+        "runner": "pytest",
+    }
+    groups = {group["name"]: group["commands"] for group in payload["groups"]}
+    assert "Start here" in groups
+    assert any(command["name"] == "check" for command in groups["Start here"])
+    assert not any(command["name"] == "evaluate" for command in groups["Start here"])
+
+
+def test_cmd_help_json_advanced_prints_full_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "--advanced", "--json"])
+
+    cmd_help(advanced=True)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["advanced"] is True
+    commands = [command["name"] for group in payload["groups"] for command in group["commands"]]
+    assert set(commands) == set(TASKS)
+
+
+def test_cmd_task_help_uses_command_usage_metadata(capsys: pytest.CaptureFixture[str]) -> None:
+    cmd_task_help("baseline")
+    out = capsys.readouterr().out
+    assert "Usage: interlocks baseline [show|init|advance|check] [--json] [--auto-pr]" in out
+
+    cmd_task_help("config")
+    out = capsys.readouterr().out
+    assert "Usage: interlocks config [show <tool> [--bundled-only] [--json]]" in out
+
+
+def test_cmd_help_command_json_reuses_task_help_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "check", "--json"])
+
+    cmd_help_from_argv()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "check"
+    assert payload["usage"] == "usage: interlocks check"
+    assert any(flag["name"] == "--json" for flag in payload["flags"])
+
+
+def test_task_help_payload_falls_back_for_private_task_names() -> None:
+    assert _task_help_payload("custom-task") == {
+        "command": "custom-task",
+        "usage": "usage: interlocks custom-task",
+        "flags": [],
+    }
 
 
 def test_cmd_help_prints_active_preset_and_resolved_values(
@@ -190,11 +295,12 @@ def test_cmd_presets_prints_options_and_copyable_config(
     assert "baseline" in out
     assert "strict" in out
     assert "legacy" in out
+    assert "progressive" in out
     assert "── Next Steps" in out
     assert "Set a project preset with the CLI:" in out
-    assert "interlocks presets set baseline" in out
+    assert "interlocks presets set progressive" in out
     assert "Or add this to pyproject.toml:" in out
-    assert '[tool.interlocks]\n    preset = "baseline"' in out
+    assert '[tool.interlocks]\n    preset = "progressive"' in out
     assert "manually override any threshold" in out
     assert "pyproject.toml" in out
 
@@ -224,6 +330,118 @@ def test_cmd_presets_prints_active_preset(
     )
 
 
+def test_cmd_presets_json_lists_current_and_available_presets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_project_with_interlocks(tmp_path, monkeypatch, 'preset = "strict"')
+    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "--json"])
+
+    cmd_presets()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "presets"
+    assert payload["current"]["preset"] == "strict"
+    assert payload["current"]["pyproject"] is True
+    assert payload["switch_command"] == (
+        "interlocks presets set <baseline|strict|legacy|progressive>"
+    )
+    values = {entry["key"]: entry for entry in payload["current_values"]}
+    assert values["coverage_min"]["value"] == 90
+    assert values["coverage_min"]["source"] == "preset-derived"
+    presets = {entry["name"]: entry for entry in payload["available_presets"]}
+    assert set(presets) == {"baseline", "strict", "legacy", "progressive"}
+    assert presets["progressive"]["defaults"]["run_properties_in_check"] is True
+
+
+def test_preset_payload_helpers_have_exact_json_contract(tmp_path: Path) -> None:
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+        preset="strict",
+    )
+
+    assert _current_preset_payload(None) == {"pyproject": False, "preset": None}
+    assert _current_preset_payload(cfg) == {"pyproject": False, "preset": None}
+
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='pkg'\n", encoding="utf-8")
+
+    assert _current_preset_payload(cfg) == {
+        "pyproject": True,
+        "preset": "strict",
+        "pyproject_path": "pyproject.toml",
+    }
+    current_values = _preset_current_values_payload(cfg)
+    coverage = next(entry for entry in current_values if entry["key"] == "coverage_min")
+    assert coverage == {"key": "coverage_min", "value": 80, "source": "unknown"}
+    assert _available_preset_payload("progressive") == {
+        "name": "progressive",
+        "description": preset_description("progressive"),
+        "defaults": preset_defaults("progressive"),
+    }
+
+
+def test_current_preset_payload_requires_lowercase_pyproject_name() -> None:
+    class CaseSensitivePath:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def is_file(self) -> bool:
+            return self.name == "pyproject.toml"
+
+    class CaseSensitiveRoot:
+        def __truediv__(self, name: str) -> CaseSensitivePath:
+            return CaseSensitivePath(name)
+
+    class CaseSensitiveConfig:
+        project_root = CaseSensitiveRoot()
+        preset = "strict"
+
+        def relpath(self, path: CaseSensitivePath) -> str:
+            return path.name
+
+    assert _current_preset_payload(CaseSensitiveConfig()) == {  # pyright: ignore[reportArgumentType]
+        "pyproject": True,
+        "preset": "strict",
+        "pyproject_path": "pyproject.toml",
+    }
+
+
+def test_presets_error_payload_and_human_branch_are_exact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _presets_error_payload("unsupported preset: agent-safe", "expected baseline|strict")
+
+    assert payload == {
+        "command": "presets",
+        "error": "unsupported preset: agent-safe",
+        "detail": "expected baseline|strict",
+        "usage": "usage: interlocks presets [<baseline|strict|legacy|progressive>] or "
+        "interlocks presets set <baseline|strict|legacy|progressive>",
+        "expected_presets": ["baseline", "strict", "legacy", "progressive"],
+    }
+
+    calls: list[str | None] = []
+
+    def fake_fail_skip(message: str | None) -> None:
+        calls.append(message)
+        raise SystemExit(1)
+
+    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "agent-safe"])
+    monkeypatch.setattr("interlocks.cli.fail_skip", fake_fail_skip)
+
+    with pytest.raises(SystemExit) as exc:
+        _fail_presets_error("unsupported preset: agent-safe", "expected baseline|strict")
+
+    assert exc.value.code == 1
+    assert calls == ["unsupported preset: agent-safe (expected baseline|strict)"]
+
+
 @pytest.mark.parametrize(
     "argv",
     (
@@ -245,6 +463,27 @@ def test_cmd_presets_writes_interlock_table(
 
     assert '[tool.interlocks]\npreset = "baseline"\n' in pyproject.read_text(encoding="utf-8")
     assert "set [tool.interlocks] preset = 'baseline'" in capsys.readouterr().out
+
+
+def test_cmd_presets_set_json_writes_and_reports_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    pyproject = _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "set", "progressive", "--json"])
+
+    cmd_presets()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {
+        "command": "presets",
+        "action": "set",
+        "preset": "progressive",
+        "pyproject_path": "pyproject.toml",
+    }
+    assert 'preset = "progressive"' in pyproject.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
@@ -335,7 +574,27 @@ def test_cmd_presets_rejects_unknown_preset(
     assert exc.value.code == 1
     out = capsys.readouterr().out
     assert "unsupported preset: agent-safe" in out
-    assert "expected baseline|strict|legacy" in out
+    assert "expected baseline|strict|legacy|progressive" in out
+
+
+def test_cmd_presets_rejects_unknown_preset_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "presets", "agent-safe", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_presets()
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "presets"
+    assert payload["error"] == "unsupported preset: agent-safe"
+    assert payload["detail"] == "expected baseline|strict|legacy|progressive"
+    assert payload["expected_presets"] == ["baseline", "strict", "legacy", "progressive"]
 
 
 def test_cmd_presets_shorthand_rejects_extra_args(
@@ -363,6 +622,24 @@ def test_main_no_args_prints_help(
     assert "Usage: interlocks <command>" in out
 
 
+def test_main_no_command_json_error_is_parseable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "interlocks"
+    assert payload["error"] == "missing command"
+    assert payload["usage"] == "usage: interlocks <command>"
+    assert "check" in payload["known_commands"]
+
+
 def test_main_unknown_command_exits_one(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -371,8 +648,26 @@ def test_main_unknown_command_exits_one(
         main()
     assert exc.value.code == 1
     captured = capsys.readouterr()
-    assert "Unknown command: nope" in captured.err
+    assert captured.err == "Unknown command: nope\n"
     assert "Usage: interlocks <command>" in captured.out
+
+
+def test_main_unknown_command_json_error_is_parseable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "nope", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "nope"
+    assert payload["error"] == "unknown command nope"
+    assert payload["usage"] == "usage: interlocks <command>"
+    assert "check" in payload["known_commands"]
 
 
 def test_main_dispatches_known_command(
@@ -412,18 +707,89 @@ def test_main_command_help_lists_flags(
     assert "Usage: interlocks coverage" in out
     assert "[coverage]" in out
     assert "--min" in out
+    assert "--properties" in out
     assert "coverage fail-under percentage" in out
 
 
-def test_main_command_help_omits_flags_section_for_flagless_task(
+def test_main_command_help_json_is_parseable(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A task with no declared flags renders no Flags section (unchanged help)."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--help", "--json"])
+
+    main()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "check"
+    assert payload["usage"] == "usage: interlocks check"
+    assert payload["summary"].startswith("Local edit loop")
+    assert "--json" in {flag["name"] for flag in payload["flags"]}
+    assert any(code["code"] == 0 for code in payload["exit_codes"])
+
+
+def test_ci_help_mentions_skip_mutation_escape_hatch(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "ci"])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "--skip=" in out
+    assert "mutation" in out
+
+
+def test_main_help_command_name_lists_task_flags(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`help <task>` is equivalent to `<task> --help` for discoverability."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "property-candidates"])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "Usage: interlocks property-candidates" in out
+    assert "--changed=REF" in out
+    assert "--changed      optional" in out
+    assert "optionalscope" not in out
+    assert "--uncovered" in out
+    assert "--limit=" in out
+
+
+def test_check_help_changed_flag_mentions_property_skip(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "check"])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "optional acceptance/properties" in out
+    assert "--changed" in out
+    assert "optional" in out
+    assert "optionalscope" not in out
+    assert "skips test, acceptance, properties" in out
+
+
+def test_properties_help_lists_all_supported_profiles(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "properties"])
+
+    main()
+
+    out = capsys.readouterr().out
+    assert "Hypothesis profile: check, ci, nightly, default" in out
+
+
+def test_main_command_help_lists_json_flag_for_fix(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "--help"])
     main()
     out = capsys.readouterr().out
     assert "Usage: interlocks fix" in out
-    assert "Flags" not in out
+    assert "Flags" in out
+    assert "--json" in out
 
 
 def test_main_rejects_unknown_skip_label(
@@ -437,6 +803,23 @@ def test_main_rejects_unknown_skip_label(
     # Bad `--skip` usage is a usage error → exit 1; exit 2 is missing-pyproject.
     assert exc.value.code == 1
     assert "unknown skip label" in capsys.readouterr().err
+
+
+def test_main_rejects_unknown_skip_label_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--json", "--skip=nope"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "check"
+    assert "unknown skip label" in payload["error"]
+    assert "known_labels" in payload
 
 
 def test_main_dispatches_alias_to_canonical(
@@ -490,6 +873,47 @@ def test_main_unknown_flag_exits_one(
     assert "interlocks coverage: unknown flag --xyzzy" in capsys.readouterr().err
 
 
+def test_main_unknown_flag_json_error_is_parseable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--json", "--xyzzy"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "check"
+    assert payload["error"] == "unknown flag --xyzzy"
+    assert payload["flag"] == "--xyzzy"
+    assert "usage: interlocks check" in payload["usage"]
+    assert "--json" in payload["known_flags"]
+
+
+def test_main_rejects_help_only_advanced_flag_elsewhere(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--advanced is a help flag, not a silently ignored global flag."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "version", "--advanced"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "interlocks version: unknown flag --advanced" in capsys.readouterr().err
+
+
+def test_main_rejects_boolean_flag_value_form(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pure boolean flags are bare-only, so value forms cannot be silently ignored."""
+    monkeypatch.setattr(sys, "argv", ["interlocks", "doctor", "--json=true"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "interlocks doctor: unknown flag --json=true" in capsys.readouterr().err
+
+
 def test_main_quiet_exits_one(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -498,7 +922,61 @@ def test_main_quiet_exits_one(
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 1
-    assert "--quiet was removed" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert (
+        captured.err == "interlocks: --quiet was removed; minimal output is the default. "
+        "Pass --verbose for full output.\n"
+    )
+
+
+def test_main_quiet_json_error_is_parseable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--json", "--quiet"])
+
+    with pytest.raises(SystemExit) as exc:
+        main()
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["command"] == "interlocks"
+    assert payload["error"] == "--quiet was removed; minimal output is the default"
+    assert payload["next_action"] == "Remove `--quiet`; pass `--verbose` for full output."
+
+
+def test_fail_quiet_removed_writes_exact_human_error_to_stderr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "--quiet"])
+
+    with pytest.raises(SystemExit) as exc:
+        _fail_quiet_removed()
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert (
+        captured.err == "interlocks: --quiet was removed; minimal output is the default. "
+        "Pass --verbose for full output.\n"
+    )
+
+
+def test_fail_unknown_command_writes_exact_human_error_to_stderr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "bogus"])
+    monkeypatch.setattr("interlocks.cli.cmd_help", lambda: None)
+
+    with pytest.raises(SystemExit) as exc:
+        _fail_unknown_command("bogus")
+
+    assert exc.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Unknown command: bogus\n"
 
 
 def test_main_declared_flag_passes_validation(
@@ -514,6 +992,23 @@ def test_main_declared_flag_passes_validation(
     monkeypatch.setattr("interlocks.cli.preflight", lambda name: None)
     monkeypatch.setattr("interlocks.cli.validate_cli_skip", lambda: None)
     monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--min=80"])
+    main()
+    assert calls == ["ran"]
+
+
+def test_main_optional_flag_value_form_passes_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Optional-value flags such as --changed[=REF] still accept a value form."""
+    calls: list[str] = []
+
+    def fake() -> None:
+        calls.append("ran")
+
+    monkeypatch.setitem(TASKS, "check", (fake, "Local edit loop"))
+    monkeypatch.setattr("interlocks.cli.preflight", lambda name: None)
+    monkeypatch.setattr("interlocks.cli.validate_cli_skip", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "check", "--changed=HEAD"])
     main()
     assert calls == ["ran"]
 
@@ -578,6 +1073,9 @@ def test_cmd_config_lists_all_keys(
         assert key.name in out
     # Preset-derived value renders for baseline coverage_min == 70.
     assert re.search(r"coverage_min\s+70 \(preset-derived\)", out)
+    assert "baseline|strict|legacy|progressive" in out
+    assert "interlocks presets set progressive" in out
+    assert 'preset = "progressive"' in out
 
     # Default mode: the grouped "Config keys" table is the single presenter; the
     # flat "Resolved values" block is verbose-only.
@@ -679,6 +1177,41 @@ def test_cmd_config_show_json_is_parseable(
     assert json.loads(capsys.readouterr().out)["tool"] == "coverage"
 
 
+def test_cmd_config_show_json_keys_are_sorted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    _setup_minimal_project(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "coverage", "--json"])
+
+    cmd_config()
+
+    out = capsys.readouterr().out.strip()
+    assert out.startswith('{"bundled_path":')
+    assert '"tool": "coverage"' in out
+
+
+def test_cmd_config_show_json_invalid_usage_is_parseable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "show", "bogus", "--json"])
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_config()
+
+    assert exc.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "config"
+    assert payload["error"] == "invalid usage"
+    assert "usage: interlocks config" in payload["usage"]
+    assert payload["expected_tools"]
+
+
 def test_cmd_config_json_is_parseable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -696,7 +1229,38 @@ def test_cmd_config_json_is_parseable(
     assert "pyproject_path" in payload
     assert isinstance(payload["keys"], list) and payload["keys"]
     for entry in payload["keys"]:
-        assert {"key", "value", "source", "group"} == entry.keys()
+        assert {
+            "default",
+            "description",
+            "group",
+            "key",
+            "source",
+            "type",
+            "value",
+        } == entry.keys()
+    coverage = next(entry for entry in payload["keys"] if entry["key"] == "coverage_min")
+    assert coverage["type"] == "int"
+    assert coverage["default"] == "80"
+    assert coverage["description"] == "coverage.py fail-under"
+
+
+def test_config_json_value_coerces_raw_values_exactly(tmp_path: Path) -> None:
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "src",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+        properties_dir=tmp_path / "props",
+        pytest_args=("--maxfail=1", "-q"),
+        skip=frozenset({"mutation", "test"}),
+        coverage_min=91,
+    )
+
+    assert _json_value(cfg, "skip") == ["mutation", "test"]
+    assert _json_value(cfg, "pytest_args") == ["--maxfail=1", "-q"]
+    assert _json_value(cfg, "properties_dir") == str(tmp_path / "props")
+    assert _json_value(cfg, "coverage_min") == 91
 
 
 def test_cmd_config_json_falls_back_when_pyproject_malformed(
@@ -718,6 +1282,9 @@ def test_cmd_config_json_falls_back_when_pyproject_malformed(
     for entry in payload["keys"]:
         assert entry["value"] is None
         assert entry["source"] == "unreadable"
+        assert entry["type"]
+        assert entry["default"]
+        assert entry["description"]
 
 
 def test_cmd_config_falls_back_when_pyproject_malformed(
@@ -768,6 +1335,40 @@ def test_command_groups_match_task_groups() -> None:
     assert expected == COMMAND_GROUPS
 
 
+def test_flag_sets_for_property_candidates_partition_exactly() -> None:
+    boolean_names, optional_names, value_prefixes = _flag_sets_for_task("property-candidates")
+
+    assert boolean_names == frozenset({"--json", "--uncovered"})
+    assert optional_names == frozenset({"--changed"})
+    assert value_prefixes == ("--limit=",)
+
+
+def test_flag_sets_treat_value_shaped_flags_as_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    doc = CommandDoc(
+        "synthetic",
+        "Synthetic command",
+        "Exercises value-shaped flag partitioning.",
+        mutates=False,
+        outputs=(),
+        exit_codes=((0, "ok"),),
+        flags=(
+            FlagSpec("--good", "boolean", "off", "boolean"),
+            FlagSpec("--maybe", "optional", "default", "optional"),
+            FlagSpec("--misdeclared=", "boolean", "off", "value-shaped boolean"),
+            FlagSpec("--value=", "value", "x", "value"),
+        ),
+    )
+    monkeypatch.setitem(COMMAND_DOCS_BY_NAME, "synthetic", doc)
+
+    boolean_names, optional_names, value_prefixes = _flag_sets_for_task("synthetic")
+
+    assert boolean_names == frozenset({"--good"})
+    assert optional_names == frozenset({"--maybe"})
+    assert value_prefixes == ("--misdeclared=", "--value=")
+
+
 # Maps each command to the module(s) whose source declares its flag reads.
 # A command's flags may be read in a stage helper (e.g. stages/_budgeted.py)
 # in addition to its own module, so each entry is a tuple of import paths.
@@ -775,13 +1376,15 @@ _FLAG_SOURCE_MODULES: dict[str, tuple[str, ...]] = {
     "coverage": ("interlocks.tasks.coverage",),
     "crap": ("interlocks.tasks.crap",),
     "mutation": ("interlocks.tasks.mutation",),
-    "fix-optimize": ("interlocks.tasks.fix_optimize",),
-    "fix-rule": ("interlocks.tasks.fix_rule",),
+    "properties": ("interlocks.tasks.properties",),
+    "fix-optimize": ("interlocks.tasks.fix_optimize", "interlocks.tasks.fix_cli"),
+    "fix-rule": ("interlocks.tasks.fix_rule", "interlocks.tasks.fix_cli"),
     "fix-plan": ("interlocks.tasks.fix_plan",),
     "fix-replay": ("interlocks.tasks.fix_replay",),
     "fix-annotate": ("interlocks.tasks.fix_annotate",),
     "baseline": ("interlocks.tasks.baseline_cmd",),
     "trust": ("interlocks.tasks.stats",),
+    "property-candidates": ("interlocks.tasks.property_candidates",),
     "setup": ("interlocks.tasks.setup",),
     "config": ("interlocks.tasks.config",),
     "check": ("interlocks.stages.check", "interlocks.stages._budgeted"),
@@ -797,7 +1400,7 @@ _FLAG_SCAN_IGNORE: frozenset[str] = frozenset({"--quiet", "--verbose"})
 # `is_verbose`), not from a per-task module — so it is declared as a FlagSpec for
 # dispatcher acceptance and `--help` rendering but never appears as a literal in a
 # task's own source. Excluded from both sides of the drift-guard comparison.
-_CENTRAL_FLAGS: frozenset[str] = frozenset({"--json"})
+_CENTRAL_FLAGS: frozenset[str] = frozenset({"--json", "--skip="})
 
 # arg_value("--x=", ...)  |  arg_flag_value("--x", ...)  |  "--x" in <seq>
 #   plus the bare-equality forms: arg == "--check"  /  "--json" == arg
@@ -856,8 +1459,63 @@ def test_every_flag_source_module_command_exists() -> None:
 
 def test_command_doc_flags_default_to_empty() -> None:
     """The new ``flags`` field defaults to ``()`` — non-flag-bearing docs unchanged."""
-    doc = COMMAND_DOCS_BY_NAME["help"]
+    doc = CommandDoc(
+        "demo",
+        "Demo command",
+        "Demonstrates default command metadata.",
+        mutates=False,
+        outputs=(),
+        exit_codes=((0, "ok"),),
+    )
     assert doc.flags == ()
+    assert doc.usage == ""
+    assert doc.mutates_note == ""
+
+
+def test_command_doc_payload_reports_exact_machine_contract() -> None:
+    doc = CommandDoc(
+        "behavior-attribution",
+        "Show which acceptance behavior each test covers",
+        "Use before trusting acceptance coverage automation.",
+        mutates=True,
+        outputs=("json", "markdown"),
+        exit_codes=((0, "trace written"), (1, "trace failed")),
+        flags=(
+            FlagSpec("--json", "boolean", "off", "emit JSON"),
+            FlagSpec("--changed=", "value", "HEAD", "compare ref"),
+        ),
+        usage="behavior-attribution [--json] [--changed=REF]",
+        mutates_note="writes .interlocks/behavior-attribution.json",
+    )
+
+    assert command_doc_payload(doc) == {
+        "command": "behavior-attribution",
+        "usage": "usage: interlocks behavior-attribution [--json] [--changed=REF]",
+        "summary": "Show which acceptance behavior each test covers",
+        "when_to_use": "Use before trusting acceptance coverage automation.",
+        "mutates": True,
+        "mutates_note": "writes .interlocks/behavior-attribution.json",
+        "outputs": ["json", "markdown"],
+        "aliases": ["attribution"],
+        "flags": [
+            {
+                "name": "--json",
+                "kind": "boolean",
+                "default": "off",
+                "description": "emit JSON",
+            },
+            {
+                "name": "--changed=",
+                "kind": "value",
+                "default": "HEAD",
+                "description": "compare ref",
+            },
+        ],
+        "exit_codes": [
+            {"code": 0, "meaning": "trace written"},
+            {"code": 1, "meaning": "trace failed"},
+        ],
+    }
 
 
 def test_flag_spec_is_frozen() -> None:
@@ -909,8 +1567,134 @@ def test_cmd_explain_single_command(
 
     out = capsys.readouterr().out
     assert "  [coverage]  " in out
+    assert "Usage:      interlocks coverage" in out
     assert "When to use:" in out
     assert "[fix]" not in out
+
+
+def test_cmd_explain_json_default_is_index(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "--json"])
+
+    cmd_explain()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "explain"
+    assert payload["mode"] == "index"
+    commands = [command for group in payload["groups"] for command in group["commands"]]
+    assert {command["name"] for command in commands} == set(TASKS)
+    assert all("when_to_use" not in command for command in commands)
+
+
+def test_cmd_explain_json_all_includes_full_contracts(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "--all", "--json"])
+
+    cmd_explain()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "all"
+    check = next(
+        command
+        for group in payload["groups"]
+        for command in group["commands"]
+        if command["command"] == "check"
+    )
+    assert check["usage"] == "usage: interlocks check"
+    assert "when_to_use" in check
+    assert any(flag["name"] == "--json" for flag in check["flags"])
+
+
+def test_cmd_explain_json_single_command(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "coverage", "--json"])
+
+    cmd_explain()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "coverage"
+    assert payload["usage"] == "usage: interlocks coverage"
+    assert any(flag["name"] == "--properties" for flag in payload["flags"])
+
+
+def test_cmd_explain_properties_surfaces_adoption_loop(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "properties"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "init-properties" in out
+    assert "--profile=check" in out
+    assert "--profile=ci|nightly" in out
+
+
+def test_cmd_explain_check_mentions_changed_scope_property_skip(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "check"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "`--changed` skips broad test/acceptance/property gates" in out
+    assert "follow-up next actions" in out
+
+
+def test_cmd_explain_init_properties_mentions_adopted_repo_noop(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "init-properties"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "when no domain property tests exist" in out
+    assert "no-ops once domain properties are present" in out
+
+
+def test_cmd_explain_property_candidates_surfaces_agent_triage_loop(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "property-candidates"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "--changed=REF" in out
+    assert "--uncovered" in out
+    assert "writes no tests" in out
+
+
+def test_cmd_explain_baseline_distinguishes_read_and_write_actions(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "baseline"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "Usage:      interlocks baseline [show|init|advance|check]" in out
+    assert "Mutates:     show/check are read-only; init/advance write baseline.json" in out
+    assert "`show`/`check` are read-only" in out
+    assert "`init`/`advance` write the floor" in out
+
+
+def test_cmd_explain_presets_recommends_progressive_copyable_config(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "presets"])
+
+    cmd_explain()
+
+    out = capsys.readouterr().out
+    assert "copyable progressive config" in out
+    assert "listing is read-only" in out
+    assert "Mutates:     listing is read-only; set writes pyproject.toml" in out
 
 
 def test_cmd_explain_unknown_command_exits_nonzero(
@@ -928,13 +1712,13 @@ def test_cmd_explain_unknown_command_exits_nonzero(
 def test_cmd_explain_rejects_unknown_option(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "--bogus"])
 
     with pytest.raises(SystemExit) as exc:
         cmd_explain()
 
     assert exc.value.code == 1
-    assert "--json" in capsys.readouterr().out
+    assert "--bogus" in capsys.readouterr().out
 
 
 def test_cmd_explain_resolves_alias(

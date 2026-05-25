@@ -14,7 +14,9 @@ metrics auditable and prevents per-author tracking by accident.
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -24,13 +26,15 @@ from interlocks.lintfix import escrow
 from interlocks.lintfix.stats import quantile
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
     from pathlib import Path
 
 
 def cmd_fix_metrics() -> None:
     """Aggregate `.lintfix/*.json` into one metrics report."""
-    aggregate_metrics(load_config().project_root)
+    project_root = load_config().project_root
+    out_path = aggregate_metrics(project_root)
+    if ui.is_json():
+        ui.print_json(_fix_metrics_payload(project_root, out_path))
 
 
 def aggregate_metrics(project_root: Path) -> Path:
@@ -70,21 +74,22 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
+    return data if isinstance(data, dict) else None
 
 
 def _summarize_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
-    candidates: list[Mapping[str, Any]] = list(plan.get("candidates", []))
+    candidates = _mapping_list(plan.get("candidates"))
     rules_by_class: dict[str, list[str]] = defaultdict(list)
     outside_samples: list[int] = []
     lines_samples: list[int] = []
     for c in candidates:
         klass = str(c.get("classification") or "")
         rules_by_class[klass].append(str(c.get("rule") or ""))
-        outside_samples.append(int(c.get("changed_lines_outside_diff") or 0))
-        lines_samples.append(int(c.get("changed_lines_total") or 0))
+        outside_samples.append(_int_or_zero(c.get("changed_lines_outside_diff")))
+        lines_samples.append(_int_or_zero(c.get("changed_lines_total")))
     return {
         "base": plan.get("base"),
         "head": plan.get("head"),
@@ -101,8 +106,8 @@ def _summarize_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _summarize_optimize(opt: Mapping[str, Any]) -> dict[str, Any]:
-    selected: list[Mapping[str, Any]] = list(opt.get("selected", []))
-    not_selected: list[Mapping[str, Any]] = list(opt.get("not_selected", []))
+    selected = _mapping_list(opt.get("selected"))
+    not_selected = _mapping_list(opt.get("not_selected"))
     reason_counts: Counter[str] = Counter(
         str(c.get("reason") or "") for c in not_selected if c.get("reason")
     )
@@ -118,7 +123,7 @@ def _summarize_optimize(opt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _summarize_replay(replay: Mapping[str, Any]) -> dict[str, Any]:
-    rules: list[Mapping[str, Any]] = list(replay.get("rules", []))
+    rules = _mapping_list(replay.get("rules"))
     by_rec: Counter[str] = Counter(str(r.get("recommended_mode") or "") for r in rules)
     pareto = [str(r.get("rule") or "") for r in rules if r.get("on_pareto_frontier")]
     return {
@@ -136,6 +141,27 @@ def _mean(samples: list[int]) -> float:
     return round(sum(samples) / len(samples), 2)
 
 
+def _mapping_list(raw: object) -> list[Mapping[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, Mapping)]
+
+
+def _int_or_zero(raw: object) -> int:
+    if raw is None or isinstance(raw, bool):
+        return 0
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw) if math.isfinite(raw) else 0
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            return 0
+    return 0
+
+
 def _write_metrics(project_root: Path, payload: dict[str, Any]) -> Path:
     target = escrow.lintfix_dir(project_root) / "metrics.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +170,15 @@ def _write_metrics(project_root: Path, payload: dict[str, Any]) -> Path:
 
 
 def _print_summary(payload: dict[str, Any], rel_path: str) -> None:
+    if ui.is_json():
+        return
+    ui.gate_row(
+        "fix-metrics",
+        rel_path,
+        "ok",
+        detail=_sources_detail(payload),
+        state="ok",
+    )
     ui.section("fix-metrics")
     pairs: list[tuple[str, str]] = [("output", rel_path)]
     plan = payload.get("plan")
@@ -175,3 +210,24 @@ def _print_summary(payload: dict[str, Any], rel_path: str) -> None:
             rec = "  ".join(f"{k}={v}" for k, v in sorted(by_rec.items()))
             pairs.append(("recommendations", rec))
     ui.kv_block(pairs)
+
+
+def _sources_detail(payload: dict[str, Any]) -> str:
+    sources = payload.get("sources")
+    if not isinstance(sources, Mapping):
+        return "sources=none"
+    enabled = [str(name) for name, present in sources.items() if present]
+    if len(enabled) == len(sources) and enabled:
+        return "sources=all"
+    return "sources=" + (",".join(enabled) if enabled else "none")
+
+
+def _fix_metrics_payload(project_root: Path, out_path: Path) -> dict[str, object]:
+    metrics = _read_json(out_path) or {}
+    return {
+        "command": "fix-metrics",
+        "passed": True,
+        "metrics_path": relpath(project_root, out_path),
+        "sources": metrics.get("sources", {}),
+        "metrics": metrics,
+    }

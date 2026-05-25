@@ -50,6 +50,21 @@ def test_measure_counts_files_and_lines() -> None:
     assert m.changed_lines_outside_diff == 0
 
 
+def test_measure_preserves_plain_path_named_b() -> None:
+    patch = """\
+--- b/pkg/views.py
++++ b/pkg/views.py
+@@ -1,1 +1,1 @@
+-old
++new
+"""
+
+    m = measure(patch, _hunks("b/pkg/views.py", (1, 2)))
+
+    assert m.files_touched == ("b/pkg/views.py",)
+    assert m.changed_lines_inside_diff == 2
+
+
 def test_measure_counts_outside_diff_for_far_hunks() -> None:
     m = measure(_SIM_OUTSIDE_PATCH, _hunks("pkg/views.py", (1, 5)))
     # 2 deletions + 2 insertions at OLD lines 50, 100 — all outside hunks 1..5.

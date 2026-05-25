@@ -90,12 +90,13 @@ def validate_cli_skip() -> None:
 
 
 def _cli_raw() -> str | None:
+    values: list[str] = []
     for arg in sys.argv[1:]:
         if arg == "--skip":
             _fail_skip_usage("usage: --skip=<label>[,<label>...] (known: " + _known_labels() + ")")
         if arg.startswith("--skip="):
-            return arg.split("=", 1)[1]
-    return None
+            values.append(arg.split("=", 1)[1])
+    return ",".join(values) if values else None
 
 
 def _parse_csv(raw: str, *, source: str) -> frozenset[str]:
@@ -114,5 +115,24 @@ def _known_labels() -> str:
 
 def _fail_skip_usage(message: str) -> None:
     # Usage error → exit 1; exit 2 is reserved for a missing pyproject.
+    if ui.is_json():
+        ui.print_json(_skip_usage_payload(message, command=_command_from_argv()))
+        raise SystemExit(1)
     print(f"interlocks: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def _skip_usage_payload(message: str, *, command: str | None) -> dict[str, object]:
+    return {
+        "command": command or "interlocks",
+        "error": message,
+        "usage": "usage: --skip=<label>[,<label>...]",
+        "known_labels": sorted(SKIP_LABELS),
+    }
+
+
+def _command_from_argv() -> str | None:
+    for arg in sys.argv[1:]:
+        if not arg.startswith("-"):
+            return arg
+    return None

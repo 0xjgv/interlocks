@@ -1,4 +1,4 @@
-"""Integration tests for `interlocks check` (fix + format + typecheck + test + suppressions)."""
+"""Integration tests for `interlocks check` local edit-loop composition."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from interlocks.runner import Task
 from tests.conftest import TmpProjectFactory, stub_project_venv
 
 _PYPROJECT = textwrap.dedent(
@@ -229,10 +230,17 @@ def test_check_json_verbose_changed_emits_single_object(tmp_project: Path) -> No
         _CLEAN_SRC + "\n\ndef sub(a: int, b: int) -> int:\n    return a - b\n",
         encoding="utf-8",
     )
-    scoped = _run_check_json(tmp_project, "--verbose", "--changed")
+    scoped = _run_check_json(tmp_project, "--verbose", "--changed=HEAD")
     scoped_lines = [ln for ln in scoped.stdout.splitlines() if ln.strip()]
     assert len(scoped_lines) == 1, f"expected one object, got {scoped.stdout!r}"
-    assert json.loads(scoped_lines[0])["command"] == "check"
+    payload = json.loads(scoped_lines[0])
+    assert payload["command"] == "check"
+    skipped = {entry["name"]: entry for entry in payload["skipped"]}
+    assert skipped["test"]["next_action"] == "Run `interlocks test` for the full suite."
+    assert skipped["deps"]["next_action"] == "Run `interlocks deps` for dependency graph checks."
+    assert skipped["attribution"]["next_action"] == (
+        "Run `interlocks behavior-attribution` for registry-wide attribution."
+    )
     assert "changed vs" not in scoped.stdout
 
 
@@ -485,6 +493,20 @@ def _capture_check_parallel_descriptions(
     return captured
 
 
+def _capture_check_parallel_tasks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[Task]:
+    from interlocks.stages import check as check_mod
+
+    captured: list[Task] = []
+    monkeypatch.setattr(check_mod, "_run_budgeted_mutation", lambda **_k: None)
+    monkeypatch.setattr(check_mod, "run_tasks", captured.extend)
+    monkeypatch.setattr(check_mod, "run", lambda task, **_kw: None)
+    monkeypatch.setattr(check_mod, "cmd_crap_cached_advisory", lambda *_a, **_k: None)
+    monkeypatch.setattr(check_mod, "print_suppressions_report", lambda: None)
+    monkeypatch.chdir(tmp_path)
+    check_mod.cmd_check()
+    return captured
+
+
 def test_check_does_not_fail_required_when_run_acceptance_in_check_false(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -531,6 +553,101 @@ def test_check_appends_required_failure_when_behavior_coverage_missing(
 
     assert "Acceptance (required)" in descriptions
     assert "Acceptance (pytest-bdd)" not in descriptions
+
+
+def test_check_test_gate_ignores_pytest_bdd_targets_when_acceptance_runs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_require_acceptance_check_project(tmp_path, run_acceptance_in_check=True)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            "require_acceptance = true", "require_acceptance = false"
+        )
+        + 'features_dir = "tests/features"\ntest_runner = "pytest"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "tests" / "features").mkdir(parents=True)
+    (tmp_path / "tests" / "features" / "smoke.feature").write_text(
+        "Feature: smoke\n  Scenario: it works\n    Given a thing\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests" / "step_defs").mkdir()
+    (tmp_path / "tests" / "step_defs" / "test_smoke.py").write_text("", encoding="utf-8")
+
+    tasks = _capture_check_parallel_tasks(tmp_path, monkeypatch)
+    by_description = {task.description: task for task in tasks}
+
+    assert "Acceptance (pytest-bdd)" in by_description
+    test_task = by_description["Run tests"]
+    assert "--ignore=tests/features" in test_task.cmd
+    assert "--ignore=tests/step_defs" in test_task.cmd
+
+
+def test_check_test_gate_ignores_collected_property_dir_when_properties_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "tests" / "properties").mkdir(parents=True)
+    (tmp_path / "tests" / "properties" / "test_lengths.py").write_text(
+        "def test_property_placeholder() -> None:\n    assert True\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "check-properties"
+            version = "0.0.0"
+
+            [tool.interlocks]
+            test_runner = "pytest"
+            properties_dir = "tests/properties"
+            run_properties_in_check = true
+            """
+        ),
+        encoding="utf-8",
+    )
+    stub_project_venv(tmp_path)
+
+    tasks = _capture_check_parallel_tasks(tmp_path, monkeypatch)
+    by_description = {task.description: task for task in tasks}
+
+    assert "Property tests" in by_description
+    test_task = by_description["Run tests"]
+    assert "--ignore=tests/properties" in test_task.cmd
+
+
+def test_check_test_gate_keeps_root_property_dir_when_not_collected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "properties").mkdir()
+    (tmp_path / "properties" / "test_lengths.py").write_text(
+        "def test_property_placeholder() -> None:\n    assert True\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "check-properties"
+            version = "0.0.0"
+
+            [tool.interlocks]
+            test_runner = "pytest"
+            run_properties_in_check = true
+            """
+        ),
+        encoding="utf-8",
+    )
+    stub_project_venv(tmp_path)
+
+    tasks = _capture_check_parallel_tasks(tmp_path, monkeypatch)
+    by_description = {task.description: task for task in tasks}
+
+    assert "Property tests" in by_description
+    test_task = by_description["Run tests"]
+    assert "--ignore=properties" not in test_task.cmd
 
 
 def test_check_skips_dependency_gates_without_project_env(

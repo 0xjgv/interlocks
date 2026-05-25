@@ -6,6 +6,7 @@ reporter MUST NOT mask the original exception.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,7 @@ def test_inject_env_inert_when_subcommand_differs(
     monkeypatch.setenv("INTERLOCKS_CRASH_INJECT", "lint")
     boundary = CrashBoundary(subcommand="check")
     boundary.maybe_inject_for_test()  # must not raise
+    assert os.environ["INTERLOCKS_CRASH_INJECT"] == "lint"
 
 
 def test_inject_env_inert_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -112,6 +112,24 @@ def test_fix_replay_observes_i001_in_history(repo_with_history: Path) -> None:
     assert by_rule["I001"]["prs_with_candidate"] >= 1
 
 
+def test_fix_replay_json_reports_replay_summary(repo_with_history: Path) -> None:
+    result = _run_fix_replay(repo_with_history, "--n=2", "--json")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert result.stderr == ""
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "fix-replay"
+    assert payload["passed"] is True
+    assert payload["status"] == "replayed"
+    assert payload["replay_path"] == ".lintfix/replay.json"
+    assert payload["base_branch"] == "main"
+    assert payload["budget"] == "unblock"
+    assert payload["n_requested"] == 2
+    assert payload["n_replayed"] == 2
+    assert payload["rules_count"] >= 1
+    assert (repo_with_history / ".lintfix" / "replay.json").is_file()
+
+
 def test_fix_replay_does_not_mutate_tree(repo_with_history: Path) -> None:
     """The replay must never leave behind a worktree, a checkout, or a dirty index."""
     before = (repo_with_history / "a.py").read_text(encoding="utf-8")
@@ -134,6 +152,7 @@ def test_fix_replay_does_not_mutate_tree(repo_with_history: Path) -> None:
 def test_cmd_fix_replay_serializes_recommendation_payload(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The CLI's aggregation+serialization path must surface recommendations.
 
@@ -190,6 +209,11 @@ def test_cmd_fix_replay_serializes_recommendation_payload(
     # Exact-catalog F401 with low outside-diff promotes from escrow → auto.
     assert f401["recommended_mode"] == "auto"
     assert f401["rationale"]
+    out = capsys.readouterr().out
+    assert "[fix-replay]" in out
+    assert ".lintfix/replay.json" in out
+    assert "commits=5" in out
+    assert "rules=1" in out
 
 
 # ─────────────── _run_plan_and_load (in-process) ──────────────────

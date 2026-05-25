@@ -12,6 +12,9 @@ from interlocks.command_docs import (
     ALIASES,
     COMMAND_DOCS_BY_NAME,
     alias_suffix,
+    command_doc_payload,
+    command_index_payload,
+    command_usage,
     unknown_task_flags,
 )
 from interlocks.config import (
@@ -56,10 +59,13 @@ from interlocks.tasks.fix_plan import cmd_fix_plan
 from interlocks.tasks.fix_replay import cmd_fix_replay
 from interlocks.tasks.fix_rule import cmd_fix_rule
 from interlocks.tasks.format import cmd_format
+from interlocks.tasks.format_check import cmd_format_check
 from interlocks.tasks.init import cmd_init
 from interlocks.tasks.init_acceptance import cmd_init_acceptance
 from interlocks.tasks.lint import cmd_lint
 from interlocks.tasks.mutation import cmd_mutation
+from interlocks.tasks.properties import cmd_init_properties, cmd_properties
+from interlocks.tasks.property_candidates import cmd_property_candidates
 from interlocks.tasks.setup import cmd_setup
 from interlocks.tasks.setup_skill import cmd_setup_skill
 from interlocks.tasks.stats import cmd_trust
@@ -72,11 +78,14 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from interlocks.config import InterlockConfig
+    from interlocks.config import InterlockConfig, Preset
 
 
 def cmd_help(*, advanced: bool = False) -> None:
     cfg = load_optional_config()
+    if ui.is_json():
+        ui.print_json(_help_payload(cfg, advanced=advanced))
+        return
     ui.section("Usage")
     print("  Usage: interlocks <command>")
     if advanced:
@@ -100,22 +109,81 @@ def cmd_help(*, advanced: bool = False) -> None:
 
 
 def cmd_task_help(task_name: str) -> None:
+    if ui.is_json():
+        ui.print_json(_task_help_payload(task_name))
+        return
     _, description = TASKS[task_name]
+    doc = COMMAND_DOCS_BY_NAME.get(task_name)
+    usage = command_usage(doc) if doc is not None else task_name
     ui.section("Usage")
-    print(f"  Usage: interlocks {task_name}")
+    print(f"  Usage: interlocks {usage}")
     ui.section("Command")
     _print_command_row(task_name, description, len(task_name) + 2)
-    doc = COMMAND_DOCS_BY_NAME.get(task_name)
     if doc is not None and doc.flags:
         ui.section("Flags")
         width = max(len(spec.name) for spec in doc.flags) + 2
+        kind_width = max(len(spec.kind) + 1 for spec in doc.flags)
+        kind_width = max(kind_width, 9)
         for spec in doc.flags:
             default = f" (default: {spec.default})" if spec.default else ""
-            print(f"  {spec.name:<{width}}  {spec.kind:<8}{spec.description}{default}")
+            print(f"  {spec.name:<{width}}  {spec.kind:<{kind_width}}{spec.description}{default}")
 
 
 def cmd_help_from_argv() -> None:
+    positionals = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    if positionals and ALIASES.get(positionals[0], positionals[0]) == "help":
+        target = positionals[1:]
+        if target:
+            task_name = ALIASES.get(target[0], target[0])
+            if task_name not in TASKS:
+                fail_skip(f"help: unknown command {target[0]!r}")
+            cmd_task_help(task_name)
+            return
     cmd_help(advanced="--advanced" in sys.argv[1:])
+
+
+def _help_payload(cfg: InterlockConfig | None, *, advanced: bool) -> dict[str, object]:
+    return {
+        "command": "help",
+        "usage": "usage: interlocks help [--advanced | <command>]",
+        "advanced": advanced,
+        "groups": _help_groups_payload(advanced=advanced),
+        "detected": _detected_payload(cfg),
+    }
+
+
+def _help_groups_payload(*, advanced: bool) -> list[dict[str, object]]:
+    if advanced:
+        groups = [(group_name, tuple(group)) for group_name, group in TASK_GROUPS]
+    else:
+        groups = list(_HELP_GROUPS)
+    return [
+        {
+            "name": group_name,
+            "commands": [_help_command_payload(name) for name in names],
+        }
+        for group_name, names in groups
+    ]
+
+
+def _help_command_payload(name: str) -> dict[str, object]:
+    doc = COMMAND_DOCS_BY_NAME.get(name)
+    if doc is not None:
+        return command_index_payload(doc)
+    _, description = TASKS[name]
+    return {"name": name, "summary": description, "aliases": []}
+
+
+def _detected_payload(cfg: InterlockConfig | None) -> dict[str, object]:
+    if cfg is None or not (cfg.project_root / "pyproject.toml").is_file():
+        return {"pyproject": False}
+    return {
+        "pyproject": True,
+        "preset": cfg.preset,
+        "src": cfg.src_dir_arg,
+        "tests": cfg.test_dir_arg,
+        "runner": cfg.test_runner,
+    }
 
 
 _TOOL_INTERLOCK_HEADER = re.compile(r"^\[tool\.interlocks\]\s*$", re.MULTILINE)
@@ -143,6 +211,7 @@ _PRESET_REPORTED_KEYS: tuple[str, ...] = (
     *_THRESHOLD_KEYS,
     "mutation_ci_mode",
     "run_acceptance_in_check",
+    "run_properties_in_check",
     "require_acceptance",
 )
 
@@ -164,12 +233,15 @@ def _maybe_handle_presets_set() -> bool:
     elif len(args) == 1:
         _cmd_presets_set(args)
     else:
-        fail_skip(_presets_usage())
+        _fail_presets_error("invalid usage", _presets_usage())
     return True
 
 
 def _cmd_presets_list() -> None:
     cfg = load_optional_config()
+    if ui.is_json():
+        ui.print_json(_presets_payload(cfg))
+        return
     ui.section("Current")
     ui.kv_block([("preset", cfg.preset if cfg is not None and cfg.preset else "(none)")])
     if cfg is not None:
@@ -193,18 +265,18 @@ def _cmd_presets_list() -> None:
     ui.section("Next Steps")
     print("  Set a project preset with the CLI:")
     print()
-    print("    interlocks presets set baseline")
+    print("    interlocks presets set progressive")
     print()
     print("  Or add this to pyproject.toml:")
     print()
-    print('    [tool.interlocks]\n    preset = "baseline"')
+    print('    [tool.interlocks]\n    preset = "progressive"')
     print()
     print("  Preset thresholds are defaults. You can manually override any threshold")
     print("  in the same [tool.interlocks] table in pyproject.toml.")
 
 
 def _presets_set_invocation() -> str:
-    """The canonical `interlocks presets set <baseline|strict|legacy>` phrase."""
+    """The canonical `interlocks presets set <...>` phrase."""
     choices = "|".join(supported_presets())
     return f"interlocks presets set <{choices}>"
 
@@ -218,19 +290,91 @@ def _cmd_presets_set(args: list[str]) -> None:
     presets = supported_presets()
     choices = "|".join(presets)
     if len(args) != 1:
-        fail_skip(f"usage: {_presets_set_invocation()}")
+        _fail_presets_error("invalid usage", f"usage: {_presets_set_invocation()}")
     preset = args[0]
     if preset not in presets:
-        fail_skip(f"unsupported preset: {preset} (expected {choices})")
+        _fail_presets_error(
+            f"unsupported preset: {preset}",
+            f"expected {choices}",
+        )
 
     cfg = load_config()
     pyproject = cfg.project_root / "pyproject.toml"
     if not pyproject.is_file():
-        fail_skip("presets set: no pyproject.toml — run `interlocks init` to scaffold")
+        _fail_presets_error(
+            "no pyproject.toml",
+            "Run `interlocks init` to scaffold.",
+        )
 
     _write_project_preset(pyproject, preset)
     clear_cache()
+    if ui.is_json():
+        ui.print_json({
+            "command": "presets",
+            "action": "set",
+            "preset": preset,
+            "pyproject_path": cfg.relpath(pyproject),
+        })
+        return
     print(f"set [tool.interlocks] preset = {preset!r} in {cfg.relpath(pyproject)}")
+
+
+def _presets_payload(cfg: InterlockConfig | None) -> dict[str, object]:
+    return {
+        "command": "presets",
+        "current": _current_preset_payload(cfg),
+        "current_values": _preset_current_values_payload(cfg),
+        "available_presets": [_available_preset_payload(preset) for preset in supported_presets()],
+        "switch_command": _presets_set_invocation(),
+    }
+
+
+def _current_preset_payload(cfg: InterlockConfig | None) -> dict[str, object]:
+    if cfg is None or not (cfg.project_root / "pyproject.toml").is_file():
+        return {"pyproject": False, "preset": None}
+    return {
+        "pyproject": True,
+        "preset": cfg.preset,
+        "pyproject_path": cfg.relpath(cfg.project_root / "pyproject.toml"),
+    }
+
+
+def _preset_current_values_payload(cfg: InterlockConfig | None) -> list[dict[str, object]]:
+    if cfg is None:
+        return []
+    return [
+        {
+            "key": key,
+            "value": getattr(cfg, key),
+            "source": cfg.value_sources.get(key, "unknown"),
+        }
+        for key in _PRESET_REPORTED_KEYS
+    ]
+
+
+def _available_preset_payload(preset: Preset) -> dict[str, object]:
+    return {
+        "name": preset,
+        "description": preset_description(preset),
+        "defaults": preset_defaults(preset),
+    }
+
+
+def _presets_error_payload(error: str, detail: str) -> dict[str, object]:
+    return {
+        "command": "presets",
+        "error": error,
+        "detail": detail,
+        "usage": _presets_usage(),
+        "expected_presets": list(supported_presets()),
+    }
+
+
+def _fail_presets_error(error: str, detail: str) -> None:
+    if ui.is_json():
+        ui.print_json(_presets_error_payload(error, detail))
+        sys.exit(1)
+    fail_skip(f"{error} ({detail})" if detail.startswith("expected ") else detail)
 
 
 def _write_project_preset(pyproject: Path, preset: str) -> None:
@@ -266,10 +410,12 @@ _HELP_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "fix",
             "fix-optimize",
             "format",
+            "format-check",
             "lint",
             "typecheck",
             "test",
             "coverage",
+            "properties",
             "audit",
             "deps",
             "arch",
@@ -377,6 +523,7 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 "Aggregate .lintfix/{plan,optimize,replay}.json into .lintfix/metrics.json",
             ),
             "format": (cmd_format, "Format code with ruff"),
+            "format-check": (cmd_format_check, "Check formatting with ruff (read-only)"),
             "lint": (cmd_lint, "Lint code with ruff (read-only)"),
             "typecheck": (cmd_typecheck, "Type-check with basedpyright"),
             "test": (cmd_test, "Run tests (auto-detects pytest vs unittest)"),
@@ -399,7 +546,18 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
                 cmd_init_acceptance,
                 "Scaffold tests/features + tests/step_defs (pytest-bdd layout)",
             ),
-            "coverage": (cmd_coverage, "Tests with coverage threshold (--min=N)"),
+            "properties": (
+                cmd_properties,
+                "Property tests via pytest + Hypothesis profiles",
+            ),
+            "init-properties": (
+                cmd_init_properties,
+                "Scaffold the configured property-test dir",
+            ),
+            "coverage": (
+                cmd_coverage,
+                "Tests with coverage threshold (--min=N, optional properties)",
+            ),
             "complexity": (cmd_complexity, "Complexity gate via lizard"),
             "crap": (cmd_crap, "CRAP complexity x coverage gate"),
             "mutation": (
@@ -411,10 +569,19 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
     (
         "Stages",
         {
-            "check": (cmd_check, "Budgeted lint/format mutation + typecheck + test (full repo)"),
+            "check": (
+                cmd_check,
+                "Local edit loop: fix/format, typecheck/tests, optional acceptance/properties",
+            ),
             "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
-            "ci": (cmd_ci, "Full verification: lint, audit, typecheck, tests, coverage, CRAP"),
-            "nightly": (cmd_nightly, "Long-running gates: coverage + mutation (blocking)"),
+            "ci": (
+                cmd_ci,
+                "Full verification: lint, audit, typecheck, tests, coverage, properties, CRAP",
+            ),
+            "nightly": (
+                cmd_nightly,
+                "Long-running gates: coverage + properties + audit + mutation (blocking)",
+            ),
             "post-edit": (
                 cmd_post_edit,
                 "Budgeted lint/format mutation if source files changed (Claude Code hook)",
@@ -433,6 +600,10 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
             "evaluate": (
                 cmd_evaluate,
                 "Score automatable quality checklist items",
+            ),
+            "property-candidates": (
+                cmd_property_candidates,
+                "Rank functions for property-test hardening",
             ),
             "explain": (cmd_explain, "Explain what each command does, in prose"),
         },
@@ -484,40 +655,133 @@ TASKS: dict[str, tuple[Callable[..., None], str]] = {
 def main() -> None:
     raw_args = sys.argv[1:]
     if "--quiet" in raw_args:
-        print(
-            "interlocks: --quiet was removed; minimal output is the default. "
-            "Pass --verbose for full output.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    args = [a for a in raw_args if not a.startswith("-")]
-
-    if not args:
-        cmd_help_from_argv()
+        _fail_quiet_removed()
+    task_name = _resolve_task_name(raw_args)
+    if task_name is None:
         return
-
-    requested = args[0]
-    task_name = ALIASES.get(requested, requested)
-    if task_name not in TASKS:
-        print(f"Unknown command: {requested}", file=sys.stderr)
-        cmd_help()
-        sys.exit(1)
-
-    if "-h" in raw_args or "--help" in raw_args:
-        cmd_task_help(task_name)
+    if _maybe_render_task_help(task_name, raw_args):
         return
-
-    bad = unknown_task_flags(task_name, raw_args)
-    if bad:
-        print(f"interlocks {task_name}: unknown flag {bad[0]}", file=sys.stderr)
-        sys.exit(1)
-
+    _validate_task_flags(task_name, raw_args)
     validate_cli_skip()
     preflight(task_name)
     boundary = CrashBoundary(subcommand=task_name)
     with boundary:
         boundary.maybe_inject_for_test()
         TASKS[task_name][0]()
+
+
+def _resolve_task_name(raw_args: list[str]) -> str | None:
+    args = [a for a in raw_args if not a.startswith("-")]
+    if not args:
+        if ui.is_json():
+            _fail_missing_command()
+        cmd_help_from_argv()
+        return None
+    requested = args[0]
+    task_name = ALIASES.get(requested, requested)
+    if task_name not in TASKS:
+        _fail_unknown_command(requested)
+    return task_name
+
+
+def _maybe_render_task_help(task_name: str, raw_args: list[str]) -> bool:
+    if "-h" not in raw_args and "--help" not in raw_args:
+        return False
+    if ui.is_json():
+        ui.print_json(_task_help_payload(task_name))
+    else:
+        cmd_task_help(task_name)
+    return True
+
+
+def _validate_task_flags(task_name: str, raw_args: list[str]) -> None:
+    bad = unknown_task_flags(task_name, raw_args)
+    if bad:
+        _fail_unknown_flag(task_name, bad[0])
+
+
+def _unknown_command_payload(requested: str) -> dict[str, object]:
+    return {
+        "command": requested,
+        "error": f"unknown command {requested}",
+        "usage": "usage: interlocks <command>",
+        "known_commands": sorted(TASKS),
+    }
+
+
+def _missing_command_payload() -> dict[str, object]:
+    return {
+        "command": "interlocks",
+        "error": "missing command",
+        "usage": "usage: interlocks <command>",
+        "known_commands": sorted(TASKS),
+    }
+
+
+def _task_help_payload(task_name: str) -> dict[str, object]:
+    doc = COMMAND_DOCS_BY_NAME.get(task_name)
+    if doc is None:
+        return {
+            "command": task_name,
+            "usage": f"usage: interlocks {task_name}",
+            "flags": [],
+        }
+    return command_doc_payload(doc)
+
+
+def _fail_missing_command() -> None:
+    ui.print_json(_missing_command_payload())
+    sys.exit(1)
+
+
+def _quiet_removed_payload() -> dict[str, object]:
+    return {
+        "command": "interlocks",
+        "error": "--quiet was removed; minimal output is the default",
+        "next_action": "Remove `--quiet`; pass `--verbose` for full output.",
+    }
+
+
+def _fail_quiet_removed() -> None:
+    if ui.is_json():
+        ui.print_json(_quiet_removed_payload())
+        sys.exit(1)
+    print(
+        "interlocks: --quiet was removed; minimal output is the default. "
+        "Pass --verbose for full output.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def _fail_unknown_command(requested: str) -> None:
+    if ui.is_json():
+        ui.print_json(_unknown_command_payload(requested))
+        sys.exit(1)
+    print(f"Unknown command: {requested}", file=sys.stderr)
+    cmd_help()
+    sys.exit(1)
+
+
+def _unknown_flag_payload(task_name: str, flag: str) -> dict[str, object]:
+    doc = COMMAND_DOCS_BY_NAME.get(task_name)
+    payload: dict[str, object] = {
+        "command": task_name,
+        "error": f"unknown flag {flag}",
+        "flag": flag,
+    }
+    if doc is not None:
+        payload["usage"] = f"usage: interlocks {command_usage(doc)}"
+        payload["known_flags"] = [spec.name for spec in doc.flags]
+    return payload
+
+
+def _fail_unknown_flag(task_name: str, flag: str) -> None:
+    if ui.is_json():
+        ui.print_json(_unknown_flag_payload(task_name, flag))
+        sys.exit(1)
+    print(f"interlocks {task_name}: unknown flag {flag}", file=sys.stderr)
+    sys.exit(1)
 
 
 if __name__ == "__main__":

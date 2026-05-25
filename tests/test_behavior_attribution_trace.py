@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from interlocks import behavior_attribution_trace as trace_mod
 from interlocks.behavior_attribution import load_evidence, write_evidence
 from interlocks.behavior_attribution_trace import (
     _CURRENT_SCENARIO,
@@ -21,6 +22,7 @@ from interlocks.behavior_attribution_trace import (
     _merge_subprocess_events,
     _parse_subprocess_event,
     _probe_env,
+    _record_current_process_events,
     _scenario_line,
     _supports_python_sitecustomize,
     _tracer,
@@ -31,6 +33,19 @@ from interlocks.behavior_attribution_trace import (
 
 def _frame(name: str, globals_: dict[str, object]) -> SimpleNamespace:
     return SimpleNamespace(f_code=SimpleNamespace(co_name=name), f_globals=globals_)
+
+
+def _assert_probe_call(
+    call: dict[str, object],
+    events_path: Path,
+    public_symbols: list[str],
+) -> None:
+    kwargs = call["kwargs"]
+    assert isinstance(kwargs, dict)
+    env = kwargs["env"]
+    assert isinstance(env, dict)
+    assert env[EVENTS_ENV] == str(events_path)
+    assert json.loads(env[PAYLOAD_ENV]) == {"public_symbols": public_symbols}
 
 
 def test_tracer_records_symbol_for_current_scenario(tmp_path: Path) -> None:
@@ -98,6 +113,76 @@ def test_write_evidence_round_trips(tmp_path: Path) -> None:
     assert evidence is not None
     assert evidence.created_at == 123.0
     assert evidence.scenarios[0].reached_symbols == frozenset({"pkg.mod:foo"})
+
+
+def test_write_evidence_emits_stable_json_contract(tmp_path: Path) -> None:
+    path = tmp_path / "nested" / ".interlocks" / "behavior-attribution.json"
+    expected = {
+        "created_at": 123.0,
+        "failure": "trace failed",
+        "scenarios": [
+            {
+                "feature_path": str(tmp_path / "a.feature"),
+                "scenario_line": 3,
+                "reached_symbols": ["pkg.mod:foo"],
+            },
+            {
+                "feature_path": str(tmp_path / "b.feature"),
+                "scenario_line": 8,
+                "reached_symbols": ["a", "z"],
+            },
+        ],
+    }
+
+    write_evidence(
+        path,
+        reached_by_scenario={
+            (tmp_path / "b.feature", 8): {"z", "a"},
+            (tmp_path / "a.feature", 3): {"pkg.mod:foo"},
+        },
+        created_at=123.0,
+        failure="trace failed",
+    )
+
+    raw = path.read_text(encoding="utf-8")
+    assert raw == json.dumps(expected, sort_keys=True) + "\n"
+    assert json.loads(raw) == expected
+
+
+def test_write_evidence_reuses_existing_parent_directory(tmp_path: Path) -> None:
+    path = tmp_path / ".interlocks" / "behavior-attribution.json"
+    path.parent.mkdir()
+
+    write_evidence(path, reached_by_scenario={}, created_at=1.0)
+    write_evidence(path, reached_by_scenario={}, created_at=2.0)
+
+    assert json.loads(path.read_text(encoding="utf-8"))["created_at"] == 2.0
+
+
+def test_write_evidence_uses_explicit_utf8_encoding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / ".interlocks" / "behavior-attribution.json"
+    calls: list[str | None] = []
+    path_type = type(path)
+    original = path_type.write_text
+
+    def spy_write_text(
+        self: Path,
+        data: str,
+        encoding: str | None = None,
+        errors: str | None = None,
+        newline: str | None = None,
+    ) -> int:
+        calls.append(encoding)
+        return original(self, data, encoding=encoding, errors=errors, newline=newline)
+
+    monkeypatch.setattr(path_type, "write_text", spy_write_text)
+
+    write_evidence(path, reached_by_scenario={}, created_at=123.0)
+
+    assert calls == ["utf-8"]
 
 
 def test_subprocess_probe_records_symbols_to_events_file(tmp_path: Path) -> None:
@@ -221,6 +306,119 @@ def test_install_subprocess_probe_skips_non_python_commands(
     assert "env" not in kwargs
 
 
+def test_install_subprocess_probe_refreshes_existing_run_and_popen_wrappers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    run_calls: list[dict[str, object]] = []
+    popen_calls: list[dict[str, object]] = []
+
+    def fake_run(*args: object, **kwargs: object) -> str:
+        run_calls.append({"args": args, "kwargs": kwargs})
+        return "run-result"
+
+    def fake_popen(*args: object, **kwargs: object) -> str:
+        popen_calls.append({"args": args, "kwargs": kwargs})
+        return "popen-result"
+
+    first_events = tmp_path / "first.jsonl"
+    second_events = tmp_path / "second.jsonl"
+
+    monkeypatch.setattr(trace_mod, "_PATCHED_RUN", None)
+    monkeypatch.setattr(trace_mod, "_PATCHED_POPEN", None)
+    monkeypatch.setattr(trace_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(trace_mod.subprocess, "Popen", fake_popen)
+
+    _install_subprocess_probe(("pkg.mod:first",), first_events)
+    run_wrapper = trace_mod.subprocess.run
+    popen_wrapper = trace_mod.subprocess.Popen
+
+    assert callable(run_wrapper)
+    assert callable(popen_wrapper)
+    assert run_wrapper is trace_mod._PATCHED_RUN
+    assert popen_wrapper is trace_mod._PATCHED_POPEN
+
+    token = _CURRENT_SCENARIO.set((tmp_path / "feature.feature", 4))
+    try:
+        assert trace_mod.subprocess.run([sys.executable, "-m", "sample"]) == "run-result"
+        assert trace_mod.subprocess.Popen([sys.executable, "-m", "sample"]) == "popen-result"
+    finally:
+        _CURRENT_SCENARIO.reset(token)
+
+    _assert_probe_call(run_calls[0], first_events, ["pkg.mod:first"])
+    _assert_probe_call(popen_calls[0], first_events, ["pkg.mod:first"])
+    run_calls.clear()
+    popen_calls.clear()
+
+    _install_subprocess_probe(("pkg.mod:second", "pkg.mod:third"), second_events)
+
+    assert trace_mod.subprocess.run is run_wrapper
+    assert trace_mod.subprocess.Popen is popen_wrapper
+
+    token = _CURRENT_SCENARIO.set((tmp_path / "feature.feature", 4))
+    try:
+        assert trace_mod.subprocess.run([sys.executable, "-m", "sample"]) == "run-result"
+        assert trace_mod.subprocess.Popen([sys.executable, "-m", "sample"]) == "popen-result"
+    finally:
+        _CURRENT_SCENARIO.reset(token)
+
+    _assert_probe_call(run_calls[0], second_events, ["pkg.mod:second", "pkg.mod:third"])
+    _assert_probe_call(popen_calls[0], second_events, ["pkg.mod:second", "pkg.mod:third"])
+
+
+def test_install_subprocess_probe_rewraps_replaced_launchers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    run_calls: list[dict[str, object]] = []
+    popen_calls: list[dict[str, object]] = []
+
+    def first_run(*args: object, **kwargs: object) -> str:
+        return "first-run"
+
+    def first_popen(*args: object, **kwargs: object) -> str:
+        return "first-popen"
+
+    def replacement_run(*args: object, **kwargs: object) -> str:
+        run_calls.append({"args": args, "kwargs": kwargs})
+        return "replacement-run"
+
+    def replacement_popen(*args: object, **kwargs: object) -> str:
+        popen_calls.append({"args": args, "kwargs": kwargs})
+        return "replacement-popen"
+
+    events = tmp_path / "events.jsonl"
+
+    monkeypatch.setattr(trace_mod, "_PATCHED_RUN", None)
+    monkeypatch.setattr(trace_mod, "_PATCHED_POPEN", None)
+    monkeypatch.setattr(trace_mod.subprocess, "run", first_run)
+    monkeypatch.setattr(trace_mod.subprocess, "Popen", first_popen)
+
+    _install_subprocess_probe(("pkg.mod:first",), tmp_path / "first.jsonl")
+    stale_run_wrapper = trace_mod.subprocess.run
+    stale_popen_wrapper = trace_mod.subprocess.Popen
+
+    monkeypatch.setattr(trace_mod.subprocess, "run", replacement_run)
+    monkeypatch.setattr(trace_mod.subprocess, "Popen", replacement_popen)
+
+    _install_subprocess_probe(("pkg.mod:replacement",), events)
+
+    assert trace_mod.subprocess.run is trace_mod._PATCHED_RUN
+    assert trace_mod.subprocess.Popen is trace_mod._PATCHED_POPEN
+    assert trace_mod.subprocess.run is not stale_run_wrapper
+    assert trace_mod.subprocess.Popen is not stale_popen_wrapper
+
+    token = _CURRENT_SCENARIO.set((tmp_path / "feature.feature", 4))
+    try:
+        assert trace_mod.subprocess.run([sys.executable, "-m", "sample"]) == "replacement-run"
+        assert trace_mod.subprocess.Popen([sys.executable, "-m", "sample"]) == "replacement-popen"
+    finally:
+        _CURRENT_SCENARIO.reset(token)
+
+    _assert_probe_call(run_calls[0], events, ["pkg.mod:replacement"])
+    _assert_probe_call(popen_calls[0], events, ["pkg.mod:replacement"])
+
+
 def test_subprocess_command_supports_kwargs_and_command_detection() -> None:
     assert _supports_python_sitecustomize([sys.executable, "-m", "pytest"])
     assert not _supports_python_sitecustomize(["git", "status"])
@@ -266,6 +464,17 @@ def test_scenario_line_falls_back_to_zero() -> None:
     assert _scenario_line(object()) == 0
 
 
+def test_scenario_line_prefers_line_number_over_line() -> None:
+    scenario = SimpleNamespace(line_number=3, line=9)
+
+    assert _scenario_line(scenario) == 3
+
+
+def test_scenario_line_rejects_boolean_line_number_before_line_fallback() -> None:
+    assert _scenario_line(SimpleNamespace(line_number=True, line=8)) == 8
+    assert _scenario_line(SimpleNamespace(line_number=True, line=False)) == 0
+
+
 def test_write_reached_events_skips_empty_and_writes_sorted(tmp_path: Path) -> None:
     path = tmp_path / "events.jsonl"
 
@@ -275,6 +484,47 @@ def test_write_reached_events_skips_empty_and_writes_sorted(tmp_path: Path) -> N
     assert path.read_text(encoding="utf-8").splitlines() == [
         json.dumps({"scenario": "scenario", "symbol": "pkg.mod:a"}),
         json.dumps({"scenario": "scenario", "symbol": "pkg.mod:b"}),
+    ]
+
+
+def test_record_current_process_events_flushes_reached_symbols_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    events = tmp_path / "events.jsonl"
+    scenario = _encode_scenario_key((tmp_path / "feature.feature", 4))
+    registered: list[object] = []
+    traces: list[object] = []
+    monkeypatch.setenv(SCENARIO_ENV, scenario)
+    monkeypatch.setenv(EVENTS_ENV, str(events))
+    monkeypatch.setenv(PAYLOAD_ENV, json.dumps({"public_symbols": ["pkg.mod:tracked"]}))
+
+    def register(callback: object) -> None:
+        registered.append(callback)
+
+    def gettrace() -> str:
+        return "previous-trace"
+
+    def settrace(trace: object) -> None:
+        traces.append(trace)
+
+    monkeypatch.setattr(trace_mod.atexit, "register", register)
+    monkeypatch.setattr(trace_mod.sys, "gettrace", gettrace)
+    monkeypatch.setattr(trace_mod.sys, "settrace", settrace)
+
+    _record_current_process_events()
+
+    assert len(registered) == 1
+    trace = traces[0]
+    assert callable(trace)
+    trace(_frame("tracked", {"__name__": "pkg.mod"}), "call", None)
+    flush = registered[0]
+    assert callable(flush)
+    flush()
+
+    assert traces[-1] == "previous-trace"
+    assert events.read_text(encoding="utf-8").splitlines() == [
+        json.dumps({"scenario": scenario, "symbol": "pkg.mod:tracked"})
     ]
 
 

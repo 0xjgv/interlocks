@@ -57,6 +57,9 @@ def cmd_fix_replay(
     payload = _serialize(result, rule_stats)
     plan_path = _write_replay_json(cfg.project_root, payload)
 
+    if ui.is_json():
+        ui.print_json(_fix_replay_payload(payload, cfg.relpath(plan_path)))
+        return
     _print_summary(result, rule_stats, base, budget_name, cfg.relpath(plan_path))
 
 
@@ -99,6 +102,32 @@ def _write_replay_json(project_root: Path, payload: dict[str, Any]) -> Path:
     return target
 
 
+def _fix_replay_payload(payload: dict[str, Any], replay_path: str) -> dict[str, object]:
+    rules = payload.get("rules")
+    rule_rows = rules if isinstance(rules, list) else []
+    return {
+        "command": "fix-replay",
+        "passed": True,
+        "status": "replayed",
+        "replay_path": replay_path,
+        "base_branch": payload.get("base_branch"),
+        "budget": payload.get("budget"),
+        "n_requested": payload.get("n_requested", 0),
+        "n_replayed": payload.get("n_replayed", 0),
+        "n_with_error": payload.get("n_with_error", 0),
+        "rules_count": len(rule_rows),
+        "pareto_frontier": _pareto_frontier(rule_rows),
+    }
+
+
+def _pareto_frontier(rule_rows: list[object]) -> list[str]:
+    return sorted(
+        str(row.get("rule"))
+        for row in rule_rows
+        if isinstance(row, dict) and row.get("on_pareto_frontier")
+    )
+
+
 def _print_summary(
     result: replay_module.ReplayResult,
     rule_stats: tuple[stats_module.RuleStats, ...],
@@ -106,9 +135,16 @@ def _print_summary(
     budget_name: str,
     plan_rel: str,
 ) -> None:
+    errors = sum(1 for p in result.points if p.error)
+    ui.gate_row(
+        "fix-replay",
+        plan_rel,
+        "ok",
+        detail=f"commits={len(result.points)} errors={errors} rules={len(rule_stats)}",
+        state="ok",
+    )
     header = f"fix-replay ({base}, n={result.requested}, budget={budget_name})"
     ui.section(header)
-    errors = sum(1 for p in result.points if p.error)
     ui.kv_block([
         ("commits replayed", str(len(result.points))),
         ("commits with errors", str(errors)),

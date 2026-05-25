@@ -7,6 +7,7 @@ autodetected defaults. Stdlib-only.
 
 from __future__ import annotations
 
+import math
 import sys
 import tomllib
 from dataclasses import dataclass, field, replace
@@ -57,6 +58,7 @@ SKIP_LABELS: frozenset[str] = frozenset({
     "format",
     "lint",
     "mutation",
+    "properties",
     "test",
     "typecheck",
 })
@@ -90,6 +92,7 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "mutation_ci_mode": "off",
         "run_acceptance_in_check": False,
         "require_acceptance": False,
+        "run_properties_in_check": False,
     },
     "strict": {
         "coverage_min": 90,
@@ -107,6 +110,7 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "mutation_ci_mode": "incremental",
         "run_acceptance_in_check": True,
         "require_acceptance": True,
+        "run_properties_in_check": True,
     },
     "legacy": {
         "coverage_min": 0,
@@ -123,6 +127,7 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "mutation_ci_mode": "off",
         "run_acceptance_in_check": False,
         "require_acceptance": False,
+        "run_properties_in_check": False,
     },
     # Thresholds intentionally permissive — the baseline file ratchets above these.
     "progressive": {
@@ -141,6 +146,7 @@ _PRESET_DEFAULTS: dict[Preset, dict[str, object]] = {
         "mutation_ci_mode": "incremental",
         "run_acceptance_in_check": True,
         "require_acceptance": True,
+        "run_properties_in_check": True,
     },
 }
 
@@ -216,6 +222,13 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "str",
         "auto",
         "Gherkin features dir (tests/features/, features/, or <test_dir>/features/)",
+        "Paths",
+    ),
+    ConfigKeyDoc(
+        "properties_dir",
+        "str",
+        "auto",
+        "Property-test dir (properties/ by default; existing <test_dir>/properties/ supported)",
         "Paths",
     ),
     ConfigKeyDoc(
@@ -301,6 +314,13 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
         "bool",
         "false",
         "Run acceptance scenarios inside `interlocks check`",
+        "Gates",
+    ),
+    ConfigKeyDoc(
+        "run_properties_in_check",
+        "bool",
+        "false",
+        "Run property tests inside `interlocks check` when properties exist",
         "Gates",
     ),
     ConfigKeyDoc(
@@ -485,7 +505,10 @@ def _load_pyproject(project_root: Path) -> dict[str, Any]:
 
 
 def _interlock_table(pyproject: dict[str, Any]) -> dict[str, Any]:
-    table = pyproject.get("tool", {}).get("interlocks", {})
+    tool = pyproject.get("tool", {})
+    if not isinstance(tool, dict):
+        return {}
+    table = tool.get("interlocks", {})
     return table if isinstance(table, dict) else {}
 
 
@@ -501,8 +524,8 @@ def _tool_version_overrides(table: dict[str, Any]) -> dict[str, str]:
         return {}
     overrides: dict[str, str] = {}
     for name, value in raw.items():
-        if name in TOOL_DEFAULTS and isinstance(value, str) and value:
-            overrides[name] = value
+        if name in TOOL_DEFAULTS and isinstance(value, str) and (pin := value.strip()):
+            overrides[name] = pin
     return overrides
 
 
@@ -581,7 +604,9 @@ class InterlockConfig:
     # Acceptance (Gherkin) — all optional; resolved lazily by the task.
     acceptance_runner: AcceptanceRunner | None = None
     features_dir: Path | None = None
+    properties_dir: Path | None = None
     run_acceptance_in_check: bool = False
+    run_properties_in_check: bool = False
     require_acceptance: bool = False
     evaluate_dependency_freshness: bool = False
     dependency_freshness_command: str = "interlocks deps-freshness"
@@ -621,6 +646,13 @@ class InterlockConfig:
         if self.features_dir is None:
             return None
         return self.relpath(self.features_dir)
+
+    @property
+    def properties_dir_arg(self) -> str | None:
+        """Project-root-relative string form of ``properties_dir``, or ``None``."""
+        if self.properties_dir is None:
+            return None
+        return self.relpath(self.properties_dir)
 
     def tool_version(self, name: str) -> str:
         """Resolve the version pin for tool ``name``.
@@ -788,6 +820,7 @@ def _build_config(project_root: Path) -> InterlockConfig:
         "src_dir": paths.src_dir_override,
         "test_dir": paths.test_dir_override,
         "features_dir": paths.features_dir_override,
+        "properties_dir": paths.properties_dir_override,
         "test_runner": runner_override,
         "test_invoker": invoker_override,
         "acceptance_runner": acceptance_runner,
@@ -803,8 +836,12 @@ def _build_config(project_root: Path) -> InterlockConfig:
         pytest_args=pytest_args,
         acceptance_runner=acceptance_runner,
         features_dir=paths.features_dir,
+        properties_dir=paths.properties_dir,
         run_acceptance_in_check=table.get(
             "run_acceptance_in_check", InterlockConfig.run_acceptance_in_check
+        ),
+        run_properties_in_check=table.get(
+            "run_properties_in_check", InterlockConfig.run_properties_in_check
         ),
         require_acceptance=table.get("require_acceptance", InterlockConfig.require_acceptance),
         mutation_ci_mode=table.get("mutation_ci_mode", InterlockConfig.mutation_ci_mode),
@@ -835,9 +872,11 @@ class ResolvedPaths:
     test_dir_override: object
     src_dir_override: object
     features_dir_override: object
+    properties_dir_override: object
     test_dir: Path
     src_dir: Path
     features_dir: Path | None
+    properties_dir: Path | None
 
 
 def _resolved_paths(
@@ -846,6 +885,7 @@ def _resolved_paths(
     test_dir_override = table.get("test_dir")
     src_dir_override = table.get("src_dir")
     features_dir_override = table.get("features_dir")
+    properties_dir_override = table.get("properties_dir")
     test_dir = _resolved_path(test_dir_override, detect_test_dir(project_root), project_root)
     src_dir = _resolved_path(
         src_dir_override, detect_src_dir(project_root, pyproject), project_root
@@ -853,14 +893,38 @@ def _resolved_paths(
     features_dir = _resolved_path(
         features_dir_override, detect_features_dir(project_root, test_dir), project_root
     )
+    properties_dir = _resolved_path(
+        properties_dir_override,
+        detect_properties_dir(project_root, test_dir),
+        project_root,
+    )
     return ResolvedPaths(
         test_dir_override,
         src_dir_override,
         features_dir_override,
+        properties_dir_override,
         test_dir,
         src_dir,
         features_dir,
+        properties_dir,
     )
+
+
+def detect_properties_dir(project_root: Path, test_dir: Path) -> Path:
+    """Return the conventional property-test directory for this project.
+
+    Root-level ``properties/`` is the default so regular ``pytest tests`` runs do
+    not collect property tests outside the dedicated profile-controlled gate.
+    Brownfield projects that already have ``<test_dir>/properties/`` are still
+    detected when root-level ``properties/`` is absent.
+    """
+    root_properties = project_root / "properties"
+    if root_properties.is_dir():
+        return root_properties
+    nested = test_dir / "properties"
+    if nested.is_dir():
+        return nested
+    return root_properties
 
 
 def _default_enforce_behavior_attribution(pyproject: dict[str, Any]) -> bool:
@@ -888,6 +952,7 @@ _STRING_KEYS = (
     "mutation_since_ref",
     "changed_ref",
     "features_dir",
+    "properties_dir",
     "dependency_freshness_command",
     "dependency_freshness_stage",
     "ci_evidence_path",
@@ -961,7 +1026,7 @@ def _explicit_config_overrides(table: dict[str, Any]) -> dict[str, Any]:
         if parsed is not None:
             overrides[enum_key] = parsed
     overrides.update(_threshold_overrides(table))
-    for bool_key in ("run_acceptance_in_check", "require_acceptance"):
+    for bool_key in ("run_acceptance_in_check", "run_properties_in_check", "require_acceptance"):
         coerced = _coerce_bool(table.get(bool_key))
         if coerced is not None:
             overrides[bool_key] = coerced
@@ -984,6 +1049,7 @@ def _complete_value_sources(
         "changed_ref",
         "skip",
         "run_acceptance_in_check",
+        "run_properties_in_check",
         "require_acceptance",
         "evaluate_dependency_freshness",
         "dependency_freshness_command",
@@ -1041,6 +1107,8 @@ def coerce_int(raw: object) -> int | None:
     if isinstance(raw, int):
         return raw
     if isinstance(raw, float):
+        if not math.isfinite(raw):
+            return None
         return int(raw)
     return None
 
@@ -1049,8 +1117,14 @@ def coerce_float(raw: object) -> float | None:
     """Coerce ``raw`` to float when it is a number; return ``None`` for booleans/non-numbers."""
     if raw is None or isinstance(raw, bool):
         return None
-    if isinstance(raw, (int, float)):
-        return float(raw)
+    if isinstance(raw, int):
+        try:
+            value = float(raw)
+        except OverflowError:
+            return None
+        return value if math.isfinite(value) else None
+    if isinstance(raw, float):
+        return raw if math.isfinite(raw) else None
     return None
 
 

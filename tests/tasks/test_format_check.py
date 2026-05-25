@@ -1,11 +1,15 @@
 """Integration tests for interlocks.tasks.format_check.
 
-``format-check`` is not registered in the CLI TASKS dict (see interlocks/cli.py),
-so we invoke ``cmd_format_check`` directly and assert the SystemExit code.
+The CLI exposes ``format-check`` as the read-only counterpart to ``format``;
+the unit layer still invokes ``cmd_format_check`` directly for focused exit-code
+coverage.
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -50,6 +54,31 @@ def test_format_check_clean_exits_zero(
     assert "ok" in out
 
 
+def test_format_check_json_clean_exits_zero(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.format_check import cmd_format_check
+
+    src = tmp_project / "sample.py"
+    src.write_text(CLEAN, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "format-check", "--json"])
+    clear_cache()
+
+    cmd_format_check()
+
+    assert src.read_text(encoding="utf-8") == CLEAN
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "format-check"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "format"
+    assert captured.err.startswith("interlocks: [format]")
+
+
 def test_format_check_unformatted_exits_nonzero(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -60,6 +89,29 @@ def test_format_check_unformatted_exits_nonzero(
     with pytest.raises(SystemExit) as excinfo:
         cmd_format_check()
     assert excinfo.value.code != 0
+
+
+def test_format_check_json_unformatted_exits_nonzero(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.format_check import cmd_format_check
+
+    (tmp_project / "sample.py").write_text(UNFORMATTED, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "format-check", "--json"])
+    clear_cache()
+
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_format_check()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert payload["command"] == "format-check"
+    assert payload["passed"] is False
+    assert payload["gates"][0]["status"] == "fail"
 
 
 def test_format_check_injects_bundled_config_in_bare_project(
@@ -74,3 +126,19 @@ def test_format_check_injects_bundled_config_in_bare_project(
     cmd = task_format_check().cmd
     assert "--config" in cmd
     assert Path(cmd[cmd.index("--config") + 1]).name == "ruff.toml"
+
+
+def test_format_check_cli_entrypoint_is_registered(tmp_project: Path) -> None:
+    (tmp_project / "sample.py").write_text(CLEAN, encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "interlocks.cli", "format-check"],
+        cwd=tmp_project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "[format]" in result.stdout
+    assert "ok" in result.stdout

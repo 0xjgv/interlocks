@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -79,7 +80,12 @@ def load_evidence(path: Path) -> AttributionEvidence | None:
         return None
     created_at = raw.get("created_at")
     scenarios = raw.get("scenarios")
-    if not isinstance(created_at, int | float) or not isinstance(scenarios, list):
+    if (
+        not isinstance(created_at, int | float)
+        or isinstance(created_at, bool)
+        or not math.isfinite(float(created_at))
+        or not isinstance(scenarios, list)
+    ):
         return None
 
     parsed: list[ScenarioReach] = []
@@ -210,7 +216,11 @@ def _format_unresolved(behaviors: tuple[Behavior, ...]) -> Iterable[str]:
 def _format_gaps(failures: tuple[AttributionClaimFailure, ...]) -> Iterable[str]:
     yield "  instrumentation gaps:"
     for failure in failures:
-        yield _claim_line(failure, " — no per-scenario evidence recorded")
+        detail = (
+            f" claimed {failure.scenario.behavior_id} but no per-scenario evidence "
+            f"recorded for {failure.public_symbol}"
+        )
+        yield _claim_line(failure, detail)
 
 
 def _format_informational(behaviors: tuple[Behavior, ...]) -> Iterable[str]:
@@ -255,7 +265,7 @@ def _parse_reach(raw: object) -> ScenarioReach | None:
     reached_symbols = raw.get("reached_symbols")
     if not isinstance(feature_path, str):
         return None
-    if not isinstance(scenario_line, int) or isinstance(scenario_line, bool):
+    if not isinstance(scenario_line, int) or isinstance(scenario_line, bool) or scenario_line <= 0:
         return None
     if not isinstance(reached_symbols, list):
         return None

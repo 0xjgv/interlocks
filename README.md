@@ -48,9 +48,10 @@ Run the local quality loop:
 uvx --from interlocks il check
 ```
 
-`check` runs fix, format, typecheck, tests, optional acceptance tests, advisory
-dependency hygiene, cached CRAP feedback when fresh coverage exists, and the
-suppressions report. It is the command to run after edits before pushing.
+`check` runs fix, format, typecheck, tests, optional acceptance and property
+tests, advisory dependency hygiene, cached CRAP feedback when fresh coverage
+exists, and the suppressions report. It is the command to run after edits
+before pushing.
 
 For frequent local use:
 
@@ -131,13 +132,16 @@ machine-readable JSON object on stdout. Exit codes are unchanged, and
 | Command | When | What It Proves |
 |---------|------|----------------|
 | `interlocks doctor` | Before adoption or when confused | Static project detection, config, integrations, blockers, next steps |
-| `interlocks check` | After local edits | Fix, format, typecheck, tests, optional acceptance, deps advisory, cached CRAP advisory, suppressions |
+| `interlocks check` | After local edits | Fix, format, typecheck, tests, optional acceptance/properties, deps advisory, cached CRAP advisory, suppressions |
 | `interlocks pre-commit` | Git hook | Staged-file fix/format, re-stage, typecheck, tests when source changed |
-| `interlocks ci` | Pull requests and protected branches | Format-check, lint, complexity, audit, deps, typecheck, coverage, arch, acceptance, CRAP, optional mutation |
-| `interlocks nightly` | Scheduled jobs | Coverage, audit, full mutation, blocking on `mutation_min_score` |
+| `interlocks ci` | Pull requests and protected branches | Format-check, lint, complexity, audit, deps, typecheck, coverage including properties, arch, acceptance, CRAP, optional mutation |
+| `interlocks nightly` | Scheduled jobs | Coverage including properties, audit, full mutation, blocking on `mutation_min_score` |
 
 `interlocks ci` writes `.interlocks/ci.json` timing evidence. `nightly` catches
 slower evidence that may be too expensive for every PR.
+
+Agents can use `interlocks property-candidates --json --uncovered` to rank
+pure-ish functions that are not already referenced by property tests.
 
 ## Agent Contract
 
@@ -167,8 +171,9 @@ interlocks check --changed=HEAD~1
 
 `--changed` scopes file-level gates such as fix, format, typecheck, and CRAP to
 the diff against the configured base ref. Graph-wide gates and the test suite
-are skipped with a banner. Run `interlocks test` separately when you want the
-full suite.
+are skipped with a banner; property tests are skipped too because they are
+property-wide rather than file-level. Run `interlocks test` and
+`interlocks properties --profile=check` separately when you want the full suite.
 
 Debug a failing gate:
 
@@ -176,7 +181,7 @@ Debug a failing gate:
 il lint
 il typecheck
 il test
-il coverage --min=80
+il coverage --min=80 --properties
 il deps
 il audit
 il arch

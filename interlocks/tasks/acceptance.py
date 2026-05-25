@@ -13,7 +13,9 @@ import json
 import os
 from typing import TYPE_CHECKING
 
+from interlocks import ui
 from interlocks.acceptance_status import (
+    AcceptanceClassification,
     AcceptanceStatus,
     classify_acceptance,
     classify_acceptance_with_details,
@@ -29,7 +31,7 @@ from interlocks.behavior_attribution_trace import PAYLOAD_ENV, PLUGIN_NAME
 from interlocks.behavior_coverage import behavior_registry_for_config
 from interlocks.config import InterlockConfig, invoker_prefix, load_config
 from interlocks.detect import detect_acceptance_runner
-from interlocks.runner import Task, fail_skip, run, warn_skip
+from interlocks.runner import Task, fail_skip, run, run_task_json, subcommand_args, warn_skip
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -76,26 +78,93 @@ def task_acceptance_with_attribution(cfg: InterlockConfig) -> Task | None:
 def cmd_acceptance() -> None:
     cfg = load_config()
     classification = classify_acceptance_with_details(cfg)
-    if classification.status is AcceptanceStatus.DISABLED:
-        warn_skip("acceptance: disabled via acceptance_runner = 'off'")
-        return
-    if classification.status is AcceptanceStatus.OPTIONAL_MISSING:
-        warn_skip(_MISSING_FEATURES_NUDGE)
-        return
-    if classification.is_required_failure:
-        fail_skip(
-            remediation_message(
-                classification.status,
-                classification.features_dir,
-                classification.behavior_result,
-            )
-        )
+    if _handle_acceptance_nonrunnable(classification):
         return
     task = task_acceptance_from_config(cfg)
     if task is None:
-        warn_skip(_MISSING_FEATURES_NUDGE)
+        _emit_acceptance_skip(
+            AcceptanceStatus.OPTIONAL_MISSING,
+            reason=_MISSING_FEATURES_NUDGE,
+            next_actions=["Run `interlocks init-acceptance` to scaffold feature files."],
+        )
+        return
+    if ui.is_json():
+        run_task_json("acceptance", task)
         return
     run(task)
+
+
+def _handle_acceptance_nonrunnable(classification: AcceptanceClassification) -> bool:
+    if classification.status is AcceptanceStatus.DISABLED:
+        _emit_acceptance_skip(
+            classification.status,
+            reason="acceptance: disabled via acceptance_runner = 'off'",
+            next_actions=[],
+        )
+        return True
+    if classification.status is AcceptanceStatus.OPTIONAL_MISSING:
+        _emit_acceptance_skip(
+            classification.status,
+            reason=_MISSING_FEATURES_NUDGE,
+            next_actions=["Run `interlocks init-acceptance` to scaffold feature files."],
+        )
+        return True
+    if classification.is_required_failure:
+        _emit_acceptance_failure(classification)
+        return True
+    return False
+
+
+def _emit_acceptance_skip(
+    status: AcceptanceStatus, *, reason: str, next_actions: list[str]
+) -> None:
+    if ui.is_json():
+        ui.print_json(_acceptance_skip_payload(status, reason=reason, next_actions=next_actions))
+        return
+    warn_skip(reason)
+
+
+def _emit_acceptance_failure(classification: AcceptanceClassification) -> None:
+    message = remediation_message(
+        classification.status,
+        classification.features_dir,
+        classification.behavior_result,
+    )
+    if ui.is_json():
+        ui.print_json(_acceptance_failure_payload(classification.status, message))
+        raise SystemExit(1)
+    fail_skip(message)
+
+
+def _acceptance_skip_payload(
+    status: AcceptanceStatus, *, reason: str, next_actions: list[str]
+) -> dict[str, object]:
+    return {
+        "command": "acceptance",
+        "passed": True,
+        "status": "skipped",
+        "acceptance_status": status.value,
+        "reason": reason,
+        "next_actions": next_actions,
+    }
+
+
+def _acceptance_failure_payload(status: AcceptanceStatus, message: str) -> dict[str, object]:
+    return {
+        "command": "acceptance",
+        "passed": False,
+        "acceptance_status": status.value,
+        "error": message,
+        "next_actions": [_acceptance_failure_next_action(status)],
+    }
+
+
+def _acceptance_failure_next_action(status: AcceptanceStatus) -> str:
+    if status is AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE:
+        return "Add or update Gherkin behavior markers, then rerun `interlocks acceptance`."
+    if status is AcceptanceStatus.MISSING_SCENARIOS:
+        return "Add at least one scenario, then rerun `interlocks acceptance`."
+    return "Run `interlocks init-acceptance` to scaffold feature files."
 
 
 def attribution_enabled() -> bool:
@@ -128,12 +197,19 @@ def _maybe_attribution_task(cfg: InterlockConfig, task: Task) -> Task:
 
 
 def _maybe_trace_task(cfg: InterlockConfig, task: Task) -> Task:
-    if not trace_enabled() or not trace_can_wrap_command(task.cmd):
+    force_trace = _trace_flag_requested()
+    if not (force_trace or trace_enabled()):
+        return task
+    if not trace_can_wrap_command(task.cmd, force_in_process=force_trace):
         return task
     symbols = _public_symbols(cfg)
     if not symbols:
         return task
     return dataclasses.replace(task, cmd=trace_wrapper_cmd(cfg.project_root, symbols, task.cmd))
+
+
+def _trace_flag_requested() -> bool:
+    return "--trace" in subcommand_args("acceptance")
 
 
 def _public_symbols(cfg: InterlockConfig) -> tuple[str, ...]:
@@ -151,9 +227,20 @@ def _inject_pytest_plugin(cmd: list[str]) -> list[str]:
         idx = cmd.index("pytest")
     except ValueError:
         return cmd
-    if PLUGIN_NAME in cmd:
+    if _loads_pytest_plugin(cmd[idx + 1 :]):
         return cmd
     return [*cmd[: idx + 1], "-p", PLUGIN_NAME, *cmd[idx + 1 :]]
+
+
+def _loads_pytest_plugin(args: list[str]) -> bool:
+    for idx, arg in enumerate(args):
+        if arg == "-p":
+            if idx + 1 < len(args) and args[idx + 1] == PLUGIN_NAME:
+                return True
+            continue
+        if arg == f"-p{PLUGIN_NAME}":
+            return True
+    return False
 
 
 def _pytest_bdd_task(cfg: InterlockConfig, features_dir: Path, features_arg: str) -> Task:
@@ -170,6 +257,7 @@ def _pytest_bdd_task(cfg: InterlockConfig, features_dir: Path, features_arg: str
         allowed_rcs=(0, 5),
         label="acceptance",
         display="pytest-bdd",
+        start_status="running",
     )
 
 
@@ -188,4 +276,10 @@ def _pytest_bdd_targets(cfg: InterlockConfig, features_dir: Path, features_arg: 
 
 def _behave_task(cfg: InterlockConfig, features_arg: str) -> Task:
     cmd = [*invoker_prefix(cfg), "behave", features_arg]
-    return Task("Acceptance (behave)", cmd, label="acceptance", display="behave")
+    return Task(
+        "Acceptance (behave)",
+        cmd,
+        label="acceptance",
+        display="behave",
+        start_status="running",
+    )

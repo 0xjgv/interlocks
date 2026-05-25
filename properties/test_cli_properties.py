@@ -1,0 +1,389 @@
+"""Property tests for CLI display helpers."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import cast
+
+from hypothesis import given
+from hypothesis import strategies as st
+
+from interlocks import cli as cli_mod
+from interlocks.cli import (
+    _HELP_GROUPS,
+    TASKS,
+    _available_preset_payload,
+    _current_preset_payload,
+    _detected_payload,
+    _detected_summary_line,
+    _help_command_payload,
+    _help_groups_payload,
+    _maybe_handle_presets_set,
+    _missing_command_payload,
+    _presets_error_payload,
+    _presets_payload,
+    _quiet_removed_payload,
+    _resolve_task_name,
+    _task_help_payload,
+    _unknown_command_payload,
+    _unknown_flag_payload,
+    _validate_task_flags,
+)
+from interlocks.config import (
+    InterlockConfig,
+    Preset,
+    TestRunner,
+    preset_defaults,
+    preset_description,
+    supported_presets,
+)
+
+_REL_PATH = st.from_regex(
+    r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,20}(?:/[A-Za-z0-9_][A-Za-z0-9_.-]{0,20}){0,2}",
+    fullmatch=True,
+)
+_PRESET = st.one_of(
+    st.none(),
+    st.sampled_from(["baseline", "strict", "legacy", "progressive"]),
+)
+_KNOWN_PRESET = st.sampled_from(supported_presets())
+_RUNNER = st.sampled_from(["pytest", "unittest"])
+_FLAG = st.from_regex(r"--[a-z][a-z0-9-]{0,20}", fullmatch=True)
+_COMMAND = st.from_regex(r"[a-z][a-z0-9-]{0,20}", fullmatch=True)
+_KNOWN_COMMAND = st.sampled_from([
+    ("check", "check"),
+    ("unblock", "fix-optimize"),
+    ("attribution", "behavior-attribution"),
+])
+_KNOWN_CHECK_FLAG = st.sampled_from([
+    "--changed",
+    "--changed=HEAD",
+    "--json",
+    "--mutation-budget=quick",
+    "--renovate",
+    "--skip=mutation",
+])
+_TASK_NAME = st.sampled_from(tuple(sorted(TASKS)))
+_PRESET_ARGS = st.lists(
+    st.from_regex(r"[a-z][a-z0-9-]{0,12}", fullmatch=True),
+    max_size=3,
+)
+
+
+def _run_maybe_handle_presets_set(args: list[str]) -> tuple[bool | str, list[list[str]]]:
+    calls: list[list[str]] = []
+
+    def fake_set(set_args: list[str]) -> None:
+        calls.append(set_args)
+
+    def fake_error(_error: str, _detail: str) -> None:
+        raise RuntimeError("invalid presets usage")
+
+    old_argv = sys.argv
+    old_set = cli_mod._cmd_presets_set
+    old_error = cli_mod._fail_presets_error
+    sys.argv = ["interlocks", "presets", *args, "--json"]
+    cli_mod._cmd_presets_set = fake_set  # type: ignore[assignment]
+    cli_mod._fail_presets_error = fake_error  # type: ignore[assignment]
+    try:
+        outcome = _call_maybe_handle_presets_set()
+    finally:
+        cli_mod._cmd_presets_set = old_set  # type: ignore[assignment]
+        cli_mod._fail_presets_error = old_error  # type: ignore[assignment]
+        sys.argv = old_argv
+    return outcome, calls
+
+
+def _call_maybe_handle_presets_set() -> bool | str:
+    try:
+        return _maybe_handle_presets_set()
+    except RuntimeError:
+        return "invalid"
+
+
+@given(preset=_PRESET, src=_REL_PATH, tests=_REL_PATH, runner=_RUNNER)
+def test_detected_summary_line_uses_resolved_config_labels(
+    preset: str | None,
+    src: str,
+    tests: str,
+    runner: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / src,
+            test_dir=root / tests,
+            test_runner=cast("TestRunner", runner),
+            test_invoker="python",
+            preset=cast("Preset | None", preset),
+        )
+
+        line = _detected_summary_line(cfg)
+
+    assert line == (
+        f"Detected: preset={preset or '(none)'}, src={src}, tests={tests}, runner={runner}"
+    )
+
+
+@given(preset=_PRESET, src=_REL_PATH, tests=_REL_PATH, runner=_RUNNER)
+def test_detected_payload_projects_resolved_config_when_pyproject_exists(
+    preset: str | None,
+    src: str,
+    tests: str,
+    runner: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        (root / "pyproject.toml").write_text("[project]\nname='pkg'\n", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / src,
+            test_dir=root / tests,
+            test_runner=cast("TestRunner", runner),
+            test_invoker="python",
+            preset=cast("Preset | None", preset),
+        )
+
+        payload = _detected_payload(cfg)
+
+    assert payload == {
+        "pyproject": True,
+        "preset": preset,
+        "src": src,
+        "tests": tests,
+        "runner": runner,
+    }
+
+
+def test_detected_payload_marks_missing_pyproject() -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        payload = _detected_payload(cfg)
+
+    assert payload == {"pyproject": False}
+    assert _detected_payload(None) == {"pyproject": False}
+
+
+@given(preset=_PRESET)
+def test_current_preset_payload_tracks_pyproject_presence(preset: str | None) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            preset=cast("Preset | None", preset),
+        )
+
+        missing = _current_preset_payload(cfg)
+        (root / "pyproject.toml").write_text("[project]\nname='pkg'\n", encoding="utf-8")
+        present = _current_preset_payload(cfg)
+
+    assert missing == {"pyproject": False, "preset": None}
+    assert present == {
+        "pyproject": True,
+        "preset": preset,
+        "pyproject_path": "pyproject.toml",
+    }
+    assert _current_preset_payload(None) == {"pyproject": False, "preset": None}
+
+
+@given(preset=_KNOWN_PRESET)
+def test_available_preset_payload_projects_defaults_and_description(preset: Preset) -> None:
+    payload = _available_preset_payload(preset)
+
+    assert payload == {
+        "name": preset,
+        "description": preset_description(preset),
+        "defaults": preset_defaults(preset),
+    }
+
+
+@given(preset=_PRESET)
+def test_presets_payload_lists_supported_presets_and_current_values(preset: str | None) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        (root / "pyproject.toml").write_text("[project]\nname='pkg'\n", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            preset=cast("Preset | None", preset),
+            value_sources={"coverage_min": "preset-derived"},
+        )
+
+        payload = _presets_payload(cfg)
+
+    assert payload["command"] == "presets"
+    assert payload["current"] == {
+        "pyproject": True,
+        "preset": preset,
+        "pyproject_path": "pyproject.toml",
+    }
+    available = payload["available_presets"]
+    current_values = payload["current_values"]
+    assert isinstance(available, list)
+    assert isinstance(current_values, list)
+    assert [entry["name"] for entry in available] == list(supported_presets())
+    coverage = next(entry for entry in current_values if entry["key"] == "coverage_min")
+    assert coverage["source"] == "preset-derived"
+    assert payload["switch_command"] == (
+        "interlocks presets set <baseline|strict|legacy|progressive>"
+    )
+
+
+@given(error=st.text(max_size=100), detail=st.text(max_size=100))
+def test_presets_error_payload_lists_supported_presets(error: str, detail: str) -> None:
+    payload = _presets_error_payload(error, detail)
+
+    assert payload["command"] == "presets"
+    assert payload["error"] == error
+    assert payload["detail"] == detail
+    assert "usage: interlocks presets" in str(payload["usage"])
+    assert payload["expected_presets"] == list(supported_presets())
+
+
+@given(args=_PRESET_ARGS)
+def test_maybe_handle_presets_set_delegates_only_when_positionals_follow_command(
+    args: list[str],
+) -> None:
+    outcome, calls = _run_maybe_handle_presets_set(args)
+
+    if len(args) > 1 and args[0] != "set":
+        assert outcome == "invalid"
+        assert calls == []
+        return
+
+    if not args:
+        assert outcome is False
+        assert calls == []
+    elif args[0] == "set":
+        assert outcome is True
+        assert calls == [args[1:]]
+    else:
+        assert outcome is True
+        assert calls == [args]
+
+
+@given(advanced=st.booleans())
+def test_help_groups_payload_lists_known_commands_without_duplicates(advanced: bool) -> None:
+    payload = _help_groups_payload(advanced=advanced)
+    names: list[str] = []
+    for group in payload:
+        commands = group["commands"]
+        assert isinstance(commands, list)
+        for command in commands:
+            assert isinstance(command, dict)
+            name = command["name"]
+            assert isinstance(name, str)
+            names.append(name)
+
+    assert len(names) == len(set(names))
+    assert set(names) <= set(TASKS)
+    if advanced:
+        assert set(names) == set(TASKS)
+    else:
+        expected = {name for _group, names in _HELP_GROUPS for name in names}
+        assert set(names) == expected
+
+
+@given(task_name=_TASK_NAME)
+def test_help_command_payload_projects_registered_command_row(task_name: str) -> None:
+    payload = _help_command_payload(task_name)
+
+    assert payload["name"] == task_name
+    assert payload["summary"] == TASKS[task_name][1]
+    assert isinstance(payload["aliases"], list)
+
+
+@given(
+    command_pair=_KNOWN_COMMAND,
+    leading_flags=st.lists(_KNOWN_CHECK_FLAG, max_size=3),
+    trailing_args=st.lists(st.text(max_size=10), max_size=3),
+)
+def test_resolve_task_name_uses_first_positional_and_aliases(
+    command_pair: tuple[str, str],
+    leading_flags: list[str],
+    trailing_args: list[str],
+) -> None:
+    requested, expected = command_pair
+    raw_args = [*leading_flags, requested, *trailing_args]
+
+    assert _resolve_task_name(raw_args) == expected
+
+
+@given(flags=st.lists(_KNOWN_CHECK_FLAG, max_size=6))
+def test_validate_task_flags_accepts_declared_and_global_flags(flags: list[str]) -> None:
+    _validate_task_flags("check", ["check", *flags])
+
+
+@given(flag=_FLAG)
+def test_unknown_flag_payload_includes_command_usage_and_declared_flags(flag: str) -> None:
+    payload = _unknown_flag_payload("check", flag)
+
+    assert payload["command"] == "check"
+    assert payload["error"] == f"unknown flag {flag}"
+    assert payload["flag"] == flag
+    assert "usage: interlocks check" in str(payload["usage"])
+    known_flags = payload["known_flags"]
+    assert isinstance(known_flags, list)
+    assert "--json" in known_flags
+
+
+@given(command=_COMMAND)
+def test_unknown_command_payload_lists_known_command_domain(command: str) -> None:
+    payload = _unknown_command_payload(command)
+
+    assert payload["command"] == command
+    assert payload["error"] == f"unknown command {command}"
+    assert payload["usage"] == "usage: interlocks <command>"
+    known_commands = payload["known_commands"]
+    assert isinstance(known_commands, list)
+    assert known_commands == sorted(known_commands)
+    assert "check" in known_commands
+
+
+def test_missing_command_payload_lists_known_command_domain() -> None:
+    payload = _missing_command_payload()
+
+    assert payload["command"] == "interlocks"
+    assert payload["error"] == "missing command"
+    assert payload["usage"] == "usage: interlocks <command>"
+    known_commands = payload["known_commands"]
+    assert isinstance(known_commands, list)
+    assert known_commands == sorted(known_commands)
+    assert "check" in known_commands
+
+
+def test_task_help_payload_projects_command_doc_metadata() -> None:
+    payload = _task_help_payload("check")
+
+    assert payload["command"] == "check"
+    assert payload["usage"] == "usage: interlocks check"
+    assert isinstance(payload["flags"], list)
+    assert any(flag["name"] == "--json" for flag in payload["flags"])
+    assert isinstance(payload["exit_codes"], list)
+    assert any(entry["code"] == 0 for entry in payload["exit_codes"])
+
+
+def test_quiet_removed_payload_points_to_current_output_modes() -> None:
+    payload = _quiet_removed_payload()
+
+    assert payload["command"] == "interlocks"
+    assert payload["error"] == "--quiet was removed; minimal output is the default"
+    assert payload["next_action"] == "Remove `--quiet`; pass `--verbose` for full output."

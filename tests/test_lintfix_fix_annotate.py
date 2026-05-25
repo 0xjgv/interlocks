@@ -90,6 +90,7 @@ def test_flatten_optimize_pulls_cost_fields_onto_flat_keys() -> None:
         "patch_path": None,
     }
     flat = fix_annotate._flatten_optimize(opt_cand)
+    assert flat is not None
     assert flat["classification"] == "auto"
     assert flat["files_touched"] == 2
     assert flat["changed_lines_total"] == 12
@@ -123,6 +124,89 @@ def test_missing_plan_file_exits_zero_with_no_annotations(
     out = _capsys_stdout(capsys)
     assert "::notice" not in out
     assert "::warning" not in out
+    assert "[fix-annotate]" in out
+    assert ".lintfix/plan.json" in out
+    assert "no plan" in out
+
+
+def test_missing_plan_json_reports_zero_annotations(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate", "--json"]):
+        fix_annotate.cmd_fix_annotate()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload == {
+        "command": "fix-annotate",
+        "passed": True,
+        "status": "missing",
+        "source": "plan",
+        "input_path": ".lintfix/plan.json",
+        "found": False,
+        "annotation_count": 0,
+        "notice": 0,
+        "warning": 0,
+        "skip": 0,
+    }
+
+
+def test_missing_annotation_result_reports_human_row_when_requested(
+    project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows: list[tuple[str, str, str, str, str]] = []
+
+    def fake_gate_row(
+        label: str,
+        target: str,
+        status: str,
+        *,
+        detail: str,
+        state: str,
+    ) -> None:
+        rows.append((label, target, status, detail, state))
+
+    monkeypatch.setattr(fix_annotate.ui, "gate_row", fake_gate_row)
+    path = project / ".lintfix" / "plan.json"
+
+    result = fix_annotate._missing_annotation_result(
+        project,
+        source="plan",
+        path=path,
+        report_missing=True,
+        emit_json=False,
+    )
+
+    assert result == fix_annotate.AnnotationResult(source="plan", path=path, found=False)
+    assert rows == [("fix-annotate", ".lintfix/plan.json", "ok", "no plan", "ok")]
+
+
+def test_missing_annotation_result_suppresses_row_for_quiet_callers(
+    project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows: list[tuple[object, ...]] = []
+    path = project / ".lintfix" / "plan.json"
+
+    monkeypatch.setattr(fix_annotate.ui, "gate_row", lambda *args, **kwargs: rows.append(args))
+
+    assert fix_annotate._missing_annotation_result(
+        project,
+        source="plan",
+        path=path,
+        report_missing=False,
+        emit_json=False,
+    ) == fix_annotate.AnnotationResult(source="plan", path=path, found=False)
+    assert fix_annotate._missing_annotation_result(
+        project,
+        source="plan",
+        path=path,
+        report_missing=True,
+        emit_json=True,
+    ) == fix_annotate.AnnotationResult(source="plan", path=path, found=False)
+    assert rows == []
 
 
 def test_plan_json_emits_annotations_for_each_candidate(
@@ -155,6 +239,37 @@ def test_plan_json_emits_annotations_for_each_candidate(
     assert "::warning file=c.py,line=1::" in out  # SIM102
     # skip never annotates
     assert "UP007" not in out
+
+
+def test_plan_json_json_reports_annotation_counts_without_workflow_commands(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    plan = {
+        "base": "main",
+        "head": "abc123",
+        "mode": "unblock",
+        "ruff_version": "0.x",
+        "candidates": [
+            _plan_candidate("I001", "auto", ["a.py"]),
+            _plan_candidate("SIM102", "advisory", ["c.py"], outside=42),
+            _plan_candidate("UP007", "skip", ["d.py"]),
+        ],
+    }
+    (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate", "--json"]):
+        fix_annotate.cmd_fix_annotate()
+
+    out = capsys.readouterr().out
+    payload = json.loads(out)
+    assert "::notice" not in out
+    assert "::warning" not in out
+    assert payload["status"] == "annotated"
+    assert payload["found"] is True
+    assert payload["annotation_count"] == 2
+    assert payload["notice"] == 1
+    assert payload["warning"] == 1
+    assert payload["skip"] == 1
 
 
 def test_optimize_source_reads_selected_and_not_selected(
@@ -239,6 +354,7 @@ def test_emit_annotations_missing_file_is_non_failing(
     fix_annotate.emit_annotations(project, source="plan")
     out = _capsys_stdout(capsys)
     assert "::notice" not in out
+    assert "[fix-annotate]" not in out
 
 
 def test_emit_annotations_reads_optimize_source(

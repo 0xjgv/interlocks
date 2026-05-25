@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+
+from interlocks.config import clear_cache
 
 _MODULE_SRC = textwrap.dedent(
     """\
@@ -71,16 +74,18 @@ def test_crap_passes_on_healthy_project(
     """No offenders → no SystemExit regardless of enforce_crap (default True)."""
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr("interlocks.ui.is_verbose", lambda: False)
     # Prime .coverage so generate_coverage_xml has something to convert.
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
 
-    cmd_crap()  # trivial inc() is under the ceiling → stays silent on exit
+    cmd_crap()  # trivial inc() is under the ceiling
 
     captured = capsys.readouterr()
     assert "CRAP" in captured.out
     assert "[crap]" in captured.out
+    assert "ok" in captured.out
 
 
 def test_crap_default_threshold_from_config(
@@ -119,3 +124,139 @@ def test_crap_cli_max_overrides_config(
     cmd_crap()
     captured = capsys.readouterr()
     assert "42.5" in captured.out
+
+
+def test_crap_json_passes_on_healthy_project(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    _run_coverage(tmp_project)
+
+    from interlocks.tasks.crap import cmd_crap
+
+    clear_cache()
+    try:
+        cmd_crap()
+    finally:
+        clear_cache()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "crap"
+    assert payload["passed"] is True
+    assert payload["status"] == "ok"
+    assert payload["max_crap"] == 30.0
+    assert payload["function_count"] >= 1
+    assert payload["offender_count"] == 0
+    assert payload["offenders"] == []
+    assert captured.err == "interlocks: [crap] CRAP --max=30.0 running\n"
+
+
+def test_crap_json_reports_enforced_offenders(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + "\n[tool.interlocks]\ncrap_max = 0.5\nenforce_crap = true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    _run_coverage(tmp_project)
+
+    from interlocks.tasks.crap import cmd_crap
+
+    clear_cache()
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            cmd_crap()
+    finally:
+        clear_cache()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["passed"] is False
+    assert payload["status"] == "failed"
+    assert payload["enforce_crap"] is True
+    assert payload["offender_count"] == 1
+    assert payload["offenders"][0]["name"] == "inc"
+    assert payload["offenders"][0]["crap"] == 1.0
+    assert "inc@" not in captured.out
+
+
+def test_crap_json_keeps_advisory_offenders_non_blocking(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_project / "pyproject.toml").write_text(
+        _PYPROJECT + "\n[tool.interlocks]\ncrap_max = 0.5\nenforce_crap = false\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.syspath_prepend(str(tmp_project))
+    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    _run_coverage(tmp_project)
+
+    from interlocks.tasks.crap import cmd_crap
+
+    clear_cache()
+    try:
+        cmd_crap()
+    finally:
+        clear_cache()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["status"] == "warn"
+    assert payload["enforce_crap"] is False
+    assert payload["offender_count"] == 1
+
+
+def test_crap_json_missing_coverage_cache_is_parseable(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+
+    from interlocks.tasks.crap import cmd_crap
+
+    clear_cache()
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            cmd_crap()
+    finally:
+        clear_cache()
+
+    assert excinfo.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is False
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "no coverage cache"
+    assert payload["next_action"] == "Run `interlocks coverage` before `interlocks crap`."
+
+
+def test_crap_json_stale_coverage_cache_is_parseable(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_project / ".coverage").write_text("old", encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    monkeypatch.setattr("interlocks.tasks.crap.coverage_cache_is_stale", lambda *_args: True)
+
+    from interlocks.tasks.crap import cmd_crap
+
+    clear_cache()
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            cmd_crap()
+    finally:
+        clear_cache()
+
+    assert excinfo.value.code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is False
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "coverage cache is stale"
+    assert payload["next_action"] == "Run `interlocks coverage` before `interlocks crap`."

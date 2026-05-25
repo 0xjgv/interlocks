@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -56,6 +57,53 @@ def test_format_cli_modifies_unformatted_file(tmp_project: Path) -> None:
     )
     # ruff format exits 0 even when it rewrites; contract is in-place modification.
     assert result.returncode == 0
+    assert f.read_text(encoding="utf-8") != UNFORMATTED
+
+
+def test_format_json_reports_clean_run(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.format import cmd_format
+
+    f = tmp_project / "sample.py"
+    f.write_text(CLEAN, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "format", "--json"])
+    clear_cache()
+
+    cmd_format()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["command"] == "format"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "format"
+    assert captured.err.startswith("interlocks: [format]")
+    assert f.read_text(encoding="utf-8") == CLEAN
+
+
+def test_format_json_formats_file(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.format import cmd_format
+
+    f = tmp_project / "sample.py"
+    f.write_text(UNFORMATTED, encoding="utf-8")
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "format", "--json"])
+    clear_cache()
+
+    cmd_format()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "format"
+    assert payload["passed"] is True
     assert f.read_text(encoding="utf-8") != UNFORMATTED
 
 

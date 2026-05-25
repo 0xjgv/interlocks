@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import json
+import signal
 import subprocess
 import sys
 import textwrap
@@ -18,12 +20,20 @@ from interlocks.config import InterlockConfig
 from interlocks.tasks import mutation as mutation_mod
 from interlocks.tasks.mutation import (
     _changed_to_globs,
+    _JsonProgress,
     _make_pulse_thread,
     _mutant_in_changed,
+    _mutation_progress_from_line,
+    _mutation_progress_label,
+    _MutationProgress,
+    _print_json_progress,
     _print_survivors,
     _PulseState,
+    _report_mutation,
     _resolve_min_score,
     _run_mutmut,
+    _skip_mutation_no_coverage,
+    _wait_for_proc,
     cmd_mutation,
 )
 
@@ -102,6 +112,162 @@ def test_mutation_skips_when_coverage_missing(
     assert "mutation" in captured.out.lower()
 
 
+def test_mutation_progress_label_normalizes_spinner_edges() -> None:
+    assert _mutation_progress_label("⠋ Running Listing all tests") == "listing all tests"
+    assert _mutation_progress_label("⠋Running Listing all tests") == "listing all tests"
+    assert _mutation_progress_label("⠋") == "mutmut"
+
+
+def test_mutation_progress_from_line_extracts_exact_checked_and_total() -> None:
+    assert _mutation_progress_from_line("prefix 12/345 suffix") == _MutationProgress(12, 345)
+    assert _mutation_progress_from_line("no fraction here") is None
+
+
+def test_wait_for_proc_sends_sigint_before_terminating() -> None:
+    class _TimeoutThenGracefulProc:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+            self.waits = 0
+
+        def wait(self, timeout: int | None = None) -> int:
+            self.events.append(f"wait:{timeout}")
+            self.waits += 1
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired(["mutmut"], timeout)
+            return 0
+
+        def send_signal(self, sig: int) -> None:
+            self.events.append(f"signal:{sig}")
+
+        def terminate(self) -> None:
+            self.events.append("terminate")
+
+        def kill(self) -> None:
+            self.events.append("kill")
+
+    proc = _TimeoutThenGracefulProc()
+
+    completed = _wait_for_proc(proc, timeout=1)  # type: ignore[arg-type]
+
+    assert completed is False
+    assert proc.events == ["wait:1", f"signal:{signal.SIGINT}", "wait:10"]
+
+
+def test_wait_for_proc_terminates_then_kills_when_sigint_is_ignored() -> None:
+    class _StubbornProc:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+            self.waits = 0
+
+        def wait(self, timeout: int | None = None) -> int:
+            self.events.append(f"wait:{timeout}")
+            self.waits += 1
+            if self.waits <= 3:
+                raise subprocess.TimeoutExpired(["mutmut"], timeout)
+            return 0
+
+        def send_signal(self, sig: int) -> None:
+            self.events.append(f"signal:{sig}")
+
+        def terminate(self) -> None:
+            self.events.append("terminate")
+
+        def kill(self) -> None:
+            self.events.append("kill")
+
+    proc = _StubbornProc()
+
+    completed = _wait_for_proc(proc, timeout=1)  # type: ignore[arg-type]
+
+    assert completed is False
+    assert proc.events == [
+        "wait:1",
+        f"signal:{signal.SIGINT}",
+        "wait:10",
+        "terminate",
+        "wait:10",
+        "kill",
+        "wait:None",
+    ]
+
+
+def _no_results_context(
+    progress: _MutationProgress | None,
+    *,
+    completed: bool = False,
+) -> mutation_mod._NoResultsContext:
+    return mutation_mod._NoResultsContext(
+        start=0.0,
+        json_mode=True,
+        run_config=mutation_mod._MutationRun(
+            min_coverage=80.0,
+            coverage_pct=95.0,
+            timeout=30,
+            min_score=60.0,
+            changed_only=False,
+            globs=None,
+            changed=None,
+        ),
+        completed=completed,
+        progress=progress,
+    )
+
+
+def test_mutation_no_results_helpers_distinguish_progress_states(tmp_path: Path) -> None:
+    log_path = tmp_path / "mutation.log"
+    no_progress = _no_results_context(None)
+    zero_progress = _no_results_context(_MutationProgress(0, 10))
+    started = _no_results_context(_MutationProgress(1, 10))
+    completed_started = _no_results_context(_MutationProgress(1, 10), completed=True)
+
+    assert mutation_mod._mutation_progress_started(None) is False
+    assert mutation_mod._mutation_progress_started(zero_progress.progress) is False
+    assert mutation_mod._mutation_progress_started(started.progress) is True
+
+    assert mutation_mod._mutation_no_results_reason(no_progress) == "no checked mutmut results"
+    assert mutation_mod._mutation_no_results_reason(zero_progress) == "no checked mutmut results"
+    assert mutation_mod._mutation_no_results_reason(started) == (
+        "mutmut summary unavailable after partial progress"
+    )
+
+    assert mutation_mod._mutation_no_results_next_action(log_path, context=no_progress) == (
+        f"Inspect `{log_path}` and rerun `interlocks mutation`."
+    )
+    assert mutation_mod._mutation_no_results_next_action(log_path, context=completed_started) == (
+        f"Inspect `{log_path}` and rerun `interlocks mutation`."
+    )
+    assert mutation_mod._mutation_no_results_next_action(log_path, context=started) == (
+        f"Inspect `{log_path}` for the last progress line and rerun "
+        "`interlocks mutation` with a higher `--max-runtime=`."
+    )
+
+    assert mutation_mod._mutation_no_results_error(no_progress) == (
+        "Mutation run timed out before any mutants were checked"
+    )
+    assert mutation_mod._mutation_no_results_error(zero_progress) == (
+        "Mutation run timed out before any mutants were checked"
+    )
+    assert mutation_mod._mutation_no_results_error(started) == (
+        "Mutation run timed out after progress reached 1/10, but mutmut results were unavailable"
+    )
+
+
+def test_print_json_progress_throttles_and_updates_timestamp(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(mutation_mod.ui, "is_json", lambda: True)
+    progress = _JsonProgress(last_emit=10.0)
+
+    _print_json_progress("mutmut 1/10", progress, now=39.9)
+    assert capsys.readouterr().err == ""
+    assert progress.last_emit == 10.0
+
+    _print_json_progress("mutmut 2/10", progress, now=40.0)
+    assert capsys.readouterr().err == "interlocks: [mutation] mutmut 2/10 running\n"
+    assert progress.last_emit == 40.0
+
+
 @pytest.mark.slow
 def test_mutation_runs_and_prints_score(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -118,6 +284,348 @@ def test_mutation_runs_and_prints_score(
 
     captured = capsys.readouterr()
     assert "Mutation: score" in captured.out
+
+
+def test_report_mutation_prints_success_in_default_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(mutation_mod.ui, "is_verbose", lambda: False)
+    monkeypatch.setattr(mutation_mod.ui, "is_json", lambda: False)
+    summary = metrics_mod.MutationSummary(killed=3, survived=1, timeout=0, score=75.0)
+
+    failed = _report_mutation(
+        summary,
+        min_score=None,
+        completed=True,
+        changed=None,
+        log_path=tmp_path / "mutation.log",
+    )
+
+    assert not failed
+    out = capsys.readouterr().out
+    assert "Mutation: score 75.0%" in out
+    assert "killed 3/4" in out
+
+
+def test_mutation_json_skips_when_coverage_missing(
+    tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--json"])
+
+    cmd_mutation()
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == ""
+    assert payload["command"] == "mutation"
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "no coverage data"
+    assert payload["next_action"] == "Run `interlocks coverage` before `interlocks mutation`."
+
+
+def test_skip_mutation_no_coverage_json_passes_min_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_emit_mutation_skip_json(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(mutation_mod, "_emit_mutation_skip_json", fake_emit_mutation_skip_json)
+
+    _skip_mutation_no_coverage(start=1.5, json_mode=True, min_cov=82.5)
+
+    assert captured["reason"] == "no coverage data"
+    assert captured["start"] == 1.5
+    assert captured["min_coverage"] == 82.5
+
+
+def test_mutation_json_skips_when_coverage_below_min(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="0.5"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--json"])
+
+    cmd_mutation()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "coverage below mutation minimum"
+    assert payload["coverage_pct"] == 50.0
+
+
+def test_mutation_json_skips_when_no_changed_src(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(mutation_mod, "changed_py_files_vs", lambda _ref: {"tests/test_x.py"})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--json", "--changed-only", "--min-coverage=0"],
+    )
+
+    cmd_mutation()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "no changed src files vs origin/main"
+    assert "without `--changed-only`" in payload["next_action"]
+
+
+def test_mutation_json_skips_when_mutmut_results_missing(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (True, tmp_project / ".interlocks/mutation.log"),
+    )
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--json", "--min-coverage=0"])
+
+    cmd_mutation(changed_only=False)
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert captured.err == "interlocks: [mutation] mutmut run running\n"
+    assert payload["passed"] is True
+    assert payload["status"] == "skipped"
+    assert payload["reason"] == "no checked mutmut results"
+    assert "mutation.log" in payload["next_action"]
+
+
+def _write_mutation_log(project: Path, line: str) -> Path:
+    log_path = project / ".interlocks/mutation.log"
+    log_path.parent.mkdir(exist_ok=True)
+    log_path.write_text(line, encoding="utf-8")
+    return log_path
+
+
+def test_mutation_json_exits_when_enforced_timeout_has_no_results(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    log_path = _write_mutation_log(tmp_project, "0/10  🎉 0 🫥 0\n")
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (False, log_path),
+    )
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_mutation(changed_only=False)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert payload["passed"] is False
+    assert payload["status"] == "partial"
+    assert payload["reason"] == "no checked mutmut results"
+    assert payload["completed"] is False
+    assert payload["checked_mutants"] == 0
+    assert payload["total_mutants"] == 10
+    assert payload["completion_pct"] == 0.0
+    assert payload["error"] == "Mutation run timed out before any mutants were checked"
+    evidence = json.loads((tmp_project / ".interlocks/mutation.json").read_text(encoding="utf-8"))
+    assert evidence["completed"] is False
+    assert evidence["no_results"] is True
+    assert evidence["checked_mutants"] == 0
+    assert evidence["total_mutants"] == 10
+
+
+def test_mutation_json_explains_partial_progress_without_summary(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    log_path = _write_mutation_log(tmp_project, "12/100  🎉 5 🫥 6  🙁 1\n")
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (False, log_path),
+    )
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_mutation(changed_only=False)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert payload["passed"] is False
+    assert payload["status"] == "partial"
+    assert payload["reason"] == "mutmut summary unavailable after partial progress"
+    assert payload["checked_mutants"] == 12
+    assert payload["total_mutants"] == 100
+    assert payload["completion_pct"] == 12.0
+    assert payload["error"] == (
+        "Mutation run timed out after progress reached 12/100, but mutmut results were unavailable"
+    )
+    assert "higher `--max-runtime=`" in payload["next_action"]
+    evidence = json.loads((tmp_project / ".interlocks/mutation.json").read_text(encoding="utf-8"))
+    assert evidence["checked_mutants"] == 12
+    assert evidence["total_mutants"] == 100
+
+
+def test_mutation_json_reports_success_and_writes_evidence(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(mutation_mod, "changed_py_files_vs", lambda _ref: {"mypkg/mod.py"})
+    log_path = _write_mutation_log(tmp_project, "4/4  🎉 3 🫥 1\n")
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (True, log_path),
+    )
+    monkeypatch.setattr(
+        mutation_mod,
+        "read_mutation_summary",
+        lambda **_kwargs: metrics_mod.MutationSummary(
+            killed=3,
+            survived=1,
+            timeout=0,
+            score=75.0,
+            survivors=["mypkg.mod.x__mutmut_1"],
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--json", "--changed-only", "--min-coverage=0"],
+    )
+
+    cmd_mutation()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["passed"] is True
+    assert payload["status"] == "ok"
+    assert payload["mode"] == "changed-only"
+    assert payload["targets"] == ["mypkg.mod.*"]
+    assert payload["checked_mutants"] == 4
+    assert "total_mutants" not in payload
+    assert "completion_pct" not in payload
+    assert payload["score"] == 75.0
+    assert payload["survivors"] == ["mypkg.mod.x__mutmut_1"]
+    evidence = json.loads((tmp_project / ".interlocks/mutation.json").read_text(encoding="utf-8"))
+    assert evidence["score"] == 75.0
+    assert "total_mutants" not in evidence
+    assert "completion_pct" not in evidence
+
+
+def test_mutation_json_exits_on_enforced_low_score(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (True, tmp_project / ".interlocks/mutation.log"),
+    )
+    monkeypatch.setattr(
+        mutation_mod,
+        "read_mutation_summary",
+        lambda **_kwargs: metrics_mod.MutationSummary(killed=1, survived=1, timeout=0, score=50.0),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=80"],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_mutation(changed_only=False)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert payload["passed"] is False
+    assert payload["status"] == "failed"
+    assert payload["error"] == "Mutation score 50.0% below threshold 80.0%"
+
+
+def test_mutation_json_exits_on_enforced_partial_run(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    log_path = _write_mutation_log(tmp_project, "10/20  🎉 9 🫥 1\n")
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (False, log_path),
+    )
+    monkeypatch.setattr(
+        mutation_mod,
+        "read_mutation_summary",
+        lambda **_kwargs: metrics_mod.MutationSummary(killed=9, survived=1, timeout=0, score=90.0),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        cmd_mutation(changed_only=False)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert excinfo.value.code == 1
+    assert payload["passed"] is False
+    assert payload["status"] == "partial"
+    assert payload["completed"] is False
+    assert payload["checked_mutants"] == 10
+    assert payload["total_mutants"] == 20
+    assert payload["completion_pct"] == 50.0
+    assert "estimated_full_runtime_seconds" in payload
+    assert "timed out" in payload["error"]
+    assert "partial" in payload["error"]
 
 
 # ─────────────── threshold cascade ─────────────────────
@@ -337,6 +845,7 @@ def test_cmd_mutation_passes_globs_to_mutmut(
     tmp_project: Path,
     primed_coverage_xml: Callable[[str], Path],
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """`--changed-only` with src diff → mutmut argv has `run` BEFORE module globs."""
     primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
@@ -355,7 +864,7 @@ def test_cmd_mutation_passes_globs_to_mutmut(
 
     monkeypatch.setattr(mutation_mod, "_run_mutmut", _spy_run)
     monkeypatch.setattr(
-        mutation_mod, "read_mutation_summary", lambda: None
+        mutation_mod, "read_mutation_summary", lambda **_kwargs: None
     )  # short-circuit before parsing
     monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
 
@@ -369,6 +878,10 @@ def test_cmd_mutation_passes_globs_to_mutmut(
     run_idx = len(argv) - 1 - argv[::-1].index("run")
     assert argv[run_idx - 1] == "mutmut"
     assert argv[run_idx + 1 :] == ["mypkg.mod.*", "mypkg.other.*"]
+    out = capsys.readouterr().out
+    assert "no checked mutmut results" in out
+    assert ".interlocks" in out
+    assert "mutation.log" in out
 
 
 def test_cmd_mutation_invokes_popen_with_run_then_globs(
@@ -408,7 +921,7 @@ def test_cmd_mutation_invokes_popen_with_run_then_globs(
         return _FakeProc()
 
     monkeypatch.setattr(mutation_mod.subprocess, "Popen", _fake_popen)
-    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda: None)
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
     monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=True)
@@ -437,13 +950,46 @@ def test_cmd_mutation_full_run_uses_run_subcommand(
         return True, tmp_project / ".interlocks" / "mutation.log"
 
     monkeypatch.setattr(mutation_mod, "_run_mutmut", _spy_run)
-    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda: None)
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
     monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=False)
 
     assert captured_argv, "expected _run_mutmut to be called"
     assert captured_argv[0][-1] == "run"
+
+
+def test_cmd_mutation_writes_interlocks_evidence(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    monkeypatch.setattr(mutation_mod, "changed_py_files_vs", lambda _ref: {"mypkg/mod.py"})
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (True, tmp_project / ".interlocks/mutation.log"),
+    )
+    monkeypatch.setattr(
+        mutation_mod,
+        "read_mutation_summary",
+        lambda **_kwargs: metrics_mod.MutationSummary(
+            killed=3, survived=1, timeout=0, score=75.0, survivors=["mypkg.mod.x__mutmut_1"]
+        ),
+    )
+    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+
+    cmd_mutation(changed_only=True)
+
+    payload = json.loads((tmp_project / ".interlocks/mutation.json").read_text(encoding="utf-8"))
+    assert payload["command"] == "mutation"
+    assert payload["completed"] is True
+    assert payload["mode"] == "changed-only"
+    assert payload["targets"] == ["mypkg.mod.*"]
+    assert payload["checked_mutants"] == 4
+    assert payload["score"] == 75.0
 
 
 # ─────────────── live progress pulse (`_run_mutmut`) ───────────────────
@@ -492,6 +1038,44 @@ class _FakePopen:
         self.stdout._lines = []
 
 
+class _ClosableSlowStdout:
+    def __init__(self, lines: Iterable[str], delay: float = 0.05) -> None:
+        self._lines = list(lines)
+        self._delay = delay
+        self.closed = False
+
+    def __iter__(self) -> _ClosableSlowStdout:
+        return self
+
+    def __next__(self) -> str:
+        time.sleep(self._delay)
+        if self.closed:
+            raise ValueError("I/O operation on closed file.")
+        if not self._lines:
+            raise StopIteration
+        return self._lines.pop(0)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _ImmediatePopen:
+    """Popen stand-in whose process exits before stdout is fully drained."""
+
+    def __init__(self, lines: Iterable[str], delay: float = 0.05) -> None:
+        self.stdout = _ClosableSlowStdout(lines, delay)
+        self.returncode = 0
+
+    def wait(self, timeout: float | None = None) -> int:
+        return 0
+
+    def terminate(self) -> None:
+        self.stdout.close()
+
+    def kill(self) -> None:
+        self.stdout.close()
+
+
 _PULSE_LINES = [
     "1/100  🎉 0 🫥 1\n",
     "2/100  🎉 0 🫥 2\n",
@@ -508,6 +1092,53 @@ def _install_fake_popen(
         return _FakePopen(lines, delay=delay)
 
     monkeypatch.setattr(mutation_mod.subprocess, "Popen", _factory)
+
+
+def test_run_mutmut_prints_json_progress_to_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutation_mod.ui, "is_json", lambda: True)
+    monkeypatch.setattr(mutation_mod.ui, "is_verbose", lambda: False)
+    monkeypatch.setattr(mutation_mod, "VERBOSE", False)
+    monkeypatch.setattr(mutation_mod, "_JSON_PROGRESS_SECONDS", 0.0)
+    _install_fake_popen(
+        monkeypatch,
+        [
+            "⠋ Running clean tests\n",
+            "1/100  🎉 0 🫥 1\n",
+            "2/100  🎉 1 🫥 1\n",
+        ],
+        delay=0.0,
+    )
+
+    completed, _log_path = _run_mutmut(["fake-mutmut"], timeout=10)
+
+    captured = capsys.readouterr()
+    assert completed is True
+    assert captured.out == ""
+    assert "interlocks: [mutation] clean tests running\n" in captured.err
+    assert "interlocks: [mutation] mutmut 1/100 running\n" in captured.err
+
+
+def test_run_mutmut_closes_slow_reader_without_thread_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(mutation_mod.ui, "is_json", lambda: True)
+    monkeypatch.setattr(mutation_mod.ui, "is_verbose", lambda: False)
+    monkeypatch.setattr(mutation_mod, "_READER_JOIN_SECONDS", 0.01)
+
+    def _factory(*_args: object, **_kwargs: object) -> _ImmediatePopen:
+        return _ImmediatePopen(["1/100  🎉 0 🫥 1\n"], delay=0.05)
+
+    monkeypatch.setattr(mutation_mod.subprocess, "Popen", _factory)
+
+    completed, _log_path = _run_mutmut(["fake-mutmut"], timeout=10)
+
+    captured = capsys.readouterr()
+    assert completed is True
+    assert "Exception in thread" not in captured.err
 
 
 def test_pulse_emits_periodically_to_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

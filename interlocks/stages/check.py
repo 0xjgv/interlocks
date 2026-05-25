@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from interlocks import run_summary, ui
 from interlocks.acceptance_status import (
@@ -40,8 +41,12 @@ from interlocks.tasks.acceptance import task_acceptance_with_attribution
 from interlocks.tasks.behavior_attribution import cmd_behavior_attribution_cached_advisory
 from interlocks.tasks.crap import cmd_crap_cached_advisory
 from interlocks.tasks.deps import task_deps
+from interlocks.tasks.properties import task_properties
 from interlocks.tasks.test import task_test
 from interlocks.tasks.typecheck import task_typecheck
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def cmd_check() -> None:
@@ -52,8 +57,9 @@ def cmd_check() -> None:
 
     ``--changed[=<ref>]`` scopes file-level gates (fix/format/typecheck/CRAP) to
     ``.py`` files changed vs ``<ref>`` (default ``cfg.changed_ref``). Graph-wide
-    gates (deps, behavior-attribution, acceptance) and the test suite skip — they
-    can't be scoped to a file list without re-introducing the legacy noise.
+    gates (deps, behavior-attribution, acceptance), property tests, and the test
+    suite skip — they can't be scoped to a file list without re-introducing the
+    legacy noise.
     """
     start = time.monotonic()
     cfg = load_config()
@@ -71,16 +77,25 @@ def cmd_check() -> None:
     maybe_print_skip_banner(skip_policy)
 
     try:
-        ui.section("Quality Checks")
-        _run_budgeted_mutation(base=scope_ref or "HEAD", skip_policy=skip_policy)
-        ui.section("Parallel")
-        run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
-        ui.section("Advisory")
-        _run_advisory(scope_ref, scoped_files, skip_policy)
+        _run_check_sections(cfg, scope_ref, scoped_files, skip_policy)
     finally:
         print_suppressions_report()
         run_summary.flush(cfg)
         _print_footer(time.monotonic() - start)
+
+
+def _run_check_sections(
+    cfg: InterlockConfig,
+    scope_ref: str | None,
+    scoped_files: list[str] | None,
+    skip_policy: SkipPolicy,
+) -> None:
+    ui.section("Quality Checks")
+    _run_budgeted_mutation(base=scope_ref or "HEAD", skip_policy=skip_policy)
+    ui.section("Parallel")
+    run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
+    ui.section("Advisory")
+    _run_advisory(scope_ref, scoped_files, skip_policy)
 
 
 def _exit_if_changed_scope_empty(
@@ -106,25 +121,71 @@ def _print_scope(scope_ref: str | None, scoped_files: list[str] | None) -> None:
 def _parallel_tasks(
     cfg: InterlockConfig, scope_ref: str | None, scoped_files: list[str] | None
 ) -> list[Task]:
+    acceptance = _acceptance_task(cfg, scope_ref)
+    properties = _properties_task(cfg, scope_ref)
     optional = (
         task_typecheck(scoped_files),
-        _test_task(scope_ref),
-        _acceptance_task(cfg, scope_ref),
+        _test_task(cfg, scope_ref, acceptance, properties),
+        acceptance,
+        properties,
     )
     return [t for t in optional if t is not None]
 
 
-def _test_task(scope_ref: str | None) -> Task | None:
+def _test_task(
+    cfg: InterlockConfig,
+    scope_ref: str | None,
+    acceptance: Task | None,
+    properties: Task | None,
+) -> Task | None:
     if scope_ref is not None:
-        _skip_under_changed("test", "run `interlocks test` for full suite")
+        _skip_under_changed(
+            "test",
+            "full-suite, not file-level",
+            "Run `interlocks test` for the full suite.",
+        )
         return None
-    if not project_env_ready(load_config()):
+    if not project_env_ready(cfg):
         return None
-    test = task_test()
+    test = task_test(
+        extra_pytest_args=(
+            *_acceptance_ignore_args(cfg, acceptance),
+            *_properties_ignore_args(cfg, properties),
+        )
+    )
     if test is None:
         record_skip("test", "no test dir detected — run `interlocks init` to scaffold tests/")
         warn_skip("test: no test dir detected — run `interlocks init` to scaffold tests/")
     return test
+
+
+def _acceptance_ignore_args(cfg: InterlockConfig, acceptance: Task | None) -> tuple[str, ...]:
+    if acceptance is None or acceptance.description != "Acceptance (pytest-bdd)":
+        return ()
+    if cfg.features_dir is None or cfg.test_runner != "pytest":
+        return ()
+    candidates = (cfg.features_dir, cfg.features_dir.parent / "step_defs")
+    return tuple(
+        f"--ignore={cfg.relpath(path)}" for path in candidates if _collected_by_test(cfg, path)
+    )
+
+
+def _properties_ignore_args(cfg: InterlockConfig, properties: Task | None) -> tuple[str, ...]:
+    if properties is None or cfg.properties_dir is None or cfg.test_runner != "pytest":
+        return ()
+    if not _collected_by_test(cfg, cfg.properties_dir):
+        return ()
+    return (f"--ignore={cfg.relpath(cfg.properties_dir)}",)
+
+
+def _collected_by_test(cfg: InterlockConfig, path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    try:
+        path.resolve().relative_to(cfg.test_dir.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def _acceptance_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None:
@@ -133,7 +194,11 @@ def _acceptance_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None
     if not cfg.run_acceptance_in_check:
         return None
     if scope_ref is not None:
-        _skip_under_changed("acceptance", "scenario-level, not file-level")
+        _skip_under_changed(
+            "acceptance",
+            "scenario-level, not file-level",
+            "Run `interlocks acceptance` for full scenario coverage.",
+        )
         return None
     acceptance = classify_acceptance_with_details(cfg)
     if acceptance.is_required_failure:
@@ -143,13 +208,32 @@ def _acceptance_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None
     return None
 
 
+def _properties_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None:
+    if not project_env_ready(cfg):
+        return None
+    if not cfg.run_properties_in_check:
+        return None
+    if scope_ref is not None:
+        _skip_under_changed(
+            "properties",
+            "property-wide, not file-level",
+            "Run `interlocks properties --profile=check` for generated-input coverage.",
+        )
+        return None
+    return task_properties(profile="check")
+
+
 def _run_advisory(
     scope_ref: str | None, scoped_files: list[str] | None, skip_policy: SkipPolicy
 ) -> None:
     if scope_ref is None:
         run_unless_skipped("deps", lambda: run(task_deps(), no_exit=True), skip_policy)
     else:
-        _skip_under_changed("deps", "graph-wide by construction")
+        _skip_under_changed(
+            "deps",
+            "graph-wide by construction",
+            "Run `interlocks deps` for dependency graph checks.",
+        )
     run_unless_skipped(
         "crap",
         lambda: cmd_crap_cached_advisory(set(scoped_files) if scoped_files is not None else None),
@@ -158,11 +242,15 @@ def _run_advisory(
     if scope_ref is None:
         run_unless_skipped("attribution", cmd_behavior_attribution_cached_advisory, skip_policy)
     else:
-        _skip_under_changed("attribution", "registry-wide")
+        _skip_under_changed(
+            "attribution",
+            "registry-wide",
+            "Run `interlocks behavior-attribution` for registry-wide attribution.",
+        )
 
 
-def _skip_under_changed(label: str, reason: str) -> None:
-    record_skip(label, f"skipped under --changed — {reason}")
+def _skip_under_changed(label: str, reason: str, next_action: str) -> None:
+    record_skip(label, f"skipped under --changed — {reason}", next_action=next_action)
     warn_skip(f"{label}: skipped under --changed — {reason}")
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -85,8 +86,86 @@ def test_deps_invokes_deptry_with_known_first_party(monkeypatch: pytest.MonkeyPa
 
     task = captured["task"]
     assert task.description == "Deps (deptry)"
+    assert task.start_status == "running"
     cmd = task.cmd
     assert any("deptry" in part for part in cmd), f"deptry missing in cmd: {cmd}"
     assert "--known-first-party" in cmd
     kfp_idx = cmd.index("--known-first-party")
     assert cmd[kfp_idx + 1] == "interlocks"
+
+
+def test_deps_json_uses_shared_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    from interlocks.runner import Task
+    from interlocks.tasks import deps as deps_mod
+
+    captured: list[tuple[str, Task]] = []
+    monkeypatch.setattr(sys, "argv", ["interlocks", "deps", "--json"])
+    monkeypatch.setattr(
+        deps_mod,
+        "run_task_json",
+        lambda command, task: captured.append((command, task)),
+    )
+
+    deps_mod.cmd_deps()
+
+    assert len(captured) == 1
+    command, task = captured[0]
+    assert command == "deps"
+    assert task.description == "Deps (deptry)"
+
+
+def test_deps_json_reports_gate_result(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from interlocks.runner import Task
+    from interlocks.tasks import deps as deps_mod
+
+    task = Task("Deps (deptry)", [sys.executable, "-c", ""], label="deps", display="deptry")
+    monkeypatch.setattr(sys, "argv", ["interlocks", "deps", "--json"])
+    monkeypatch.setattr(deps_mod, "task_deps", lambda: task)
+
+    deps_mod.cmd_deps()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "deps"
+    assert payload["passed"] is True
+    assert payload["gates"][0]["name"] == "deps"
+
+
+def test_deps_excludes_property_tests_from_root_src_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from interlocks.config import clear_cache
+    from interlocks.tasks.deps import task_deps
+
+    (tmp_path / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """
+            [project]
+            name = "probe-project"
+            version = "0.0.0"
+            requires-python = ">=3.11"
+
+            [tool.interlocks]
+            src_dir = "."
+            properties_dir = "properties"
+            """
+        ),
+        encoding="utf-8",
+    )
+    properties = tmp_path / "properties"
+    properties.mkdir()
+    (properties / "test_example_properties.py").write_text(
+        "from hypothesis import given\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    clear_cache()
+    try:
+        cmd = task_deps().cmd
+    finally:
+        clear_cache()
+
+    assert "--extend-exclude" in cmd
+    assert cmd[cmd.index("--extend-exclude") + 1] == "properties"
