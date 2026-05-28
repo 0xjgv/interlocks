@@ -40,8 +40,7 @@ def test_init_success_payload_reports_created_subset(
     actions: list[str],
 ) -> None:
     files = [
-        {"path": path, "action": actions[index % len(actions)]}
-        for index, path in enumerate(paths)
+        {"path": path, "action": actions[index % len(actions)]} for index, path in enumerate(paths)
     ]
 
     payload = _init_success_payload(project_name, files)
@@ -55,8 +54,7 @@ def test_init_success_payload_reports_created_subset(
 @given(actions=st.lists(st.sampled_from(("created", "kept")), max_size=8))
 def test_init_status_distinguishes_all_created(actions: list[str]) -> None:
     files = [
-        {"path": f"tests/{index}.py", "action": action}
-        for index, action in enumerate(actions)
+        {"path": f"tests/{index}.py", "action": action} for index, action in enumerate(actions)
     ]
 
     status = scaffold_status(files)
