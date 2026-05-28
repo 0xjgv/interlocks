@@ -540,6 +540,27 @@ def _references_from_scope(
     return _resolved_references(cfg, local_aliases, scope, property_attributes)
 
 
+def _child_reference(
+    cfg: InterlockConfig,
+    aliases: _ReferenceAliases,
+    child: ast.AST,
+    call_func_ids: frozenset[int],
+    property_attributes: frozenset[tuple[str, str]],
+) -> tuple[str, str] | None:
+    if isinstance(child, ast.Call):
+        return _resolved_reference(cfg, aliases, child.func)
+    if (
+        isinstance(child, ast.Attribute)
+        and isinstance(child.ctx, ast.Load)
+        and id(child) not in call_func_ids
+    ):
+        ref = _resolved_reference(cfg, aliases, child)
+        # `None in property_attributes` is False, so this also screens out misses.
+        if ref in property_attributes:
+            return ref
+    return None
+
+
 def _resolved_references(
     cfg: InterlockConfig,
     aliases: _ReferenceAliases,
@@ -547,20 +568,13 @@ def _resolved_references(
     property_attributes: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[tuple[str, str]]:
     refs: list[tuple[str, str]] = []
-    call_func_ids = {id(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)}
+    call_func_ids = frozenset(
+        id(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)
+    )
     for child in ast.walk(node):
-        if isinstance(child, ast.Call):
-            ref = _resolved_reference(cfg, aliases, child.func)
-            if ref is not None:
-                refs.append(ref)
-        elif (
-            isinstance(child, ast.Attribute)
-            and isinstance(child.ctx, ast.Load)
-            and id(child) not in call_func_ids
-        ):
-            ref = _resolved_reference(cfg, aliases, child)
-            if ref is not None and ref in property_attributes:
-                refs.append(ref)
+        ref = _child_reference(cfg, aliases, child, call_func_ids, property_attributes)
+        if ref is not None:
+            refs.append(ref)
     return refs
 
 
