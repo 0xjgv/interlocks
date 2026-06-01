@@ -887,6 +887,11 @@ def test_property_attribute_symbols_track_property_like_decorators(name: str) ->
     assert tree_symbols == set(symbols)
 
 
+@given(relpath=st.text(max_size=40))
+def test_property_attribute_symbols_ignore_non_module_trees(relpath: str) -> None:
+    assert _property_attribute_symbols_from_tree(ast.Expression(ast.Constant(1)), relpath) == set()
+
+
 @given(
     decorator=st.sampled_from([
         "property",

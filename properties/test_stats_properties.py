@@ -94,6 +94,19 @@ def test_inspect_function_counts_only_same_scope_assertions(
     assert inspected.loc >= 2
 
 
+@given(styles=_ASSERT_STYLES)
+def test_inspect_function_reports_exact_source_span(styles: list[str]) -> None:
+    fn = _function_from_styles(styles, nested_asserts=0)
+
+    inspected = stats._inspect_function(
+        fn,
+        "tests/test_generated.py",
+        qualname="test_generated",
+    )
+
+    assert inspected.loc == (fn.end_lineno or fn.lineno) - fn.lineno + 1
+
+
 @given(names=st.lists(_IDENT, max_size=8, unique=True))
 def test_inspect_tree_returns_top_level_and_class_test_functions(names: list[str]) -> None:
     top_level = "\n".join(f"def test_{name}():\n    pass\n" for name in names)
@@ -354,6 +367,13 @@ def test_mutation_gap_sentence_reports_only_configured_shortfalls(
         assert sentence == f"mutation {mutation_score:.0f}% below {mutation_min_score:.0f}%"
     else:
         assert not sentence
+
+
+@given(score=_PERCENT_FLOAT)
+def test_mutation_gap_sentence_accepts_exact_floor(score: float) -> None:
+    mutation = MutationSummary(killed=1, survived=1, timeout=0, score=score, completed=True)
+
+    assert stats._mutation_gap_sentence(mutation, score) == ""
 
 
 @given(

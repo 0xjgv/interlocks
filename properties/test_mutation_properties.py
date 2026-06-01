@@ -243,6 +243,19 @@ def test_mutation_progress_fields_report_denominator_and_estimate(
 
 
 @given(
+    checked=st.integers(min_value=0, max_value=100_000),
+    total=st.integers(min_value=1, max_value=100_000),
+)
+def test_mutation_progress_completion_is_rounded_percentage(
+    checked: int,
+    total: int,
+) -> None:
+    fields = mutation._mutation_progress_fields(checked, total)
+
+    assert fields["completion_pct"] == round(min((checked / total) * 100, 100.0), 3)
+
+
+@given(
     survivor_count=st.integers(min_value=0, max_value=100),
     visible_count=st.integers(min_value=0, max_value=100),
 )
@@ -316,6 +329,36 @@ def test_mutation_result_message_fields_follow_failure_precedence(
         assert fields == {"warning": "mutation run timed out before all mutants were checked"}
     else:
         assert fields == {}
+
+
+@given(score=_PERCENT, min_score=_PERCENT)
+def test_mutation_result_score_failure_message_names_thresholds(
+    score: float,
+    min_score: float,
+) -> None:
+    summary = MutationSummary(killed=1, survived=1, timeout=0, score=score)
+    context = mutation._MutationPayloadContext(
+        min_score=min_score,
+        completed=True,
+        changed_only=False,
+        globs=None,
+        changed=None,
+        log_path=Path(".interlocks/mutation.log"),
+        elapsed=1.0,
+        max_runtime=600,
+        min_coverage=70.0,
+        coverage_pct=90.0,
+        total_mutants=None,
+    )
+
+    fields = mutation._mutation_result_message_fields(
+        summary,
+        context,
+        failed=False,
+        score_failed=True,
+    )
+
+    assert fields == {"error": f"Mutation score {score:.1f}% below threshold {min_score:.1f}%"}
 
 
 @given(
