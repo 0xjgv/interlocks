@@ -26,6 +26,12 @@ _SECTION = st.from_regex(r"[A-Za-z][A-Za-z0-9_-]{0,20}", fullmatch=True)
 _SIDECAR = st.from_regex(r"[A-Za-z0-9_.-]{1,24}", fullmatch=True).filter(
     lambda value: "/" not in value and value not in {".", ".."}
 )
+_CASE_UNIQUE_SIDECARS = st.lists(
+    _SIDECAR,
+    min_size=1,
+    max_size=5,
+    unique_by=lambda value: value.casefold(),
+)
 _KNOWN_TOOL = st.sampled_from(tuple(TOOL_CONFIG_SPECS))
 _KNOWN_SPEC = st.sampled_from(tuple(TOOL_CONFIG_SPECS.values()))
 
@@ -54,7 +60,7 @@ def test_project_config_source_prefers_pyproject_tool_section(
 
 @given(
     section=_SECTION,
-    sidecars=st.lists(_SIDECAR, min_size=1, max_size=5, unique=True),
+    sidecars=_CASE_UNIQUE_SIDECARS,
     existing_index=st.integers(min_value=0, max_value=4),
 )
 def test_project_config_source_uses_first_existing_sidecar(
