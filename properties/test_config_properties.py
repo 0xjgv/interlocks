@@ -116,6 +116,29 @@ _ENUM_KEY_VALUES = st.sampled_from([
     ("audit_severity_threshold", ("low", "medium", "high", "critical")),
     ("arch_template", ("default", "layered")),
 ])
+_DEFAULT_VALUE_SOURCE_KEYS = frozenset({
+    *_INT_THRESHOLDS,
+    *_FLOAT_THRESHOLDS,
+    *_BOOL_THRESHOLDS,
+    "mutation_ci_mode",
+    "mutation_since_ref",
+    "changed_ref",
+    "skip",
+    "run_acceptance_in_check",
+    "run_properties_in_check",
+    "require_acceptance",
+    "evaluate_dependency_freshness",
+    "dependency_freshness_command",
+    "dependency_freshness_stage",
+    "audit_severity_threshold",
+    "arch_template",
+    "arch_layers",
+    "pr_ci_runtime_budget_seconds",
+    "pr_ci_evidence_max_age_hours",
+    "ci_evidence_path",
+    "pytest_args",
+    "preset",
+})
 
 
 @given(
@@ -456,3 +479,22 @@ def test_complete_value_sources_preserves_and_fills_sources(
         elif key not in sources:
             assert complete[key] == "project-configured"
     assert complete["preset"] == ("bundled-default" if preset is None else "project-configured")
+
+
+@given(
+    sources=st.dictionaries(_VALUE_SOURCE_KEYS, _VALUE_SOURCE_VALUES, max_size=10),
+    overrides=st.dictionaries(_OVERRIDE_SOURCE_KEYS, _EXPLICIT_VALUE, max_size=10),
+    preset=st.one_of(st.none(), st.text(max_size=20)),
+)
+def test_complete_value_sources_covers_all_default_and_override_keys(
+    sources: dict[str, str],
+    overrides: dict[str, object],
+    preset: str | None,
+) -> None:
+    table = {} if preset is None else {"preset": preset}
+
+    complete = _complete_value_sources(sources, table, overrides=overrides)
+
+    assert _DEFAULT_VALUE_SOURCE_KEYS <= complete.keys()
+    assert sources.keys() <= complete.keys()
+    assert overrides.keys() <= complete.keys()

@@ -15,6 +15,7 @@ from interlocks import cli as cli_mod
 from interlocks import ui
 from interlocks.cli import (
     _HELP_GROUPS,
+    TASK_GROUPS,
     TASKS,
     _available_preset_payload,
     _current_preset_payload,
@@ -302,6 +303,20 @@ def test_help_groups_payload_lists_known_commands_without_duplicates(advanced: b
     else:
         expected = {name for _group, names in _HELP_GROUPS for name in names}
         assert set(names) == expected
+
+
+@given(advanced=st.booleans())
+def test_help_groups_payload_preserves_declared_group_order(advanced: bool) -> None:
+    payload = _help_groups_payload(advanced=advanced)
+    expected_groups = TASK_GROUPS if advanced else _HELP_GROUPS
+
+    assert [group["name"] for group in payload] == [
+        group_name for group_name, _names in expected_groups
+    ]
+    assert [
+        [command["name"] for command in group["commands"]]
+        for group in payload
+    ] == [list(names) for _group_name, names in expected_groups]
 
 
 @given(task_name=_TASK_NAME)
