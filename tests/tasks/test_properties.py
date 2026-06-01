@@ -187,6 +187,37 @@ def test_init_properties_json_reports_scaffold_actions(
     assert (tmp_project / "properties" / "test_example_properties.py").is_file()
 
 
+def test_init_properties_omits_dependency_action_when_hypothesis_declared(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_project / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "property-probe"
+            version = "0.0.0"
+            requires-python = ">=3.11"
+
+            [dependency-groups]
+            dev = ["hypothesis>=6"]
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_init_properties(tmp_project, monkeypatch, capsys, "--json")
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    payload = json.loads(result.stdout)
+    assert (
+        "Add `hypothesis>=6` to test/dev dependencies if it is missing."
+        not in payload["next_actions"]
+    )
+    assert "Run `interlocks properties --profile=check`." in payload["next_actions"]
+
+
 def test_init_properties_preserves_existing_files_and_creates_missing(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,

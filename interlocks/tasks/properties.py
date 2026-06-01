@@ -24,7 +24,12 @@ from interlocks.runner import (
     section,
     warn_skip,
 )
-from interlocks.scaffold import ScaffoldFile, ensure_bytes_file, scaffold_file
+from interlocks.scaffold import (
+    ScaffoldFile,
+    ensure_bytes_file,
+    next_actions_without_declared_dependency,
+    scaffold_file,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -32,8 +37,9 @@ if TYPE_CHECKING:
 PROPERTY_PROFILES = ("check", "ci", "nightly", "default")
 _PROPERTY_PROFILE_SET = frozenset(PROPERTY_PROFILES)
 _SCAFFOLD_EXAMPLE = "test_example_properties.py"
+_INIT_PROPERTIES_DEP_ACTION = "Add `hypothesis>=6` to test/dev dependencies if it is missing."
 _INIT_PROPERTIES_NEXT_ACTIONS = (
-    "Add `hypothesis>=6` to test/dev dependencies if it is missing.",
+    _INIT_PROPERTIES_DEP_ACTION,
     "Create or sync the project environment if `interlocks doctor` reports one missing.",
     "Replace the example property with domain invariants.",
     "Run `interlocks properties --profile=check`.",
@@ -243,7 +249,7 @@ def cmd_init_properties() -> None:
                 _InitPropertiesResult(
                     status="scaffold-present",
                     files=tuple(files),
-                    next_actions=_INIT_PROPERTIES_NEXT_ACTIONS,
+                    next_actions=_init_properties_next_actions(cfg),
                 ),
             )
         )
@@ -252,7 +258,7 @@ def cmd_init_properties() -> None:
         action = file["action"]
         path = file["path"]
         print(f"{action} {path}")
-    _print_init_properties_next_steps()
+    _print_init_properties_next_steps(cfg)
 
 
 def _init_properties_payload(
@@ -281,6 +287,15 @@ def _init_properties_targets(properties_dir: Path) -> tuple[tuple[Path, str], ..
     return ((properties_dir / "test_example_properties.py", "properties_test_example.py"),)
 
 
-def _print_init_properties_next_steps() -> None:
-    for action in _INIT_PROPERTIES_NEXT_ACTIONS:
+def _init_properties_next_actions(cfg: InterlockConfig) -> tuple[str, ...]:
+    return next_actions_without_declared_dependency(
+        cfg.pyproject,
+        dependency="hypothesis",
+        dependency_action=_INIT_PROPERTIES_DEP_ACTION,
+        actions=_INIT_PROPERTIES_NEXT_ACTIONS,
+    )
+
+
+def _print_init_properties_next_steps(cfg: InterlockConfig) -> None:
+    for action in _init_properties_next_actions(cfg):
         print(f"next: {action[0].lower()}{action[1:]}")

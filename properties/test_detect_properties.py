@@ -14,6 +14,7 @@ from interlocks.detect import (
     _deps_mention,
     _has_pytest_config,
     _iter_declared_deps,
+    dependency_declared,
     detect_acceptance_runner,
     detect_features_dir,
     detect_src_dir,
@@ -294,6 +295,14 @@ def test_deps_mention_matches_declared_dependency_words(deps: list[str]) -> None
     assert _deps_mention(_PYTEST_WORD, pyproject) is any(
         _PYTEST_WORD.search(dep) is not None for dep in deps
     )
+
+
+@given(package=st.sampled_from(["hypothesis", "pytest-bdd", "some_pkg", "some.pkg"]))
+def test_dependency_declared_matches_normalized_distribution_name(package: str) -> None:
+    pyproject = {"dependency-groups": {"dev": [f"{package}[extra]>=1"]}}
+
+    assert dependency_declared(pyproject, package.replace("_", "-").replace(".", "-")) is True
+    assert dependency_declared(pyproject, f"{package}-other") is False
 
 
 @given(tool=st.text(min_size=1, max_size=20))

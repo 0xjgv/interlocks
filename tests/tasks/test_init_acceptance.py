@@ -93,6 +93,35 @@ def test_init_acceptance_json_scaffolds_layout(tmp_project: Path) -> None:
     assert (tmp_project / "tests" / "step_defs" / "conftest.py").is_file()
 
 
+def test_init_acceptance_omits_dependency_action_when_pytest_bdd_declared(
+    tmp_project: Path,
+) -> None:
+    (tmp_project / "pyproject.toml").write_text(
+        textwrap.dedent(
+            """\
+            [project]
+            name = "init-probe"
+            version = "0.0.0"
+            requires-python = ">=3.11"
+
+            [dependency-groups]
+            dev = ["pytest-bdd>=8"]
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_cli(tmp_project, "init-acceptance", "--json")
+
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
+    payload = json.loads(result.stdout)
+    assert (
+        "Add `pytest-bdd>=8` to test/dev dependencies if it is missing."
+        not in payload["next_actions"]
+    )
+    assert "Run `interlocks acceptance`." in payload["next_actions"]
+
+
 def test_init_acceptance_json_preserves_existing_files_and_creates_missing(
     tmp_project: Path,
 ) -> None:
@@ -167,15 +196,24 @@ def test_init_acceptance_json_keeps_domain_features_without_adding_example(
     assert not (tmp_project / "tests" / "step_defs").exists()
 
 
-def test_init_acceptance_success_payload_is_exact() -> None:
+def test_init_acceptance_success_payload_is_exact(tmp_path: Path) -> None:
+    from interlocks.config import InterlockConfig
     from interlocks.tasks import init_acceptance as mod
 
+    (tmp_path / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
+    cfg = InterlockConfig(
+        project_root=tmp_path,
+        src_dir=tmp_path / "pkg",
+        test_dir=tmp_path / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+    )
     files = [
         {"path": "tests/features/example.feature", "action": "kept"},
         {"path": "tests/step_defs/test_example.py", "action": "created"},
     ]
 
-    assert mod._init_acceptance_success_payload(files) == {
+    assert mod._init_acceptance_success_payload(cfg, files) == {
         "command": "init-acceptance",
         "passed": True,
         "status": "scaffold-present",

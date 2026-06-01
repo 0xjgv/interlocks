@@ -17,6 +17,7 @@ from interlocks.scaffold import (
     ScaffoldFile,
     created_paths,
     ensure_bytes_file,
+    next_actions_without_declared_dependency,
     scaffold_file,
     scaffold_status,
 )
@@ -31,8 +32,9 @@ _INIT_ACCEPTANCE_OUTPUTS = (
     "tests/step_defs/test_example.py",
     "tests/step_defs/conftest.py",
 )
+_INIT_ACCEPTANCE_DEP_ACTION = "Add `pytest-bdd>=8` to test/dev dependencies if it is missing."
 _INIT_ACCEPTANCE_NEXT_ACTIONS = (
-    "Add `pytest-bdd>=8` to test/dev dependencies if it is missing.",
+    _INIT_ACCEPTANCE_DEP_ACTION,
     "Create or sync the project environment if `interlocks doctor` reports one missing.",
     "Replace the example scenario with project behavior.",
     "Run `interlocks acceptance`.",
@@ -69,15 +71,15 @@ def cmd_init_acceptance() -> None:
         )
 
     if ui.is_json():
-        ui.print_json(_init_acceptance_success_payload(files))
+        ui.print_json(_init_acceptance_success_payload(cfg, files))
         return
     for file in files:
         print(f"{file['action']} {file['path']}")
-    _print_init_acceptance_next_steps()
+    _print_init_acceptance_next_steps(cfg)
 
 
-def _print_init_acceptance_next_steps() -> None:
-    for action in _INIT_ACCEPTANCE_NEXT_ACTIONS:
+def _print_init_acceptance_next_steps(cfg: InterlockConfig) -> None:
+    for action in _init_acceptance_next_actions(cfg):
         print(f"next: {action[0].lower()}{action[1:]}")
 
 
@@ -101,15 +103,26 @@ def _init_acceptance_targets(test_dir: Path) -> tuple[tuple[Path, str], ...]:
     )
 
 
-def _init_acceptance_success_payload(files: list[ScaffoldFile]) -> dict[str, object]:
+def _init_acceptance_success_payload(
+    cfg: InterlockConfig, files: list[ScaffoldFile]
+) -> dict[str, object]:
     return {
         "command": "init-acceptance",
         "passed": True,
         "status": scaffold_status(files),
         "created": created_paths(files),
         "files": files,
-        "next_actions": list(_INIT_ACCEPTANCE_NEXT_ACTIONS),
+        "next_actions": list(_init_acceptance_next_actions(cfg)),
     }
+
+
+def _init_acceptance_next_actions(cfg: InterlockConfig) -> tuple[str, ...]:
+    return next_actions_without_declared_dependency(
+        cfg.pyproject,
+        dependency="pytest-bdd",
+        dependency_action=_INIT_ACCEPTANCE_DEP_ACTION,
+        actions=_INIT_ACCEPTANCE_NEXT_ACTIONS,
+    )
 
 
 def _init_acceptance_domain_payload(

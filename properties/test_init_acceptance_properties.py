@@ -20,10 +20,25 @@ from interlocks.tasks.init_acceptance import (
 )
 
 
+def _cfg(root: Path) -> InterlockConfig:
+    (root / "pyproject.toml").write_text(
+        "[project]\nname = 'probe'\nversion = '0.0.0'\n",
+        encoding="utf-8",
+    )
+    return InterlockConfig(
+        project_root=root,
+        src_dir=root / "src",
+        test_dir=root / "tests",
+        test_runner="pytest",
+        test_invoker="python",
+    )
+
+
 def test_init_acceptance_success_payload_shape_is_stable() -> None:
     files = [{"path": path, "action": "created"} for path in _INIT_ACCEPTANCE_OUTPUTS]
 
-    payload = _init_acceptance_success_payload(files)
+    with TemporaryDirectory() as raw_root:
+        payload = _init_acceptance_success_payload(_cfg(Path(raw_root)), files)
 
     assert payload["command"] == "init-acceptance"
     assert payload["passed"] is True
@@ -45,7 +60,8 @@ def test_init_acceptance_success_payload_reports_created_subset(
         {"path": path, "action": actions[index % len(actions)]} for index, path in enumerate(paths)
     ]
 
-    payload = _init_acceptance_success_payload(files)
+    with TemporaryDirectory() as raw_root:
+        payload = _init_acceptance_success_payload(_cfg(Path(raw_root)), files)
 
     assert payload["command"] == "init-acceptance"
     assert payload["passed"] is True

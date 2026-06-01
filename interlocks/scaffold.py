@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
+
+from interlocks.detect import dependency_declared
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,6 +25,18 @@ def scaffold_status(files: list[ScaffoldFile]) -> str:
 
 def created_paths(files: list[ScaffoldFile]) -> list[str]:
     return [file["path"] for file in files if file["action"] == "created"]
+
+
+def next_actions_without_declared_dependency(
+    pyproject: dict[str, Any],
+    *,
+    dependency: str,
+    dependency_action: str,
+    actions: tuple[str, ...],
+) -> tuple[str, ...]:
+    if dependency_declared(pyproject, dependency):
+        return tuple(action for action in actions if action != dependency_action)
+    return actions
 
 
 def ensure_text_file(target: Path, content: str) -> ScaffoldAction:

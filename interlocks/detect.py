@@ -77,6 +77,25 @@ def _deps_mention(pattern: re.Pattern[str], pyproject: dict[str, Any]) -> bool:
     return any(pattern.search(str(dep)) for dep in _iter_declared_deps(pyproject))
 
 
+def dependency_declared(pyproject: dict[str, Any], package: str) -> bool:
+    """True when project/dependency-group/uv deps declare ``package`` by normalized name."""
+    wanted = _normalize_dependency_name(package)
+    return any(
+        _normalize_dependency_name(dep) == wanted for dep in _iter_declared_dep_names(pyproject)
+    )
+
+
+def _iter_declared_dep_names(pyproject: dict[str, Any]) -> Iterator[str]:
+    for dep in _iter_declared_deps(pyproject):
+        match = re.match(r"\s*([A-Za-z0-9_.-]+)", dep)
+        if match is not None:
+            yield match.group(1)
+
+
+def _normalize_dependency_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
 def detect_test_runner(
     project_root: Path, pyproject: dict[str, Any], test_dir: Path
 ) -> TestRunner:

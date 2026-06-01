@@ -12,6 +12,7 @@ from interlocks.scaffold import (
     created_paths,
     ensure_bytes_file,
     ensure_text_file,
+    next_actions_without_declared_dependency,
     scaffold_file,
     scaffold_status,
 )
@@ -33,6 +34,24 @@ def test_created_paths_returns_only_created_entries(actions: list[str]) -> None:
     assert created_paths(files) == [
         f"path-{index}" for index, action in enumerate(actions) if action == "created"
     ]
+
+
+@given(declared=st.booleans())
+def test_next_actions_without_declared_dependency_omits_declared_dependency(
+    declared: bool,
+) -> None:
+    action = "Add `pytest-bdd>=8` to test/dev dependencies if it is missing."
+    actions = (action, "Run `interlocks acceptance`.")
+    pyproject = {"dependency-groups": {"dev": ["pytest_bdd>=8"]}} if declared else {}
+
+    next_actions = next_actions_without_declared_dependency(
+        pyproject,
+        dependency="pytest-bdd",
+        dependency_action=action,
+        actions=actions,
+    )
+
+    assert next_actions == (("Run `interlocks acceptance`.",) if declared else actions)
 
 
 @given(
