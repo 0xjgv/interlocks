@@ -19,6 +19,7 @@ from interlocks.tasks.doctor import (
     _cfg_rows,
     _crash_report_cache_row,
     _gap_lines,
+    _is_fail,
     _is_warn,
     _next_steps,
     _readiness,
@@ -81,6 +82,14 @@ def test_actionable_gap_rows_exclude_inert_placeholders(values: list[CheckRow]) 
     assert _actionable_gap_rows(values) == [
         row for row in values if row.state == "warn" and row.detail != _INERT_DETAIL
     ]
+
+
+@given(values=rows(), label=st.text(max_size=30))
+def test_is_fail_matches_fail_row_lookup(values: list[CheckRow], label: str) -> None:
+    by_label = {row.label: row for row in values}
+    row = by_label.get(label)
+
+    assert _is_fail(by_label, label) is (row is not None and row.state == "fail")
 
 
 @given(state=_STATES, inert=st.booleans())

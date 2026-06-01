@@ -22,6 +22,7 @@ from interlocks.tasks.property_candidates import (
     _candidates_from_tree,
     _CandidateSignals,
     _caution_line,
+    _child_reference,
     _empty_candidate_lines,
     _has_property_decorator,
     _iter_source_files,
@@ -703,6 +704,20 @@ def test_reference_resolution_distinguishes_module_and_class_symbols(
             attribute_node,
             frozenset({("pkg/generated.py", f"Parser.{method}")}),
         )
+        attribute_ref = _child_reference(
+            cfg,
+            aliases,
+            attribute_node.value,
+            frozenset(),
+            frozenset({("pkg/generated.py", f"Parser.{method}")}),
+        )
+        call_attribute_ref = _child_reference(
+            cfg,
+            aliases,
+            instance_node.value.func,
+            frozenset({id(instance_node.value.func)}),
+            frozenset({("pkg/generated.py", f"Parser.{method}")}),
+        )
         non_property_attribute_refs = _resolved_references(cfg, aliases, attribute_node)
         scope = import_tree.body[-1]
         assert isinstance(scope, ast.FunctionDef)
@@ -732,6 +747,8 @@ def test_reference_resolution_distinguishes_module_and_class_symbols(
         assert method_ref == ("pkg/generated.py", f"Parser.{method}")
         assert instance_ref == ("pkg/generated.py", f"Parser.{method}")
         assert attribute_refs == [("pkg/generated.py", f"Parser.{method}")]
+        assert attribute_ref == ("pkg/generated.py", f"Parser.{method}")
+        assert call_attribute_ref is None
         assert non_property_attribute_refs == []
         assert ("pkg/generated.py", f"Parser.{method}") in scoped_refs
         assert scoped_refs.count(("pkg/generated.py", f"Parser.{method}")) == 1

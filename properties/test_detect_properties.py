@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import string
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -13,7 +14,9 @@ from interlocks.detect import (
     _PYTEST_WORD,
     _deps_mention,
     _has_pytest_config,
+    _iter_declared_dep_names,
     _iter_declared_deps,
+    _normalize_dependency_name,
     dependency_declared,
     detect_acceptance_runner,
     detect_features_dir,
@@ -23,6 +26,11 @@ from interlocks.detect import (
 )
 
 _DEP = st.text(min_size=1, max_size=40)
+_DEP_NAME = st.text(
+    alphabet=string.ascii_letters + string.digits + "-_.",
+    min_size=1,
+    max_size=30,
+)
 _MALFORMED_CONTAINER = st.one_of(
     st.none(),
     st.text(max_size=20),
@@ -303,6 +311,29 @@ def test_dependency_declared_matches_normalized_distribution_name(package: str) 
 
     assert dependency_declared(pyproject, package.replace("_", "-").replace(".", "-")) is True
     assert dependency_declared(pyproject, f"{package}-other") is False
+
+
+@given(name=_DEP_NAME)
+def test_normalize_dependency_name_collapses_pep503_separators(name: str) -> None:
+    normalized = _normalize_dependency_name(name)
+
+    assert normalized == normalized.lower()
+    assert "_" not in normalized
+    assert "." not in normalized
+    assert _normalize_dependency_name(normalized) == normalized
+
+
+@given(
+    names=st.lists(_DEP_NAME, max_size=8),
+    suffix=st.sampled_from(["", ">=1", "[extra]>=1", " ; python_version >= '3.11'"]),
+)
+def test_iter_declared_dep_names_extracts_distribution_names(
+    names: list[str],
+    suffix: str,
+) -> None:
+    pyproject = {"project": {"dependencies": [f"  {name}{suffix}" for name in names]}}
+
+    assert list(_iter_declared_dep_names(pyproject)) == names
 
 
 @given(tool=st.text(min_size=1, max_size=20))

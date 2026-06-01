@@ -13,6 +13,7 @@ from interlocks.config import SKIP_LABELS, InterlockConfig
 from interlocks.defaults_path import TOOL_CONFIG_SPECS, ToolConfigSource
 from interlocks.tasks.config import (
     CONFIG_KEYS,
+    _config_state,
     _config_usage,
     _config_usage_payload,
     _current_label,
@@ -114,6 +115,17 @@ def test_missing_config_display_labels_do_not_claim_resolved_defaults() -> None:
     assert _display_source_label(None, "coverage_min", state="missing") == "missing-project"
     assert _display_current_label(None, "coverage_min", state="unreadable") == "(unreadable)"
     assert _display_source_label(None, "coverage_min", state="unreadable") == "unreadable"
+
+
+@given(has_cfg=st.booleans(), pyproject_present=st.booleans())
+def test_config_state_depends_only_on_cfg_and_pyproject_presence(
+    has_cfg: bool,
+    pyproject_present: bool,
+) -> None:
+    cfg = _cfg(Path()) if has_cfg else None
+    expected = "resolved" if has_cfg else "unreadable" if pyproject_present else "missing"
+
+    assert _config_state(cfg, pyproject_present=pyproject_present) == expected
 
 
 @given(
