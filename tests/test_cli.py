@@ -368,6 +368,7 @@ def test_preset_payload_helpers_have_exact_json_contract(tmp_path: Path) -> None
 
     assert _current_preset_payload(None) == {"pyproject": False, "preset": None}
     assert _current_preset_payload(cfg) == {"pyproject": False, "preset": None}
+    assert _preset_current_values_payload(cfg) == []
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='pkg'\n", encoding="utf-8")
 
@@ -1105,8 +1106,9 @@ def test_cmd_config_no_pyproject(
     out = capsys.readouterr().out
     assert "(none — run `interlocks init`)" in out
     assert "Scaffold a project:" in out
-    # Defaults still listed.
-    assert re.search(r"coverage_min\s+80 \(bundled-default\)", out)
+    assert "missing-project" in out
+    assert re.search(r"coverage_min\s+int\s+80\s+\(not resolved\)\s+missing-project", out)
+    assert str(tmp_path) not in out
 
 
 def test_cmd_config_show_reports_bundled_tool_config(
@@ -1285,6 +1287,26 @@ def test_cmd_config_json_falls_back_when_pyproject_malformed(
         assert entry["type"]
         assert entry["default"]
         assert entry["description"]
+
+
+def test_cmd_config_json_without_pyproject_does_not_resolve_current_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    clean_config_cache: None,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["interlocks", "config", "--json"])
+
+    cmd_config()
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "config"
+    assert payload["pyproject_path"] is None
+    assert payload["preset"] is None
+    assert payload["keys"]
+    assert {entry["value"] for entry in payload["keys"]} == {None}
+    assert {entry["source"] for entry in payload["keys"]} == {"missing-project"}
 
 
 def test_cmd_config_falls_back_when_pyproject_malformed(

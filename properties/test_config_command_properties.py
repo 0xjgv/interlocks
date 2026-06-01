@@ -16,6 +16,8 @@ from interlocks.tasks.config import (
     _config_usage,
     _config_usage_payload,
     _current_label,
+    _display_current_label,
+    _display_source_label,
     _json_value,
     _key_widths,
     _resolved_value,
@@ -105,6 +107,13 @@ def test_key_widths_cover_all_rendered_config_columns(skip_labels: list[str]) ->
     assert widths.default >= max(len(key.default) for key in CONFIG_KEYS)
     assert widths.current >= max(len(_current_label(cfg, key.name)) for key in CONFIG_KEYS)
     assert widths.source >= max(len(_source_label(cfg, key.name)) for key in CONFIG_KEYS)
+
+
+def test_missing_config_display_labels_do_not_claim_resolved_defaults() -> None:
+    assert _display_current_label(None, "coverage_min", state="missing") == "(not resolved)"
+    assert _display_source_label(None, "coverage_min", state="missing") == "missing-project"
+    assert _display_current_label(None, "coverage_min", state="unreadable") == "(unreadable)"
+    assert _display_source_label(None, "coverage_min", state="unreadable") == "unreadable"
 
 
 @given(

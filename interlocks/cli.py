@@ -244,9 +244,13 @@ def _cmd_presets_list() -> None:
         return
     ui.section("Current")
     ui.kv_block([("preset", cfg.preset if cfg is not None and cfg.preset else "(none)")])
-    if cfg is not None:
+    project_cfg = _preset_project_config(cfg)
+    if project_cfg is not None:
         ui.section("Current Values")
-        ui.kv_block([kv_with_source(cfg, key, getattr(cfg, key)) for key in _PRESET_REPORTED_KEYS])
+        ui.kv_block([
+            kv_with_source(project_cfg, key, getattr(project_cfg, key))
+            for key in _PRESET_REPORTED_KEYS
+        ])
     ui.section("Available Presets")
     for preset in supported_presets():
         defaults = preset_defaults(preset)
@@ -330,26 +334,34 @@ def _presets_payload(cfg: InterlockConfig | None) -> dict[str, object]:
 
 
 def _current_preset_payload(cfg: InterlockConfig | None) -> dict[str, object]:
-    if cfg is None or not (cfg.project_root / "pyproject.toml").is_file():
+    project_cfg = _preset_project_config(cfg)
+    if project_cfg is None:
         return {"pyproject": False, "preset": None}
     return {
         "pyproject": True,
-        "preset": cfg.preset,
-        "pyproject_path": cfg.relpath(cfg.project_root / "pyproject.toml"),
+        "preset": project_cfg.preset,
+        "pyproject_path": project_cfg.relpath(project_cfg.project_root / "pyproject.toml"),
     }
 
 
 def _preset_current_values_payload(cfg: InterlockConfig | None) -> list[dict[str, object]]:
-    if cfg is None:
+    project_cfg = _preset_project_config(cfg)
+    if project_cfg is None:
         return []
     return [
         {
             "key": key,
-            "value": getattr(cfg, key),
-            "source": cfg.value_sources.get(key, "unknown"),
+            "value": getattr(project_cfg, key),
+            "source": project_cfg.value_sources.get(key, "unknown"),
         }
         for key in _PRESET_REPORTED_KEYS
     ]
+
+
+def _preset_project_config(cfg: InterlockConfig | None) -> InterlockConfig | None:
+    if cfg is None or not (cfg.project_root / "pyproject.toml").is_file():
+        return None
+    return cfg
 
 
 def _available_preset_payload(preset: Preset) -> dict[str, object]:

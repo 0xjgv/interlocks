@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Literal, NoReturn
 
 from interlocks import ui
 from interlocks.config import (
@@ -28,6 +28,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from interlocks.config import ConfigKeyDoc, InterlockConfig
+
+ConfigState = Literal["resolved", "missing", "unreadable"]
 
 
 @dataclass(frozen=True)
@@ -50,23 +52,24 @@ def cmd_config() -> None:
         _fail_config_usage()
     project_root = find_project_root()
     pyproject = project_root / "pyproject.toml"
-    cfg = load_optional_config()
+    cfg = load_optional_config() if pyproject.is_file() else None
+    state = _config_state(cfg, pyproject_present=pyproject.is_file())
 
     if ui.is_json():
-        _print_config_json(cfg, pyproject)
+        _print_config_json(cfg, pyproject, state=state)
         return
 
     ui.section("Status")
     _print_status(cfg, pyproject_present=pyproject.is_file())
 
     ui.section("Config keys")
-    _print_keys(cfg)
+    _print_keys(cfg, state=state)
 
     if not ui.is_verbose():
         return
 
     ui.section("Resolved values")
-    _print_resolved(cfg)
+    _print_resolved(cfg, state=state)
 
     ui.section("Precedence")
     for line in _PRECEDENCE_LINES:
@@ -78,6 +81,12 @@ def cmd_config() -> None:
 
     ui.section("Next steps")
     _print_next_steps(cfg, pyproject_present=pyproject.is_file())
+
+
+def _config_state(cfg: InterlockConfig | None, *, pyproject_present: bool) -> ConfigState:
+    if cfg is not None:
+        return "resolved"
+    return "unreadable" if pyproject_present else "missing"
 
 
 def _config_usage() -> str:
@@ -201,9 +210,14 @@ def _print_status(cfg: InterlockConfig | None, *, pyproject_present: bool) -> No
 _RESOLVED_KEYS: tuple[str, ...] = tuple(k.name for k in CONFIG_KEYS)
 
 
-def _print_resolved(cfg: InterlockConfig | None) -> None:
+def _print_resolved(cfg: InterlockConfig | None, *, state: ConfigState = "unreadable") -> None:
     if cfg is None:
-        ui.kv_block([(key, "(defaults — pyproject.toml unreadable)") for key in _RESOLVED_KEYS])
+        reason = (
+            "not resolved — pyproject.toml missing"
+            if state == "missing"
+            else "defaults — pyproject.toml unreadable"
+        )
+        ui.kv_block([(key, f"({reason})") for key in _RESOLVED_KEYS])
         return
     ui.kv_block([kv_with_source(cfg, key, _resolved_value(cfg, key)) for key in _RESOLVED_KEYS])
 
@@ -252,7 +266,9 @@ def _json_value(cfg: InterlockConfig, key: str) -> object:
     return value
 
 
-def _print_config_json(cfg: InterlockConfig | None, pyproject: Path) -> None:
+def _print_config_json(
+    cfg: InterlockConfig | None, pyproject: Path, *, state: ConfigState = "unreadable"
+) -> None:
     """Emit the resolved-key listing as a single JSON object."""
     keys: list[dict[str, object]] = []
     for group in CONFIG_KEY_GROUP_ORDER:
@@ -260,7 +276,7 @@ def _print_config_json(cfg: InterlockConfig | None, pyproject: Path) -> None:
             name = key_doc.name
             if cfg is None:
                 value: object = None
-                source = "unreadable"
+                source = "missing-project" if state == "missing" else "unreadable"
             else:
                 value = _json_value(cfg, name)
                 source = cfg.value_sources.get(name, "unknown")
@@ -281,20 +297,20 @@ def _print_config_json(cfg: InterlockConfig | None, pyproject: Path) -> None:
     })
 
 
-def _print_keys(cfg: InterlockConfig | None) -> None:
-    widths = _key_widths(cfg)
+def _print_keys(cfg: InterlockConfig | None, *, state: ConfigState = "unreadable") -> None:
+    widths = _key_widths(cfg, state=state)
     _print_key_header(widths)
     for group in CONFIG_KEY_GROUP_ORDER:
-        _print_key_group(group, cfg, widths)
+        _print_key_group(group, cfg, widths, state=state)
 
 
-def _key_widths(cfg: InterlockConfig | None) -> _KeyWidths:
+def _key_widths(cfg: InterlockConfig | None, *, state: ConfigState = "unreadable") -> _KeyWidths:
     return _KeyWidths(
         name=max(len(k.name) for k in CONFIG_KEYS),
         type=max(len(k.type) for k in CONFIG_KEYS),
         default=max(len(k.default) for k in CONFIG_KEYS),
-        current=max(len(_current_label(cfg, k.name)) for k in CONFIG_KEYS),
-        source=max(len(_source_label(cfg, k.name)) for k in CONFIG_KEYS),
+        current=max(len(_display_current_label(cfg, k.name, state=state)) for k in CONFIG_KEYS),
+        source=max(len(_display_source_label(cfg, k.name, state=state)) for k in CONFIG_KEYS),
     )
 
 
@@ -309,28 +325,48 @@ def _print_key_header(widths: _KeyWidths) -> None:
     )
 
 
-def _print_key_group(group: str, cfg: InterlockConfig | None, widths: _KeyWidths) -> None:
+def _print_key_group(
+    group: str,
+    cfg: InterlockConfig | None,
+    widths: _KeyWidths,
+    *,
+    state: ConfigState,
+) -> None:
     keys = [k for k in CONFIG_KEYS if k.group == group]
     if not keys:
         return
     print(f"  {group}")
     for key in keys:
-        print(_format_key_row(key, cfg, widths))
+        print(_format_key_row(key, cfg, widths, state=state))
 
 
 def _format_key_row(
     key: ConfigKeyDoc,
     cfg: InterlockConfig | None,
     widths: _KeyWidths,
+    *,
+    state: ConfigState = "unreadable",
 ) -> str:
     return (
         f"    {key.name:<{widths.name}} "
         f"{key.type:<{widths.type}} "
         f"{key.default:<{widths.default}} "
-        f"{_current_label(cfg, key.name):<{widths.current}} "
-        f"{_source_label(cfg, key.name):<{widths.source}} "
+        f"{_display_current_label(cfg, key.name, state=state):<{widths.current}} "
+        f"{_display_source_label(cfg, key.name, state=state):<{widths.source}} "
         f"{key.description}"
     )
+
+
+def _display_current_label(cfg: InterlockConfig | None, key: str, *, state: ConfigState) -> str:
+    if cfg is not None:
+        return _current_label(cfg, key)
+    return "(not resolved)" if state == "missing" else "(unreadable)"
+
+
+def _display_source_label(cfg: InterlockConfig | None, key: str, *, state: ConfigState) -> str:
+    if cfg is not None:
+        return _source_label(cfg, key)
+    return "missing-project" if state == "missing" else "unreadable"
 
 
 def _current_label(cfg: InterlockConfig | None, key: str) -> str:
