@@ -68,6 +68,17 @@ def test_readiness_status_matches_blocked_and_gap_count(
         assert status == "ready"
 
 
+@given(gap_count=st.integers(min_value=0, max_value=100))
+def test_readiness_blocked_state_takes_precedence_over_gaps(gap_count: int) -> None:
+    blocked_status, blocked_summary = _readiness(True, gap_count)
+    ready_status, ready_summary = _readiness(False, gap_count)
+
+    assert blocked_status == "blocked"
+    assert blocked_summary
+    assert ready_status.startswith("ready")
+    assert ready_summary
+
+
 @given(rows())
 def test_gap_lines_match_warn_rows_in_order(values: list[CheckRow]) -> None:
     assert _gap_lines(values) == [

@@ -961,6 +961,46 @@ def test_iter_source_files_skips_init_and_pycache_sources(names: list[str]) -> N
     assert sources == sorted(expected)
 
 
+@given(module=st.text(max_size=80))
+def test_module_relpath_rejects_invalid_or_missing_modules(module: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        src = root / "pkg"
+        src.mkdir()
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=src,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        result = _module_relpath(cfg, module)
+
+    assert result is None
+
+
+@given(parts=st.lists(_IDENT, min_size=1, max_size=4, unique=True))
+def test_module_relpath_resolves_valid_project_modules(parts: list[str]) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        src = root / "src"
+        module_path = root.joinpath(*parts).with_suffix(".py")
+        module_path.parent.mkdir(parents=True, exist_ok=True)
+        module_path.write_text("x = 1\n", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=src,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        result = _module_relpath(cfg, ".".join(parts))
+
+    assert result == "/".join((*parts[:-1], f"{parts[-1]}.py"))
+
+
 @given(names=st.lists(_IDENT, min_size=1, max_size=8, unique_by=str.lower))
 def test_property_candidates_ranks_generated_parse_functions(names: list[str]) -> None:
     with TemporaryDirectory() as raw_root:

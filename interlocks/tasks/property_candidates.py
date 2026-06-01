@@ -777,10 +777,17 @@ def _dotted_parts(node: ast.AST) -> tuple[str, ...]:
 
 
 def _module_relpath(cfg: InterlockConfig, module: str) -> str | None:
-    suffix = Path(*module.split(".")).with_suffix(".py")
+    parts = module.split(".")
+    if not all(part.isidentifier() for part in parts):
+        return None
+    suffix = Path(*parts).with_suffix(".py")
     candidates = (cfg.project_root / suffix, cfg.src_dir / suffix)
     for path in candidates:
-        if path.is_file():
+        try:
+            is_file = path.is_file()
+        except OSError:
+            continue
+        if is_file:
             return cfg.relpath(path)
     return None
 

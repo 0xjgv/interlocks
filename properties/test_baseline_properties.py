@@ -178,6 +178,19 @@ def test_pick_stricter_chooses_present_stricter_value(
 
 
 @given(
+    a=st.one_of(st.none(), _FINITE),
+    b=st.one_of(st.none(), _FINITE),
+    higher_better=st.booleans(),
+)
+def test_pick_stricter_is_order_independent(
+    a: float | None,
+    b: float | None,
+    higher_better: bool,
+) -> None:
+    assert _pick_stricter(a, b, higher_better) == _pick_stricter(b, a, higher_better)
+
+
+@given(
     field=st.sampled_from([field for field, _higher_better in METRICS]),
     measured=st.one_of(st.none(), _FINITE),
     current_floor=st.one_of(st.none(), _FINITE),
