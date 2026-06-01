@@ -528,6 +528,52 @@ def test_format_attribution_failure_sections_follow_result_contents(
     assert ("informational symbol-less behaviors:" in message) is include_informational
 
 
+@given(
+    ids=st.lists(_ID, max_size=8, unique=True),
+    evidence_failure=st.one_of(
+        st.none(),
+        st.text(
+            alphabet=st.characters(blacklist_characters="\r\n"),
+            min_size=1,
+            max_size=30,
+        ),
+    ),
+    include_aggregate=st.booleans(),
+)
+def test_format_attribution_failure_line_count_matches_sections(
+    ids: list[str],
+    evidence_failure: str | None,
+    include_aggregate: bool,
+) -> None:
+    failures = tuple(
+        AttributionClaimFailure(_scenario(behavior_id, line=index + 1), f"pkg:{behavior_id}")
+        for index, behavior_id in enumerate(ids)
+    )
+    symbol_behaviors = tuple(_behavior(behavior_id, f"pkg:{behavior_id}") for behavior_id in ids)
+    informational = tuple(_behavior(behavior_id, None) for behavior_id in ids)
+    result = AttributionResult(
+        mis_attributed=failures,
+        unresolved_behaviors=symbol_behaviors,
+        instrumentation_gaps=failures,
+        informational_symbol_less=informational,
+        aggregate_reached_symbols=tuple(f"pkg:{behavior_id}" for behavior_id in ids)
+        if include_aggregate
+        else (),
+        evidence_failure=evidence_failure,
+    )
+
+    line_count = len(format_attribution_failure(result).split("\n"))
+    expected = 1
+    expected += 1 if evidence_failure else 0
+    expected += len(failures) + 1 if failures else 0
+    expected += len(symbol_behaviors) + 1 if symbol_behaviors else 0
+    expected += len(failures) + 1 if failures else 0
+    expected += 1 if include_aggregate and ids else 0
+    expected += len(informational) + 1 if informational else 0
+
+    assert line_count == expected
+
+
 @given(ids=st.lists(_ID, max_size=8, unique=True))
 def test_attribution_formatter_helpers_emit_one_detail_per_item(ids: list[str]) -> None:
     failures = tuple(

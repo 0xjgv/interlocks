@@ -8,6 +8,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from interlocks.acceptance_trace import (
+    AcceptanceTraceEvidence,
+    TraceSymbolEvidence,
     _match_public_symbol,
     _runner_module,
     _tracer,
@@ -84,6 +86,37 @@ def test_tracer_records_matching_call_frame_and_returns_itself(module: str, func
 @given(st.none())
 def test_missing_trace_evidence_message_is_stable(evidence: None) -> None:
     assert "advisory runtime detail" in format_trace_evidence(evidence)
+
+
+@given(
+    symbols=st.lists(_SYMBOLS, max_size=12, unique=True),
+    reached_flags=st.lists(st.booleans(), max_size=12),
+    failure=st.one_of(st.none(), st.text(min_size=1, max_size=40)),
+)
+def test_format_trace_evidence_sections_follow_loaded_evidence(
+    symbols: list[str],
+    reached_flags: list[bool],
+    failure: str | None,
+) -> None:
+    pairs = tuple(
+        TraceSymbolEvidence(symbol, reached_flags[index % len(reached_flags)])
+        for index, symbol in enumerate(symbols)
+    ) if reached_flags else tuple(TraceSymbolEvidence(symbol, False) for symbol in symbols)
+    evidence = AcceptanceTraceEvidence(pairs, failure)
+
+    message = format_trace_evidence(evidence)
+    lines = message.split("\n")
+
+    assert lines[0] == "acceptance trace evidence (advisory; not blocking)"
+    assert ("trace instrumentation failed:" in message) is (failure is not None)
+    assert any(line.startswith("reached public symbols:") for line in lines) is any(
+        item.reached for item in pairs
+    )
+    assert any(line.startswith("unreached public symbols:") for line in lines) is any(
+        not item.reached for item in pairs
+    )
+    for symbol in symbols:
+        assert symbol in message
 
 
 @given(cmd=st.lists(st.text(max_size=30), max_size=8))

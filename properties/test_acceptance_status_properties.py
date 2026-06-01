@@ -141,3 +141,33 @@ def test_classify_acceptance_with_details_reports_required_and_optional_states(
     else:
         assert classified.status is AcceptanceStatus.MISSING_SCENARIOS
     assert classified.features_dir == features_dir
+
+
+@given(
+    state=st.sampled_from(["none", "missing-dir", "empty-dir", "no-scenarios"]),
+    require_acceptance=st.booleans(),
+)
+def test_classify_acceptance_required_failure_flag_matches_status(
+    state: str,
+    require_acceptance: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        features_dir = None if state == "none" else root / "tests" / "features"
+        if state in {"empty-dir", "no-scenarios"}:
+            assert features_dir is not None
+            features_dir.mkdir(parents=True)
+        if state == "no-scenarios":
+            assert features_dir is not None
+            (features_dir / "generated.feature").write_text(
+                "Feature: generated\n",
+                encoding="utf-8",
+            )
+
+        classified = classify_acceptance_with_details(
+            _cfg(root, features_dir, require_acceptance=require_acceptance)
+        )
+
+    assert classified.is_required_failure is (
+        require_acceptance and classified.status is not AcceptanceStatus.OPTIONAL_MISSING
+    )
