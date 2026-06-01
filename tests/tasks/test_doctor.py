@@ -78,6 +78,8 @@ def test_doctor_tmpdir_flags_missing_pyproject(tmp_path: Path) -> None:
     # Minimal-default doctor emits a single status line + bulletized blockers.
     assert result.stdout.startswith("doctor: blocked")
     assert "missing pyproject.toml" in result.stdout
+    assert "missing test path" not in result.stdout
+    assert "interlocks setup" not in result.stdout
 
 
 @_MUTMUT_INCOMPATIBLE
@@ -116,12 +118,16 @@ def test_doctor_json_is_parseable(tmp_path: Path) -> None:
     assert payload["command"] == "doctor"
     assert payload["status"] == "blocked"
     assert isinstance(payload["blockers"], list)
-    assert isinstance(payload["warnings"], list)
+    assert payload["warnings"] == []
     assert payload["next_steps"] == [
-        {"message": "Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."}
+        {"message": "Run `interlocks init` to scaffold a project, then rerun `interlocks doctor`."}
+    ]
+    assert payload["detected"]["src_dir"] is None
+    assert payload["detected"]["test_dir"] is None
+    assert payload["setup_checklist"] == [
+        {"name": "pyproject", "target": "pyproject.toml", "detail": "missing", "state": "fail"}
     ]
     assert {"project_root", "preset", "src_dir", "test_dir"} <= payload["detected"].keys()
-    assert isinstance(payload["setup_checklist"], list)
     for entry in payload["setup_checklist"]:
         assert {"name", "target", "detail", "state"} == entry.keys()
 

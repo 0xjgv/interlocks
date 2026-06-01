@@ -86,7 +86,8 @@ def cmd_doctor() -> None:
         print(f"doctor: {status}")
         for line in (*report.failures, *report.blockers):
             print(f"  - {line}")
-        _print_capped(_gap_lines(report.rows), limit=3)
+        if not report.is_blocked:
+            _print_capped(_gap_lines(report.rows), limit=3)
 
     if report.failures:
         sys.exit(1)
@@ -103,7 +104,7 @@ def _build_doctor_report() -> _DoctorReport:
     blockers: list[str] = []
     failures: list[str] = []
 
-    cfg = _safe_load_config(pyproject_path, failures)
+    cfg = _safe_load_config(pyproject_path, failures) if pyproject_path.is_file() else None
     _collect_blockers(cfg, pyproject_path, blockers)
     _collect_tool_blockers(cfg, blockers)
 
@@ -136,7 +137,14 @@ def _render_doctor_json(report: _DoctorReport) -> None:
             {"name": r.label, "target": r.target, "detail": r.detail, "state": r.state}
             for r in report.rows
         ],
-        "next_steps": [{"message": step} for step in _next_steps(report.rows, report.is_blocked)],
+        "next_steps": [
+            {"message": step}
+            for step in _next_steps(
+                report.rows,
+                report.is_blocked,
+                blockers=(*report.failures, *report.blockers),
+            )
+        ],
     })
 
 
@@ -154,7 +162,7 @@ def _render_doctor_verbose(report: _DoctorReport) -> None:
     ui.message_list(_warning_lines(report), empty="none")
     ui.section("Next Steps")
     ui.message_list(
-        _next_steps(report.rows, report.is_blocked),
+        _next_steps(report.rows, report.is_blocked, blockers=(*report.failures, *report.blockers)),
         empty="Run `interlocks check` locally.",
     )
 
@@ -220,6 +228,7 @@ def _collect_blockers(
 ) -> None:
     if not pyproject_path.is_file():
         blockers.append("missing pyproject.toml; run `interlocks init` to scaffold")
+        return
     if cfg is None:
         return
     if not cfg.src_dir.exists():
@@ -249,7 +258,7 @@ def _collect_setup_rows(
     project_root: Path, cfg: InterlockConfig | None, pyproject_path: Path
 ) -> list[CheckRow]:
     rows: list[CheckRow] = [_pyproject_row(pyproject_path)]
-    if cfg is None:
+    if cfg is None or not pyproject_path.is_file():
         return rows
     rows.extend([
         _preset_row(cfg),
@@ -415,9 +424,14 @@ _NEXT_STEP_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 
-def _next_steps(rows: list[CheckRow], is_blocked: bool) -> list[str]:
+def _next_steps(
+    rows: list[CheckRow],
+    is_blocked: bool,
+    *,
+    blockers: tuple[str, ...] = (),
+) -> list[str]:
     if is_blocked:
-        return ["Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."]
+        return _blocked_next_steps(rows, blockers)
     by_label = {r.label: r for r in rows}
     steps: list[str] = []
     for labels, step in _NEXT_STEP_RULES:
@@ -430,10 +444,39 @@ def _next_steps(rows: list[CheckRow], is_blocked: bool) -> list[str]:
     return steps or ["Run `interlocks check` locally."]
 
 
+def _blocked_next_steps(rows: list[CheckRow], blockers: tuple[str, ...]) -> list[str]:
+    by_label = {row.label: row for row in rows}
+    steps: list[str] = []
+    if _is_fail(by_label, "pyproject"):
+        steps.append(
+            "Run `interlocks init` to scaffold a project, then rerun `interlocks doctor`."
+        )
+    if _is_fail(by_label, "src dir") or _is_fail(by_label, "test dir"):
+        steps.append(
+            "Create the missing source/test paths or update `[tool.interlocks]`, "
+            "then rerun `interlocks doctor`."
+        )
+    if _is_fail(by_label, "venv"):
+        steps.append(
+            "Create a project environment (`uv sync`, or "
+            "`python -m venv .venv && pip install -e .`), then rerun `interlocks doctor`."
+        )
+    if any("unsupported preset" in blocker for blocker in blockers):
+        steps.append("Choose a supported preset, then rerun `interlocks doctor`.")
+    if any("cannot read" in blocker for blocker in blockers):
+        steps.append("Fix `pyproject.toml`, then rerun `interlocks doctor`.")
+    return steps or ["Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."]
+
+
 def _is_warn(by_label: dict[str, CheckRow], label: str) -> bool:
     """True when ``label`` row is an actionable gap (warn, excluding inert placeholders)."""
     row = by_label.get(label)
     return row is not None and row.state == "warn" and row.detail != _INERT_DETAIL
+
+
+def _is_fail(by_label: dict[str, CheckRow], label: str) -> bool:
+    row = by_label.get(label)
+    return row is not None and row.state == "fail"
 
 
 def _properties_next_step(row: CheckRow) -> str:

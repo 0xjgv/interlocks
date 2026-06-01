@@ -15,6 +15,7 @@ from interlocks.tasks.doctor import (
     CheckRow,
     _acceptance_row,
     _actionable_gap_rows,
+    _blocked_next_steps,
     _cfg_rows,
     _crash_report_cache_row,
     _gap_lines,
@@ -195,8 +196,34 @@ def test_crash_report_cache_row_reports_cached_json_count(count: int) -> None:
 
 
 @given(rows())
-def test_next_steps_for_blocked_report_is_single_blocker_step(values: list[CheckRow]) -> None:
-    assert _next_steps(values, is_blocked=True) == [
+def test_next_steps_for_blocked_report_is_non_empty_and_unique(
+    values: list[CheckRow],
+) -> None:
+    steps = _next_steps(values, is_blocked=True)
+
+    assert steps
+    assert len(steps) == len(set(steps))
+
+
+def test_blocked_next_steps_name_missing_pyproject_directly() -> None:
+    assert _blocked_next_steps(
+        [CheckRow("pyproject", "pyproject.toml", "missing", "fail")],
+        (),
+    ) == ["Run `interlocks init` to scaffold a project, then rerun `interlocks doctor`."]
+
+
+def test_blocked_next_steps_name_project_env_directly() -> None:
+    assert _blocked_next_steps(
+        [CheckRow("venv", ".venv/bin/python", "missing — typecheck/test blocked", "fail")],
+        (),
+    ) == [
+        "Create a project environment (`uv sync`, or "
+        "`python -m venv .venv && pip install -e .`), then rerun `interlocks doctor`."
+    ]
+
+
+def test_blocked_next_steps_falls_back_when_blocker_is_unknown() -> None:
+    assert _blocked_next_steps([], ()) == [
         "Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."
     ]
 

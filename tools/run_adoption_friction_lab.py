@@ -180,7 +180,7 @@ def scenario_bare_repo(context: LabContext) -> ScenarioRun:
         create_bare_repo(context.target_root / "bare-repo", root=context.target_root),
     )
     doctor = run.command("doctor", "--verbose")
-    run.require_fragment(doctor, "pyproject", "Fix blockers")
+    run.require_fragment(doctor, "pyproject", "Create the missing source/test paths")
     setup = run.command("setup", "--check", "--verbose", expect_success=False)
     run.require_fragment(setup, "setup")
     changed = run.command("check", "--changed=HEAD")
