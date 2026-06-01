@@ -181,6 +181,15 @@ def test_hunk_from_header_returns_post_image_interval(start: int, count: int) ->
     assert _hunk_from_header(line, _HUNK_HEADER, start_group=1, count_group=2) == expected
 
 
+@given(start=_LINES)
+def test_hunk_from_header_defaults_missing_count_to_single_line(start: int) -> None:
+    line = f"@@ -1 +{start} @@"
+
+    assert _hunk_from_header(line, _HUNK_HEADER, start_group=1, count_group=2) == Hunk(
+        start, start
+    )
+
+
 @given(path=_PATHS, start=_LINES, count=_COUNTS)
 def test_parse_post_image_hunks_returns_normalized_file_hunks(
     path: str,

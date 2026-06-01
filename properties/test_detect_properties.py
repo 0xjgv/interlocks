@@ -296,6 +296,15 @@ def test_iter_declared_deps_ignores_malformed_dependency_containers(
     assert list(_iter_declared_deps(pyproject)) == expected
 
 
+@given(items=st.lists(st.one_of(_DEP, _MALFORMED_CONTAINER), max_size=12))
+def test_iter_declared_deps_yields_only_string_items(items: list[object]) -> None:
+    pyproject = {"project": {"dependencies": items}}
+
+    assert list(_iter_declared_deps(pyproject)) == [
+        item for item in items if isinstance(item, str)
+    ]
+
+
 @given(deps=st.lists(_DEP, max_size=12))
 def test_deps_mention_matches_declared_dependency_words(deps: list[str]) -> None:
     pyproject = {"project": {"dependencies": deps}}

@@ -228,6 +228,22 @@ def test_record_changed_line_updates_inside_outside_and_risk_counters(
     assert _line_inside(path, line, hunks)
 
 
+@given(path=_PATHS, line=st.integers(min_value=1, max_value=100), deleted=st.booleans())
+def test_record_changed_line_counts_outside_when_line_is_not_in_author_hunks(
+    path: str,
+    line: int,
+    deleted: bool,
+) -> None:
+    state = _MeasureState(files=[path], current_path=path, old_line=line)
+    hunks = {path: FileHunks(path, (Hunk(line + 1, line + 1),))}
+
+    _record_changed_line(state, "value = 1", hunks, deleted=deleted)
+
+    assert state.total == 1
+    assert state.inside == 0
+    assert state.outside == 1
+
+
 @given(path=_PATHS)
 def test_measure_line_dispatches_post_image_file_headers(path: str) -> None:
     state = _MeasureState(files=[])

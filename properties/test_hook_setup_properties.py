@@ -90,6 +90,11 @@ def test_keep_existing_hook_drops_only_duplicate_or_post_edit_commands(
         assert keep is True
 
 
+@given(new_command=_TEXT)
+def test_keep_existing_hook_drops_exact_duplicate_command(new_command: str) -> None:
+    assert _keep_existing_hook({"type": "command", "command": new_command}, new_command) is False
+
+
 @given(settings=_SETTINGS, command=_COMMAND)
 def test_ensure_stop_hook_normalizes_to_one_stop_command(
     settings: dict[str, object], command: str
