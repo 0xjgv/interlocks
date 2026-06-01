@@ -16,6 +16,7 @@ import pytest
 
 from interlocks.cli import (
     TASK_GROUPS,
+    TASK_HANDLERS,
     TASKS,
     _available_preset_payload,
     _current_preset_payload,
@@ -108,6 +109,7 @@ def _setup_project_with_interlocks(
 def test_tasks_dict_built_from_groups() -> None:
     expected = {name for _, group in TASK_GROUPS for name in group}
     assert set(TASKS.keys()) == expected
+    assert set(TASK_HANDLERS) == set(COMMAND_DOCS_BY_NAME)
     # Each entry is (callable, description).
     for fn, desc in TASKS.values():
         assert callable(fn)

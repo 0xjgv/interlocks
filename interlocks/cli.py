@@ -11,6 +11,7 @@ from interlocks import ui
 from interlocks.command_docs import (
     ALIASES,
     COMMAND_DOCS_BY_NAME,
+    COMMAND_GROUPS,
     alias_suffix,
     command_doc_payload,
     command_index_payload,
@@ -503,161 +504,73 @@ def _print_verbose_detected_block(cfg: InterlockConfig) -> None:
     print("  On internal crashes, interactive terminals prompt before opening a GitHub issue.")
 
 
-TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = [
-    (
-        "Tasks",
-        {
-            "fix": (cmd_fix, "Fix lint errors with ruff"),
-            "fix-rule": (
-                cmd_fix_rule,
-                "Rule-scoped fix: plan or apply a single ruff rule (e.g. --rule=I001)",
-            ),
-            "fix-plan": (
-                cmd_fix_plan,
-                "Non-mutating fix plan over all fixable ruff rules; writes .lintfix/plan.json",
-            ),
-            "fix-replay": (
-                cmd_fix_replay,
-                "Replay fix-plan across recent commits; writes .lintfix/replay.json",
-            ),
-            "fix-optimize": (
-                cmd_fix_optimize,
-                "Pick the highest-value lint/format subset under budget; writes the full "
-                ".lintfix/ set (--annotate / --metrics for CI; --apply to mutate)",
-            ),
-            "fix-annotate": (
-                cmd_fix_annotate,
-                "Emit GitHub Actions annotations from .lintfix/plan.json "
-                "(advisory; never fails CI)",
-            ),
-            "fix-metrics": (
-                cmd_fix_metrics,
-                "Aggregate .lintfix/{plan,optimize,replay}.json into .lintfix/metrics.json",
-            ),
-            "format": (cmd_format, "Format code with ruff"),
-            "format-check": (cmd_format_check, "Check formatting with ruff (read-only)"),
-            "lint": (cmd_lint, "Lint code with ruff (read-only)"),
-            "typecheck": (cmd_typecheck, "Type-check with basedpyright"),
-            "test": (cmd_test, "Run tests (auto-detects pytest vs unittest)"),
-            "audit": (cmd_audit, "Audit dependencies for known vulnerabilities"),
-            "deps": (cmd_deps, "Dep hygiene: unused/missing/transitive (deptry)"),
-            "deps-freshness": (
-                cmd_deps_freshness,
-                "Check outdated dependencies via explicit package-index lookup",
-            ),
-            "arch": (cmd_arch, "Architectural contracts (import-linter; default: src ↛ tests)"),
-            "acceptance": (
-                cmd_acceptance,
-                "Gherkin acceptance tests (pytest-bdd default; behave auto-detected)",
-            ),
-            "behavior-attribution": (
-                cmd_behavior_attribution,
-                "Verify BDD scenarios reach symbols declared by claimed behaviors",
-            ),
-            "init-acceptance": (
-                cmd_init_acceptance,
-                "Scaffold tests/features + tests/step_defs (pytest-bdd layout)",
-            ),
-            "properties": (
-                cmd_properties,
-                "Property tests via pytest + Hypothesis profiles",
-            ),
-            "init-properties": (
-                cmd_init_properties,
-                "Scaffold the configured property-test dir",
-            ),
-            "coverage": (
-                cmd_coverage,
-                "Tests with coverage threshold (--min=N, optional properties)",
-            ),
-            "complexity": (cmd_complexity, "Complexity gate via lizard"),
-            "crap": (cmd_crap, "CRAP complexity x coverage gate"),
-            "mutation": (
-                cmd_mutation,
-                "Mutation testing via mutmut (advisory; see `interlocks nightly`)",
-            ),
-        },
-    ),
-    (
-        "Stages",
-        {
-            "check": (
-                cmd_check,
-                "Local edit loop: fix/format, typecheck/tests, optional acceptance/properties",
-            ),
-            "pre-commit": (cmd_pre_commit, "Staged checks + tests"),
-            "ci": (
-                cmd_ci,
-                "Full verification: lint, audit, typecheck, tests, coverage, properties, CRAP",
-            ),
-            "nightly": (
-                cmd_nightly,
-                "Long-running gates: coverage + properties + audit + mutation (blocking)",
-            ),
-            "post-edit": (
-                cmd_post_edit,
-                "Budgeted lint/format mutation if source files changed (Claude Code hook)",
-            ),
-            "setup-hooks": (cmd_hooks, "Install git pre-commit and Claude Stop hooks"),
-            "clean": (cmd_clean, "Remove cache, build, coverage, and generated artifacts"),
-        },
-    ),
-    (
-        "Reports",
-        {
-            "trust": (
-                cmd_trust,
-                "Actionable trust report: coverage, CRAP, suspicious tests, next actions",
-            ),
-            "evaluate": (
-                cmd_evaluate,
-                "Score automatable quality checklist items",
-            ),
-            "property-candidates": (
-                cmd_property_candidates,
-                "Rank functions for property-test hardening",
-            ),
-            "explain": (cmd_explain, "Explain what each command does, in prose"),
-        },
-    ),
-    (
-        "Utility",
-        {
-            "config": (
-                cmd_config,
-                "Show all [tool.interlocks] keys with defaults, current values, and sources",
-            ),
-            "doctor": (cmd_doctor, "Preflight diagnostic: paths, tools, venv"),
-            "setup": (cmd_setup, "Install/check hooks, agent docs, and Claude skill"),
-            "init": (cmd_init, "Scaffold a greenfield pyproject.toml + tests/ in CWD"),
-            "agents": (
-                cmd_agents,
-                "Register interlocks block in AGENTS.md / CLAUDE.md (idempotent)",
-            ),
-            "setup-skill": (
-                cmd_setup_skill,
-                "Install bundled Claude Code SKILL.md (idempotent)",
-            ),
-            "presets": (cmd_presets, "Show preset options or set one with `presets set <preset>`"),
-            "baseline": (
-                cmd_baseline,
-                "Read/init/advance the progressive-preset quality floor "
-                "(`show|init|advance|check`)",
-            ),
-            "version": (cmd_version, "print interlocks version"),
-            "warm": (
-                cmd_warm,
-                "Pre-fetch bundled tool wheels into ~/.cache/uv (for offline runs)",
-            ),
-        },
-    ),
-    (
-        "Other",
-        {
-            "help": (cmd_help_from_argv, "Show this help message"),
-        },
-    ),
-]
+TASK_HANDLERS: dict[str, Callable[..., None]] = {
+    "acceptance": cmd_acceptance,
+    "agents": cmd_agents,
+    "arch": cmd_arch,
+    "audit": cmd_audit,
+    "baseline": cmd_baseline,
+    "behavior-attribution": cmd_behavior_attribution,
+    "check": cmd_check,
+    "ci": cmd_ci,
+    "clean": cmd_clean,
+    "complexity": cmd_complexity,
+    "config": cmd_config,
+    "coverage": cmd_coverage,
+    "crap": cmd_crap,
+    "deps": cmd_deps,
+    "deps-freshness": cmd_deps_freshness,
+    "doctor": cmd_doctor,
+    "evaluate": cmd_evaluate,
+    "explain": cmd_explain,
+    "fix": cmd_fix,
+    "fix-annotate": cmd_fix_annotate,
+    "fix-metrics": cmd_fix_metrics,
+    "fix-optimize": cmd_fix_optimize,
+    "fix-plan": cmd_fix_plan,
+    "fix-replay": cmd_fix_replay,
+    "fix-rule": cmd_fix_rule,
+    "format": cmd_format,
+    "format-check": cmd_format_check,
+    "help": cmd_help_from_argv,
+    "init": cmd_init,
+    "init-acceptance": cmd_init_acceptance,
+    "init-properties": cmd_init_properties,
+    "lint": cmd_lint,
+    "mutation": cmd_mutation,
+    "nightly": cmd_nightly,
+    "post-edit": cmd_post_edit,
+    "pre-commit": cmd_pre_commit,
+    "presets": cmd_presets,
+    "properties": cmd_properties,
+    "property-candidates": cmd_property_candidates,
+    "setup": cmd_setup,
+    "setup-hooks": cmd_hooks,
+    "setup-skill": cmd_setup_skill,
+    "test": cmd_test,
+    "trust": cmd_trust,
+    "typecheck": cmd_typecheck,
+    "version": cmd_version,
+    "warm": cmd_warm,
+}
+
+
+def _task_groups_from_docs() -> list[tuple[str, dict[str, tuple[Callable[..., None], str]]]]:
+    return [
+        (
+            group_name,
+            {
+                name: (TASK_HANDLERS[name], COMMAND_DOCS_BY_NAME[name].summary)
+                for name in group_names
+            },
+        )
+        for group_name, group_names in COMMAND_GROUPS
+    ]
+
+
+TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = (
+    _task_groups_from_docs()
+)
 
 TASKS: dict[str, tuple[Callable[..., None], str]] = {
     name: entry for _, group in TASK_GROUPS for name, entry in group.items()

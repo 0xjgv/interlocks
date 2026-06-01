@@ -3,9 +3,8 @@
 Pure data, stdlib only. Imports nothing from :mod:`interlocks.cli` to stay out
 of the import cycle (``cli`` imports every ``cmd_*`` handler).
 
-``CommandDoc.summary`` is the canonical one-line description; a drift-guard test
-keeps the bare description string in ``cli.TASK_GROUPS`` equal to it — the same
-technique used for ``CONFIG_KEYS`` vs ``ConfigKeyDoc`` in :mod:`interlocks.config`.
+``CommandDoc.summary`` is the canonical one-line description; ``cli.TASK_GROUPS``
+is derived from this registry and the CLI's compact handler map.
 """
 
 from __future__ import annotations
