@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -16,6 +17,10 @@ def _statuses(values: tuple[bool, bool]) -> list[SetupArtifactStatus]:
         SetupArtifactStatus(artifact, installed)
         for artifact, installed in zip(_HOOK_ARTIFACTS, values, strict=True)
     ]
+
+
+def _status_list(length: int) -> list[SetupArtifactStatus]:
+    return [SetupArtifactStatus(artifact, installed=True) for artifact in SETUP_ARTIFACTS[:length]]
 
 
 @given(
@@ -47,3 +52,18 @@ def test_setup_hooks_payload_summarizes_detector_state(
             "action": "refreshed" if before[index] else "installed",
             "installed": after[index],
         }
+
+
+@given(
+    before_len=st.integers(min_value=0, max_value=len(SETUP_ARTIFACTS)),
+    after_len=st.integers(min_value=0, max_value=len(SETUP_ARTIFACTS)),
+)
+def test_setup_hooks_payload_rejects_mismatched_detector_results(
+    before_len: int,
+    after_len: int,
+) -> None:
+    if before_len == after_len:
+        return
+
+    with pytest.raises(ValueError):
+        _setup_hooks_payload(_status_list(before_len), _status_list(after_len))

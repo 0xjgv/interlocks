@@ -223,3 +223,29 @@ def test_tool_specific_note_only_explains_bundled_basedpyright(
     if note is not None:
         assert "[tool.basedpyright]" in note
         assert "pyrightconfig.json" in note
+
+
+@given(bundled_only=st.booleans(), source_is_bundled=st.booleans())
+def test_tool_specific_note_lists_each_basedpyright_policy_owner(
+    bundled_only: bool,
+    source_is_bundled: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        spec = TOOL_CONFIG_SPECS["basedpyright"]
+        source = ToolConfigSource(
+            tool="basedpyright",
+            source="bundled" if source_is_bundled else "project: pyproject.toml",
+            path=root / "pyproject.toml",
+            bundled_path=root / spec.filename,
+            flag=spec.flag,
+        )
+
+        note = _tool_specific_note(source, bundled_only=bundled_only)
+
+    if not (source_is_bundled or bundled_only):
+        assert note is None
+        return
+    assert note is not None
+    for option in (f"[tool.{spec.section}]", *spec.sidecars):
+        assert option in note

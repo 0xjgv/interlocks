@@ -54,6 +54,21 @@ def test_array_scan_quoted_single_quote_stays_open(ch: str) -> None:
     assert scan.quote == "'"
 
 
+@given(st.characters())
+def test_array_scan_double_quote_escape_consumes_next_character(ch: str) -> None:
+    scan = _ArrayValueScan(quote='"', escaped=True)
+
+    scan._consume_quoted(ch)
+
+    assert scan.quote == '"'
+    assert scan.escaped is False
+
+
+@given(st.text(alphabet="# []abc", min_size=1, max_size=40))
+def test_array_scan_treats_hash_comment_as_rest_of_line(comment: str) -> None:
+    assert _value_is_multiline(f"[ # {comment} ]") is True
+
+
 @given(st.characters(blacklist_characters="[]#'\""))
 def test_array_scan_unquoted_plain_character_does_not_close(ch: str) -> None:
     scan = _ArrayValueScan()

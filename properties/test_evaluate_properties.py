@@ -100,6 +100,22 @@ def test_verdict_matches_score_ratio(total: int, max_total: int) -> None:
         assert verdict == "NEEDS WORK"
 
 
+@given(
+    low=st.integers(min_value=0, max_value=10_000),
+    high=st.integers(min_value=0, max_value=10_000),
+    max_total=st.integers(min_value=1, max_value=10_000),
+)
+def test_verdict_is_monotonic_as_score_increases(
+    low: int,
+    high: int,
+    max_total: int,
+) -> None:
+    low, high = sorted((low, high))
+    rank = {"NEEDS WORK": 0, "GAPS": 1, "HEALTHY": 2}
+
+    assert rank[_verdict(low, max_total)] <= rank[_verdict(high, max_total)]
+
+
 @given(category=_CATEGORY, score=st.integers(min_value=0, max_value=3), detail=_DETAIL)
 def test_item_status_tracks_score(category: str, score: int, detail: str) -> None:
     item = _item(category, score, detail)
@@ -623,19 +639,12 @@ def test_pr_speed_item_scores_budget_and_ci_evidence_state(
         assert item.next_action is None
 
 
-@given(
-    refresh_action=st.one_of(st.none(), st.text(min_size=1, max_size=80)),
-    passed=st.booleans(),
-    skipped=st.one_of(
-        st.just(()),
-        st.tuples(st.sampled_from(["coverage", "mutation", "properties"])),
-    ),
-)
-def test_pr_speed_evidence_action_prioritizes_refresh_failure_then_skips(
+def _pr_speed_evidence_action_for(
     refresh_action: str | None,
+    *,
     passed: bool,
     skipped: tuple[str, ...],
-) -> None:
+) -> EvaluationItem | None:
     cfg = InterlockConfig(
         project_root=Path(),
         src_dir=Path("src"),
@@ -649,9 +658,25 @@ def test_pr_speed_evidence_action_prioritizes_refresh_failure_then_skips(
         lambda _cfg, _evidence: refresh_action
     )
     try:
-        item = _pr_speed_evidence_action(cfg, evidence, "detail")
+        return _pr_speed_evidence_action(cfg, evidence, "detail")
     finally:
         evaluate_mod._ci_evidence_refresh_action = original_refresh
+
+
+@given(
+    refresh_action=st.one_of(st.none(), st.text(min_size=1, max_size=80)),
+    passed=st.booleans(),
+    skipped=st.one_of(
+        st.just(()),
+        st.tuples(st.sampled_from(["coverage", "mutation", "properties"])),
+    ),
+)
+def test_pr_speed_evidence_action_prioritizes_refresh_failure_then_skips(
+    refresh_action: str | None,
+    passed: bool,
+    skipped: tuple[str, ...],
+) -> None:
+    item = _pr_speed_evidence_action_for(refresh_action, passed=passed, skipped=skipped)
 
     if refresh_action is not None:
         assert item is not None
@@ -666,6 +691,32 @@ def test_pr_speed_evidence_action_prioritizes_refresh_failure_then_skips(
         )
     else:
         assert item is None
+
+
+@given(
+    refresh_action=st.one_of(st.none(), st.text(min_size=1, max_size=80)),
+    passed=st.booleans(),
+    skipped=st.one_of(
+        st.just(()),
+        st.tuples(st.sampled_from(["coverage", "mutation", "properties"])),
+    ),
+)
+def test_pr_speed_evidence_action_returns_ci_owned_warning(
+    refresh_action: str | None,
+    passed: bool,
+    skipped: tuple[str, ...],
+) -> None:
+    item = _pr_speed_evidence_action_for(refresh_action, passed=passed, skipped=skipped)
+
+    if refresh_action is None and passed and not skipped:
+        assert item is None
+        return
+    assert item is not None
+    assert item.category == "pr-speed"
+    assert item.score == 1
+    assert item.detail == "detail"
+    assert item.closure is not None
+    assert item.closure.command == "interlocks ci"
 
 
 @given(

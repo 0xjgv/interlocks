@@ -580,3 +580,29 @@ def test_read_mutation_summary_counts_cached_mutmut_results(rows: list[tuple[str
     assert summary.score == pytest.approx(killed / total * 100)
     assert commands
     assert "interlocks-mutmut==1.2.3" in commands[0]
+
+
+@given(require_interlocks_evidence=st.booleans())
+def test_read_mutation_summary_without_cache_dirs_does_not_touch_tools(
+    require_interlocks_evidence: bool,
+) -> None:
+    def fail_unexpected_call(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("read_mutation_summary should return before tool access")
+
+    old_capture = metrics_mod.capture
+    old_load_config = metrics_mod.load_config
+    old_cwd = Path.cwd()
+    with TemporaryDirectory() as raw_root:
+        os.chdir(raw_root)
+        metrics_mod.capture = fail_unexpected_call  # type: ignore[assignment]
+        metrics_mod.load_config = fail_unexpected_call  # type: ignore[assignment]
+        try:
+            summary = read_mutation_summary(
+                require_interlocks_evidence=require_interlocks_evidence
+            )
+        finally:
+            metrics_mod.capture = old_capture
+            metrics_mod.load_config = old_load_config
+            os.chdir(old_cwd)
+
+    assert summary is None

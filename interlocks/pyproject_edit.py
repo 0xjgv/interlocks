@@ -55,6 +55,8 @@ class _ArrayValueScan:
         return self._consume_unquoted(ch)
 
     def _consume_quoted(self, ch: str) -> None:
+        if self.quote == "#":
+            return
         if self.escaped:
             self.escaped = False
         elif self.quote == '"' and ch == "\\":

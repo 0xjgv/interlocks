@@ -139,6 +139,21 @@ def test_attribution_status_depends_on_passed_completeness_and_warnings(
         assert status == "ok"
 
 
+@given(complete=st.booleans(), has_warnings=st.booleans())
+def test_attribution_status_failure_overrides_result_shape(
+    complete: bool,
+    has_warnings: bool,
+) -> None:
+    result = AttributionResult(
+        unresolved_behaviors=() if complete else (_behavior("task-x", "pkg:x"),),
+        instrumentation_gaps=(
+            (AttributionClaimFailure(_scenario("task-x"), "pkg:x"),) if has_warnings else ()
+        ),
+    )
+
+    assert behavior_attribution_task._attribution_status(result, passed=False) == "failed"
+
+
 @given(status=st.text(max_size=30), floor_failure=st.booleans())
 def test_attribution_next_actions_are_empty_only_for_clean_ok(
     status: str, floor_failure: bool
