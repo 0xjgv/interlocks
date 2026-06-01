@@ -210,11 +210,11 @@ def _resolve_options(
     if arg_flag_value("--renovate", "1") is not None:
         cli_budget = "renovation"
     return _Options(
-        base=base or arg_value("--base=", "origin/main"),
-        budget_name=budget or cli_budget,
+        base=base if base is not None else arg_value("--base=", "origin/main"),
+        budget_name=budget if budget is not None else cli_budget,
         apply=apply if apply is not None else (arg_flag_value("--apply", "1") is not None),
         stats_path=stats_path if stats_path is not None else _resolve_stats_path(),
-        verify_cmd=verify_cmd or _verify_cmd_argv(),
+        verify_cmd=verify_cmd if verify_cmd is not None else verify_cmd_from_argv("fix-optimize"),
         annotate=arg_flag_value("--annotate", "1") is not None,
         metrics=arg_flag_value("--metrics", "1") is not None,
     )
@@ -585,7 +585,3 @@ def _write_optimize_json(project_root: Path, payload: dict[str, Any]) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return target
-
-
-def _verify_cmd_argv() -> tuple[str, ...]:
-    return verify_cmd_from_argv("fix-optimize")

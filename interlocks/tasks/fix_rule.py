@@ -48,11 +48,11 @@ def _resolve_args(
 ) -> _FixRuleArgs:
     """Fold each ``None`` kwarg back to its argv-derived default."""
     return _FixRuleArgs(
-        rule=rule or _required_rule(),
+        rule=rule if rule is not None else _required_rule(),
         apply=apply if apply is not None else (arg_flag_value("--apply", "1") is not None),
-        base=base or arg_value("--base=", "origin/main"),
-        budget_name=budget or arg_value("--budget=", "unblock"),
-        verify_cmd=verify_cmd or _verify_cmd_argv(),
+        base=base if base is not None else arg_value("--base=", "origin/main"),
+        budget_name=budget if budget is not None else arg_value("--budget=", "unblock"),
+        verify_cmd=verify_cmd if verify_cmd is not None else verify_cmd_from_argv("fix-rule"),
     )
 
 
@@ -298,7 +298,3 @@ def _required_rule() -> str:
         print("interlocks fix-rule: missing required --rule=<value>", file=sys.stderr)
         sys.exit(2)
     return value
-
-
-def _verify_cmd_argv() -> tuple[str, ...]:
-    return verify_cmd_from_argv("fix-rule")

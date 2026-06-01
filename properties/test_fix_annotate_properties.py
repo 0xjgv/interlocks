@@ -101,6 +101,27 @@ def test_format_message_accepts_partial_candidate_shapes(candidate: dict[str, ob
     assert "files" in message
 
 
+@given(
+    files=st.lists(st.text(max_size=20), max_size=5),
+    files_touched=st.integers(min_value=0, max_value=100),
+)
+def test_format_message_preserves_explicit_file_count(
+    files: list[str],
+    files_touched: int,
+) -> None:
+    message = _format_message({
+        "rule": "I001",
+        "classification": "auto",
+        "files": files,
+        "files_touched": files_touched,
+        "changed_lines_total": 0,
+        "changed_lines_outside_diff": 0,
+        "risk": 0,
+    })
+
+    assert f": {files_touched} files," in message
+
+
 @given(payload=st.dictionaries(st.text(max_size=20), _JSONISH, max_size=10))
 def test_iter_candidates_ignores_malformed_plan_payloads(
     payload: dict[str, object],

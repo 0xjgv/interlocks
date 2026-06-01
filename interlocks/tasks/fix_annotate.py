@@ -268,9 +268,9 @@ def _format_message(c: dict[str, Any]) -> str:
     rule = str(c.get("rule") or "unknown")
     classification = str(c.get("classification") or "unknown")
     raw_files = c.get("files") or []
-    files_count = c.get("files_touched") or (
-        len(raw_files) if isinstance(raw_files, list | tuple) else 0
-    )
+    files_count = c.get("files_touched")
+    if files_count is None:
+        files_count = len(raw_files) if isinstance(raw_files, list | tuple) else 0
     lines = c.get("changed_lines_total", 0)
     outside = c.get("changed_lines_outside_diff", 0)
     risk = c.get("risk", 0)
