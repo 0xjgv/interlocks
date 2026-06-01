@@ -217,6 +217,34 @@ def test_metric_regression_only_reports_strict_floor_misses(
         assert (regression is not None) is (measured > current_floor)
 
 
+@given(
+    field=st.sampled_from([field for field, _higher_better in METRICS]),
+    measured=_FINITE,
+    current_floor=_FINITE,
+    higher_better=st.booleans(),
+)
+def test_metric_regression_message_names_direction_and_values(
+    field: str,
+    measured: float,
+    current_floor: float,
+    higher_better: bool,
+) -> None:
+    regression = _metric_regression(
+        field,
+        measured=measured,
+        current_floor=current_floor,
+        higher_better=higher_better,
+    )
+
+    if regression is None:
+        return
+    assert field in regression
+    assert str(measured) in regression
+    assert str(current_floor) in regression
+    assert ("below floor" in regression) is higher_better
+    assert ("above floor" in regression) is not higher_better
+
+
 @given(_FINITE)
 def test_baseline_value_formatting_rounds_to_at_most_two_decimals(value: float) -> None:
     formatted = _fmt(value)

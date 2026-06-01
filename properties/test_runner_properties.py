@@ -495,6 +495,17 @@ def test_merged_env_preserves_process_env_and_last_override_wins(
         assert merged[key] == value
 
 
+@given(key=st.text(min_size=1, max_size=12).filter(lambda value: "=" not in value))
+def test_merged_env_single_override_does_not_mutate_process_env(key: str) -> None:
+    before = dict(os.environ)
+
+    merged = _merged_env(((key, "generated"),))
+
+    assert os.environ == before
+    assert merged is not None
+    assert merged[key] == "generated"
+
+
 @given(
     returncode=st.integers(min_value=0, max_value=5),
     elapsed=st.floats(min_value=0, max_value=100, allow_nan=False),
