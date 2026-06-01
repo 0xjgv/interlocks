@@ -393,6 +393,20 @@ def test_resolve_min_score_obeys_cli_default_enforcement_precedence(
     assert resolved == expected
 
 
+@given(configured=st.floats(allow_nan=False, allow_infinity=False))
+def test_resolve_min_score_returns_none_when_no_floor_source(configured: float) -> None:
+    cfg = _Cfg(
+        mutation_since_ref="HEAD",
+        src_dir_arg="interlocks",
+        test_dir_arg="tests",
+        enforce_mutation=False,
+        mutation_min_score=configured,
+    )
+
+    with patch.object(sys, "argv", ["interlocks", "mutation"]):
+        assert mutation._resolve_min_score(cast("InterlockConfig", cfg)) is None
+
+
 @given(score=_PERCENT, floor=st.one_of(st.none(), _PERCENT), completed=st.booleans())
 def test_mutation_status_matches_score_floor_and_completion(
     score: float, floor: float | None, completed: bool

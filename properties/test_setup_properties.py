@@ -51,6 +51,30 @@ def test_setup_payload_projects_artifact_statuses(
     ]
 
 
+@given(
+    mode=st.text(max_size=20),
+    check_only=st.booleans(),
+    next_actions=st.lists(st.text(max_size=40), max_size=8),
+)
+def test_setup_payload_preserves_mode_check_and_next_actions(
+    mode: str,
+    check_only: bool,
+    next_actions: list[str],
+) -> None:
+    payload = _setup_payload(
+        mode=mode,
+        check_only=check_only,
+        statuses=[],
+        next_actions=next_actions,
+    )
+
+    assert payload["mode"] == mode
+    assert payload["check"] is check_only
+    assert payload["passed"] is True
+    assert payload["artifacts"] == []
+    assert payload["next_actions"] == next_actions
+
+
 @given(installed=st.tuples(st.booleans(), st.booleans(), st.booleans(), st.booleans()))
 def test_check_payload_includes_fix_action_only_when_missing(
     installed: tuple[bool, bool, bool, bool],

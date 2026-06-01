@@ -183,6 +183,28 @@ def test_coverage_pct_matches_positive_hit_rate(
         assert math.isclose(result, hit / total * 100)
 
 
+@given(
+    populated=st.dictionaries(
+        _PATH,
+        st.dictionaries(
+            st.integers(min_value=1, max_value=1_000),
+            st.integers(min_value=-3, max_value=3),
+            min_size=1,
+            max_size=20,
+        ),
+        max_size=10,
+    ),
+    empty_files=st.lists(_PATH, max_size=10, unique=True),
+)
+def test_coverage_pct_ignores_empty_tracked_files(
+    populated: dict[str, dict[int, int]],
+    empty_files: list[str],
+) -> None:
+    with_empty = {**{path: {} for path in empty_files}, **populated}
+
+    assert stats._coverage_pct(with_empty) == stats._coverage_pct(populated)
+
+
 @given(score=_FINITE_FLOAT)
 def test_tier_selects_expected_score_band(score: float) -> None:
     tier = stats._tier(score)

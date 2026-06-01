@@ -755,6 +755,33 @@ def test_fix_optimize_apply_payload_reports_request_and_failure_state(
 
 
 @given(
+    selected_rows=st.lists(
+        st.tuples(_RULE, _KIND, st.lists(_FILE, min_size=1, max_size=3, unique=True).map(tuple)),
+        min_size=1,
+        max_size=5,
+        unique_by=lambda row: row[0],
+    ),
+    exit_code=st.integers(min_value=1, max_value=127),
+)
+def test_fix_optimize_apply_payload_preserves_failed_selection_context(
+    selected_rows: list[tuple[str, str, tuple[str, ...]]],
+    exit_code: int,
+) -> None:
+    selection = _selection(
+        selected=tuple(
+            _candidate(rule, kind=kind, files=files) for rule, kind, files in selected_rows
+        )
+    )
+
+    payload = fix_optimize_mod._apply_payload(selection, True, exit_code)
+
+    assert payload["status"] == "failed"
+    assert payload["selected_rules"] == [rule for rule, _kind, _files in selected_rows]
+    assert payload["returncode"] == exit_code
+    assert payload["failed_patch"] == ".lintfix/failed.patch"
+
+
+@given(
     stderr=st.text(),
     limit=st.integers(min_value=1, max_value=80),
 )

@@ -800,6 +800,26 @@ def test_local_helper_reference_map_tracks_private_helpers_only(name: str) -> No
     assert helper_refs == {"_call_generated": (("pkg/generated.py", name),)}
 
 
+@given(targets=st.lists(_IDENT, max_size=5, unique=True), value_name=_IDENT)
+def test_record_instance_aliases_ignores_non_constructor_values(
+    targets: list[str],
+    value_name: str,
+) -> None:
+    cfg = InterlockConfig(
+        project_root=Path(),
+        src_dir=Path(),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+    )
+    aliases = _ReferenceAliases({}, {}, {})
+    target_nodes = tuple(ast.Name(name, ast.Store()) for name in targets)
+
+    _record_instance_aliases(cfg, aliases, target_nodes, ast.Name(value_name, ast.Load()))
+
+    assert aliases.instances == {}
+
+
 @given(name=_IDENT, method=_IDENT)
 def test_reference_resolution_distinguishes_module_and_class_symbols(
     name: str,

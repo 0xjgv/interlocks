@@ -111,6 +111,39 @@ def test_serialize_preserves_replay_counts_and_rule_order(
 
 
 @given(
+    points=st.lists(
+        st.tuples(
+            st.from_regex(r"[a-f0-9]{7,12}", fullmatch=True),
+            st.from_regex(r"[a-f0-9]{7,12}", fullmatch=True),
+            st.one_of(st.none(), st.text(min_size=1, max_size=40)),
+            st.one_of(st.none(), st.from_regex(r"[a-f0-9]{7,12}", fullmatch=True)),
+        ),
+        max_size=20,
+    )
+)
+def test_serialize_preserves_each_replay_point_shape(
+    points: list[tuple[str, str, str | None, str | None]],
+) -> None:
+    replay_points = tuple(
+        ReplayPoint(commit, parent, (), error, reverted)
+        for commit, parent, error, reverted in points
+    )
+
+    payload = _serialize(ReplayResult("main", "unblock", len(points), replay_points), ())
+
+    assert payload["commits"] == [
+        {
+            "commit": commit,
+            "parent": parent,
+            "samples": [],
+            "error": error,
+            "reverted_in": reverted,
+        }
+        for commit, parent, error, reverted in points
+    ]
+
+
+@given(
     payload=st.fixed_dictionaries({
         "base_branch": _RULE,
         "budget": _RULE,
