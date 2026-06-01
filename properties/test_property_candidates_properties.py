@@ -29,6 +29,7 @@ from interlocks.tasks.property_candidates import (
     _has_property_decorator,
     _iter_source_files,
     _known_side_effect_call,
+    _local_helper_reference_map,
     _looks_like_class_symbol,
     _max_property_refs,
     _module_relpath,
@@ -721,6 +722,82 @@ def test_property_reference_counts_detect_module_resolved_generated_names(
 
     for name in names:
         assert counts.precise["pkg/generated.py", name] == 2
+
+
+@given(
+    name=_IDENT.filter(lambda value: value not in {"_call_generated", "test_generated"}),
+    calls=st.integers(min_value=1, max_value=5),
+)
+def test_property_reference_counts_expand_local_property_helpers(
+    name: str,
+    calls: int,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "generated.py").write_text(
+            f"def {name}() -> None:\n    return None\n",
+            encoding="utf-8",
+        )
+        properties = root / "properties"
+        properties.mkdir()
+        helper_calls = "\n".join("    _call_generated()" for _ in range(calls))
+        (properties / "test_generated_properties.py").write_text(
+            f"from pkg.generated import {name}\n\n"
+            "def _call_generated() -> None:\n"
+            f"    {name}()\n\n"
+            "def test_generated() -> None:\n"
+            f"{helper_calls}\n",
+            encoding="utf-8",
+        )
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            properties_dir=properties,
+        )
+
+        counts = _property_reference_counts(cfg)
+
+    assert counts.precise["pkg/generated.py", name] == calls
+
+
+@given(name=_IDENT.filter(lambda value: value not in {"_call_generated", "call_generated"}))
+def test_local_helper_reference_map_tracks_private_helpers_only(name: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "generated.py").write_text(
+            f"def {name}() -> None:\n    return None\n",
+            encoding="utf-8",
+        )
+        source = (
+            f"from pkg.generated import {name}\n\n"
+            "def _call_generated() -> None:\n"
+            f"    {name}()\n\n"
+            "def call_generated() -> None:\n"
+            f"    {name}()\n"
+        )
+        tree = ast.parse(source)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            properties_dir=root / "properties",
+        )
+        module_aliases = _reference_aliases(cfg, tree)
+
+        helper_refs = _local_helper_reference_map(cfg, module_aliases, tree, frozenset())
+
+    assert helper_refs == {"_call_generated": (("pkg/generated.py", name),)}
 
 
 @given(name=_IDENT, method=_IDENT)

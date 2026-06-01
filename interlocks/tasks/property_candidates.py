@@ -532,18 +532,54 @@ def _property_references_from_tree(
     if not isinstance(tree, ast.Module):
         return []
     module_aliases = _reference_aliases(cfg, tree)
+    helper_refs = _local_helper_reference_map(cfg, module_aliases, tree, property_attributes)
     refs: list[tuple[str, str]] = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            refs.extend(_references_from_scope(cfg, module_aliases, node, property_attributes))
+            if node.name in helper_refs:
+                continue
+            refs.extend(
+                _references_from_scope(
+                    cfg,
+                    module_aliases,
+                    node,
+                    property_attributes,
+                    helper_refs,
+                )
+            )
         elif isinstance(node, ast.ClassDef):
             for child in node.body:
                 if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                     refs.extend(
-                        _references_from_scope(cfg, module_aliases, child, property_attributes)
+                        _references_from_scope(
+                            cfg,
+                            module_aliases,
+                            child,
+                            property_attributes,
+                            helper_refs,
+                        )
                     )
         else:
             refs.extend(_resolved_references(cfg, module_aliases, node, property_attributes))
+    return refs
+
+
+def _local_helper_reference_map(
+    cfg: InterlockConfig,
+    module_aliases: _ReferenceAliases,
+    tree: ast.Module,
+    property_attributes: frozenset[tuple[str, str]],
+) -> dict[str, tuple[tuple[str, str], ...]]:
+    refs: dict[str, tuple[tuple[str, str], ...]] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        if not node.name.startswith("_"):
+            continue
+        local_aliases = _scope_reference_aliases(cfg, module_aliases, node)
+        helper_refs = tuple(_resolved_references(cfg, local_aliases, node, property_attributes))
+        if helper_refs:
+            refs[node.name] = helper_refs
     return refs
 
 
@@ -552,9 +588,10 @@ def _references_from_scope(
     module_aliases: _ReferenceAliases,
     scope: ast.FunctionDef | ast.AsyncFunctionDef,
     property_attributes: frozenset[tuple[str, str]] = frozenset(),
+    local_call_refs: dict[str, tuple[tuple[str, str], ...]] | None = None,
 ) -> list[tuple[str, str]]:
     local_aliases = _scope_reference_aliases(cfg, module_aliases, scope)
-    return _resolved_references(cfg, local_aliases, scope, property_attributes)
+    return _resolved_references(cfg, local_aliases, scope, property_attributes, local_call_refs)
 
 
 def _child_reference(
@@ -583,12 +620,19 @@ def _resolved_references(
     aliases: _ReferenceAliases,
     node: ast.AST,
     property_attributes: frozenset[tuple[str, str]] = frozenset(),
+    local_call_refs: dict[str, tuple[tuple[str, str], ...]] | None = None,
 ) -> list[tuple[str, str]]:
     refs: list[tuple[str, str]] = []
     call_func_ids = frozenset(
         id(child.func) for child in ast.walk(node) if isinstance(child, ast.Call)
     )
     for child in ast.walk(node):
+        if (
+            local_call_refs is not None
+            and isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Name)
+        ):
+            refs.extend(local_call_refs.get(child.func.id, ()))
         ref = _child_reference(cfg, aliases, child, call_func_ids, property_attributes)
         if ref is not None:
             refs.append(ref)

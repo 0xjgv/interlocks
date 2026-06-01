@@ -237,8 +237,17 @@ def _try_extend(plan: _Plan, idx: int, candidate: Candidate, budget: Budget) -> 
 
 def _prune_dominated(plans: list[_Plan]) -> list[_Plan]:
     """Drop plans dominated by another plan with equal or higher value."""
-    # Sort by value desc so a plan can only be dominated by an earlier entry.
-    ordered = sorted(plans, key=lambda p: -p.value)
+    # Sort by value desc and cost asc so a plan can only be dominated by an earlier entry.
+    ordered = sorted(
+        plans,
+        key=lambda p: (
+            -p.value,
+            p.cost.outside_diff,
+            p.cost.changed_lines,
+            p.cost.files,
+            p.cost.risk,
+        ),
+    )
     kept: list[_Plan] = []
     for plan in ordered:
         if not any(_dominates(other, plan) for other in kept):
