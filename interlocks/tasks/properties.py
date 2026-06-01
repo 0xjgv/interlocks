@@ -297,5 +297,4 @@ def _init_properties_next_actions(cfg: InterlockConfig) -> tuple[str, ...]:
 
 
 def _print_init_properties_next_steps(cfg: InterlockConfig) -> None:
-    for action in _init_properties_next_actions(cfg):
-        print(f"next: {action[0].lower()}{action[1:]}")
+    ui.print_next_actions(_init_properties_next_actions(cfg))

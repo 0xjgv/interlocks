@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Literal, cast
 from interlocks import __version__
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from interlocks.config import InterlockConfig
 
 State = Literal["ok", "fail", "warn"]
@@ -220,6 +222,19 @@ def message_list(items: list[str], *, empty: str = "none", indent: str = "  ") -
         return
     for item in items:
         print(f"{indent}- {item}")
+
+
+def next_action_line(action: str, *, indent: str = "") -> str:
+    """Render one human next-action line."""
+    return f"{indent}next: {action[:1].lower()}{action[1:]}"
+
+
+def print_next_actions(actions: Iterable[str], *, indent: str = "") -> None:
+    """Print human next-action lines, silent in JSON mode."""
+    if is_json():
+        return
+    for action in actions:
+        print(next_action_line(action, indent=indent))
 
 
 def group_header(name: str) -> None:

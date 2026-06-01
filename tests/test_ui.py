@@ -122,6 +122,14 @@ def test_group_header_silent_under_json(
     assert capsys.readouterr().out == ""
 
 
+def test_print_next_actions_formats_human_lines(capsys: pytest.CaptureFixture[str]) -> None:
+    ui.print_next_actions(["Run `interlocks check`.", "Sync dependencies."], indent="  ")
+
+    assert capsys.readouterr().out == (
+        "  next: run `interlocks check`.\n  next: sync dependencies.\n"
+    )
+
+
 def test_plain_len_strips_ansi_escape_sequences() -> None:
     assert ui._plain_len("\x1b[31mx\x1b[0m") == 1
 
@@ -180,5 +188,6 @@ def test_chrome_primitives_silent_under_json(
     ui.command_banner("ci", None)
     ui.section("CI Checks")
     ui.row("lint", "ruff check", "failed", state="fail")
+    ui.print_next_actions(["Run `interlocks check`."])
     ui.stage_footer(1.0)
     assert capsys.readouterr().out == ""

@@ -90,6 +90,7 @@ _SIDE_EFFECT_CALLS = frozenset({
     "ui.group_header",
     "ui.kv_block",
     "ui.message_list",
+    "ui.print_next_actions",
     "ui.print_json",
     "ui.row",
     "ui.section",
@@ -327,7 +328,7 @@ def _candidate_summary_line(state: _PropertyCandidatesState) -> str:
 
 
 def _empty_candidate_lines(state: _PropertyCandidatesState) -> tuple[str, ...]:
-    next_lines = tuple(f"  next: {action[0].lower()}{action[1:]}" for action in state.next_actions)
+    next_lines = tuple(ui.next_action_line(action, indent="  ") for action in state.next_actions)
     if not state.total_count:
         return (
             f"  no source functions in {state.scope_label} look like strong "

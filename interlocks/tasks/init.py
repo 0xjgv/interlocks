@@ -82,8 +82,7 @@ def cmd_init() -> None:
 
 
 def _print_init_next_steps() -> None:
-    for action in _INIT_NEXT_ACTIONS:
-        print(f"next: {action[0].lower()}{action[1:]}")
+    ui.print_next_actions(_INIT_NEXT_ACTIONS)
 
 
 def _init_targets(cwd: Path) -> dict[str, Path]:

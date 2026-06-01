@@ -113,6 +113,13 @@ def test_color_wrapper_honors_color_mode(code: str, text: str, use_color: bool) 
     assert rendered == (f"{code}{text}{ui._RESET}" if use_color else text)
 
 
+@given(action=_TEXT, indent=_TEXT)
+def test_next_action_line_lowercases_first_character(action: str, indent: str) -> None:
+    assert ui.next_action_line(action, indent=indent) == (
+        f"{indent}next: {action[:1].lower()}{action[1:]}"
+    )
+
+
 @given(prefix=st.lists(_ARGV_TOKEN, max_size=5), suffix=st.lists(_ARGV_TOKEN, max_size=5))
 def test_is_verbose_matches_exact_argv_membership(prefix: list[str], suffix: list[str]) -> None:
     with patch.object(sys, "argv", [*prefix, "--verbose", *suffix]):

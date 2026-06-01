@@ -79,8 +79,7 @@ def cmd_init_acceptance() -> None:
 
 
 def _print_init_acceptance_next_steps(cfg: InterlockConfig) -> None:
-    for action in _init_acceptance_next_actions(cfg):
-        print(f"next: {action[0].lower()}{action[1:]}")
+    ui.print_next_actions(_init_acceptance_next_actions(cfg))
 
 
 def domain_acceptance_feature_files(cfg: InterlockConfig) -> list[Path]:
