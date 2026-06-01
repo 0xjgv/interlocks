@@ -425,6 +425,14 @@ def test_threshold_overrides_match_key_specific_coercion(key: str, value: object
         assert overrides[key] == expected
 
 
+@given(table=st.dictionaries(st.text(max_size=20), _EXPLICIT_VALUE, max_size=20))
+def test_threshold_overrides_outputs_only_known_threshold_keys(table: dict[str, object]) -> None:
+    overrides = _threshold_overrides(table)
+
+    assert set(overrides) <= {*_INT_THRESHOLDS, *_FLOAT_THRESHOLDS, *_BOOL_THRESHOLDS}
+    assert all(value is not None for value in overrides.values())
+
+
 @given(project_name=st.one_of(st.none(), st.text(max_size=30), st.integers(), st.booleans()))
 def test_default_behavior_attribution_only_auto_enforces_for_interlocks_project(
     project_name: object,

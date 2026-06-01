@@ -260,3 +260,15 @@ def test_render_body_ignores_unallowlisted_payload_fields(extra_value: str) -> N
     assert "RuntimeError" in body
     assert "abc123" in body
     assert extra_value not in body
+
+
+@given(frames=st.lists(st.dictionaries(st.text(max_size=12), _JSON_VALUE, max_size=5), max_size=8))
+def test_render_body_formats_each_frame_with_allowlisted_formatter(
+    frames: list[dict[str, object]],
+) -> None:
+    body = _render_body({"frames": frames})
+
+    assert "## Crash report" in body
+    assert "## Frames" in body
+    for frame in frames:
+        assert _format_frame(frame) in body

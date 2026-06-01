@@ -10,6 +10,8 @@ from hypothesis import strategies as st
 
 from interlocks.behavior_coverage import (
     Behavior,
+    BehaviorCoverageResult,
+    BehaviorCoverageValidationResult,
     FeatureBehaviorParse,
     ScenarioBehavior,
     _duplicate_behavior_ids,
@@ -220,3 +222,37 @@ def test_format_behavior_coverage_failure_mentions_each_gap(behavior_id: str) ->
 
     assert "behavior coverage incomplete" in message
     assert f"uncovered behavior ID: {behavior_id}" in message
+
+
+@given(ids=st.lists(_ID, min_size=1, max_size=8, unique=True))
+def test_format_behavior_coverage_failure_emits_one_line_per_gap(ids: list[str]) -> None:
+    stale = tuple(
+        ScenarioBehavior(behavior_id, Path("generated.feature"), "generated", index + 1)
+        for index, behavior_id in enumerate(ids)
+    )
+    result = BehaviorCoverageValidationResult(
+        coverage=BehaviorCoverageResult((), ()),
+        uncovered_behavior_ids=tuple(ids),
+        stale_scenario_behaviors=stale,
+        duplicate_behavior_ids=tuple(ids),
+    )
+
+    lines = format_behavior_coverage_failure(result).split("\n")
+
+    assert (
+        lines[0]
+        == "acceptance: behavior coverage incomplete — add or update Gherkin behavior markers"
+    )
+    assert len(lines) == 1 + (3 * len(ids))
+    for behavior_id in ids:
+        assert (
+            sum(
+                line.startswith(f"invalid duplicate behavior ID: {behavior_id} —")
+                for line in lines
+            )
+            == 1
+        )
+        assert (
+            sum(line.startswith(f"uncovered behavior ID: {behavior_id} —") for line in lines) == 1
+        )
+        assert sum(line.startswith(f"stale behavior ID: {behavior_id} at ") for line in lines) == 1

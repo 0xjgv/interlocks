@@ -60,14 +60,15 @@ _KNOWN_COMMAND = st.sampled_from([
     ("unblock", "fix-optimize"),
     ("attribution", "behavior-attribution"),
 ])
-_KNOWN_CHECK_FLAG = st.sampled_from([
+_KNOWN_CHECK_FLAG_VALUES = (
     "--changed",
     "--changed=HEAD",
     "--json",
     "--mutation-budget=quick",
     "--renovate",
     "--skip=mutation",
-])
+)
+_KNOWN_CHECK_FLAG = st.sampled_from(_KNOWN_CHECK_FLAG_VALUES)
 _TASK_NAME = st.sampled_from(tuple(sorted(TASKS)))
 _PRESET_ARGS = st.lists(
     st.from_regex(r"[a-z][a-z0-9-]{0,12}", fullmatch=True),
@@ -356,6 +357,29 @@ def test_resolve_task_name_returns_none_when_only_flags(flags: list[str]) -> Non
 @given(flags=st.lists(_KNOWN_CHECK_FLAG, max_size=6))
 def test_validate_task_flags_accepts_declared_and_global_flags(flags: list[str]) -> None:
     _validate_task_flags("check", ["check", *flags])
+
+
+@given(flag=_FLAG.filter(lambda value: value not in _KNOWN_CHECK_FLAG_VALUES))
+def test_validate_task_flags_reports_first_unknown_flag(flag: str) -> None:
+    calls: list[tuple[str, str]] = []
+    old_fail = cli_mod._fail_unknown_flag
+
+    def fake_fail(task_name: str, bad_flag: str) -> None:
+        calls.append((task_name, bad_flag))
+        raise RuntimeError("unknown flag")
+
+    cli_mod._fail_unknown_flag = fake_fail  # type: ignore[assignment]
+    try:
+        try:
+            _validate_task_flags("check", ["check", flag, "--also-bad"])
+        except RuntimeError:
+            pass
+        else:  # pragma: no cover - guarded by the assertion above
+            raise AssertionError("_validate_task_flags should reject unknown flags")
+    finally:
+        cli_mod._fail_unknown_flag = old_fail  # type: ignore[assignment]
+
+    assert calls == [("check", flag)]
 
 
 @given(flag=_FLAG)
