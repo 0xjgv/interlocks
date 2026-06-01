@@ -757,6 +757,54 @@ def test_property_candidates_uncovered_hides_property_referenced_functions(
     assert ("property_probe/core.py", "parse_total") in uncovered_symbols
 
 
+def test_property_candidates_max_refs_surfaces_shallow_property_references(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pkg = tmp_project / "property_probe"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "core.py").write_text(
+        textwrap.dedent(
+            """\
+            def parse_count(raw: str) -> int:
+                if not raw:
+                    return 0
+                return int(raw)
+
+
+            def parse_total(raw: str) -> int:
+                if not raw:
+                    return 0
+                return int(raw)
+            """
+        ),
+        encoding="utf-8",
+    )
+    properties = tmp_project / "properties"
+    properties.mkdir()
+    (properties / "test_core_properties.py").write_text(
+        "from property_probe.core import parse_count, parse_total\n\n"
+        "def test_count_reference() -> None:\n"
+        "    parse_count('1')\n"
+        "    parse_count('2')\n"
+        "    parse_total('1')\n",
+        encoding="utf-8",
+    )
+
+    result = _run_property_candidates(
+        tmp_project, monkeypatch, capsys, "--json", "--max-refs=1", "--limit=0"
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    shown_symbols = {(candidate["path"], candidate["name"]) for candidate in payload["candidates"]}
+    assert payload["max_property_refs"] == 1
+    assert ("property_probe/core.py", "parse_count") not in shown_symbols
+    assert ("property_probe/core.py", "parse_total") in shown_symbols
+
+
 def test_property_candidates_uncovered_text_distinguishes_all_referenced(
     tmp_project: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1182,12 +1230,28 @@ def test_property_candidates_limit_json_error_is_parseable(
     assert "usage: interlocks property-candidates" in payload["usage"]
 
 
+def test_property_candidates_max_refs_json_error_is_parseable(
+    tmp_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = _run_property_candidates(
+        tmp_project, monkeypatch, capsys, "--json", "--max-refs=lots"
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["command"] == "property-candidates"
+    assert payload["error"] == "property-candidates: --max-refs must be an integer"
+    assert payload["expected_max_refs"] == "integer >= 0"
+
+
 def test_property_candidates_usage_contract_is_exact() -> None:
     from interlocks.tasks import property_candidates as property_candidates_mod
 
     assert property_candidates_mod._property_candidates_usage() == (
         "usage: interlocks property-candidates "
-        "[--changed[=REF]] [--uncovered] [--limit=N] [--json]"
+        "[--changed[=REF]] [--uncovered] [--max-refs=N] [--limit=N] [--json]"
     )
 
 
@@ -1203,7 +1267,7 @@ def test_property_candidates_json_error_contract_is_exact() -> None:
         "error": "property-candidates: --limit must be >= 0",
         "usage": (
             "usage: interlocks property-candidates "
-            "[--changed[=REF]] [--uncovered] [--limit=N] [--json]"
+            "[--changed[=REF]] [--uncovered] [--max-refs=N] [--limit=N] [--json]"
         ),
         "expected_limit": "integer >= 0",
     }

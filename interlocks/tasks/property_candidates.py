@@ -189,6 +189,7 @@ class _PropertyCandidatesState:
     all_candidates: list[PropertyCandidate]
     candidates: list[PropertyCandidate]
     shown: list[PropertyCandidate]
+    max_property_refs: int | None = None
 
     @property
     def total_count(self) -> int:
@@ -214,9 +215,14 @@ class _PropertyCandidatesState:
     def next_actions(self) -> tuple[str, ...]:
         if self.candidates:
             return ()
-        if self.total_count and not self.include_referenced:
+        if self.total_count and self.max_property_refs == 0:
             return (
                 "Rerun without `--uncovered` to review referenced candidates.",
+                "Add deeper invariants where property references are shallow.",
+            )
+        if self.total_count and self.max_property_refs is not None:
+            return (
+                "Rerun with a higher `--max-refs` or without it to review broader candidates.",
                 "Add deeper invariants where property references are shallow.",
             )
         if not self.total_count:
@@ -239,6 +245,8 @@ class _PropertyCandidatesState:
             "shown": len(self.shown),
             "candidates": [candidate.to_json() for candidate in self.shown],
         }
+        if self.max_property_refs is not None:
+            payload["max_property_refs"] = self.max_property_refs
         if self.next_actions:
             payload["next_actions"] = list(self.next_actions)
         return payload
@@ -278,15 +286,12 @@ def cmd_property_candidates() -> None:
 def _property_candidates_command_state() -> _PropertyCandidatesState:
     cfg = load_config()
     limit = _candidate_limit()
+    max_property_refs = _max_property_refs()
     scope_ref = arg_flag_value("--changed", cfg.changed_ref)
     changed = changed_py_files_vs(scope_ref) if scope_ref else None
-    include_referenced = arg_flag_value("--uncovered", "1") is None
+    include_referenced = max_property_refs != 0
     all_candidates = property_candidates(cfg, changed=changed, include_referenced=True)
-    candidates = (
-        all_candidates
-        if include_referenced
-        else [candidate for candidate in all_candidates if candidate.property_refs == 0]
-    )
+    candidates = _filter_by_max_property_refs(all_candidates, max_property_refs)
     shown = candidates[:limit] if limit else candidates
     return _PropertyCandidatesState(
         cfg=cfg,
@@ -295,6 +300,7 @@ def _property_candidates_command_state() -> _PropertyCandidatesState:
         all_candidates=all_candidates,
         candidates=candidates,
         shown=shown,
+        max_property_refs=max_property_refs,
     )
 
 
@@ -316,14 +322,18 @@ def _render_property_candidates(state: _PropertyCandidatesState) -> None:
 
 
 def _candidate_summary_line(state: _PropertyCandidatesState) -> str:
-    if state.include_referenced:
-        return (
-            f"  showing {len(state.shown)} of {len(state.candidates)} ranked candidate(s) "
-            f"in {state.scope_label}"
-        )
+    if state.max_property_refs == 0:
+        label = "unreferenced candidate(s)"
+    elif state.max_property_refs is not None:
+        label = f"candidate(s) with <= {state.max_property_refs} property reference(s)"
+    else:
+        label = "ranked candidate(s)"
+    detail = (
+        f" ({state.referenced_count} referenced)" if state.max_property_refs is not None else ""
+    )
     return (
-        f"  showing {len(state.shown)} of {len(state.candidates)} unreferenced candidate(s) "
-        f"in {state.scope_label} ({state.referenced_count} referenced)"
+        f"  showing {len(state.shown)} of {len(state.candidates)} {label} "
+        f"in {state.scope_label}{detail}"
     )
 
 
@@ -335,10 +345,16 @@ def _empty_candidate_lines(state: _PropertyCandidatesState) -> tuple[str, ...]:
             "property-test candidates",
             *next_lines,
         )
-    if not state.include_referenced:
+    if state.max_property_refs == 0:
         return (
             f"  all {state.total_count} ranked candidate(s) in {state.scope_label} already "
             "have property-test references",
+            *next_lines,
+        )
+    if state.max_property_refs is not None:
+        return (
+            f"  all {state.total_count} ranked candidate(s) in {state.scope_label} have more "
+            f"than {state.max_property_refs} property-test reference(s)",
             *next_lines,
         )
     return ("  no source functions look like strong property-test candidates",)
@@ -971,20 +987,45 @@ def _candidate_limit() -> int:
     return limit
 
 
+def _max_property_refs() -> int | None:
+    if arg_flag_value("--uncovered", "1") is not None:
+        return 0
+    raw = arg_value("--max-refs=", "")
+    if not raw:
+        return None
+    try:
+        limit = int(raw)
+    except ValueError:
+        _fail_property_candidates("property-candidates: --max-refs must be an integer")
+    if limit < 0:
+        _fail_property_candidates("property-candidates: --max-refs must be >= 0")
+    return limit
+
+
+def _filter_by_max_property_refs(
+    candidates: list[PropertyCandidate], max_property_refs: int | None
+) -> list[PropertyCandidate]:
+    if max_property_refs is None:
+        return candidates
+    return [candidate for candidate in candidates if candidate.property_refs <= max_property_refs]
+
+
 def _property_candidates_usage() -> str:
     return (
         "usage: interlocks property-candidates "
-        "[--changed[=REF]] [--uncovered] [--limit=N] [--json]"
+        "[--changed[=REF]] [--uncovered] [--max-refs=N] [--limit=N] [--json]"
     )
 
 
 def _property_candidates_error_payload(message: str) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "command": "property-candidates",
         "error": message,
         "usage": _property_candidates_usage(),
-        "expected_limit": "integer >= 0",
     }
+    expected_key = "expected_max_refs" if "max-refs" in message else "expected_limit"
+    payload[expected_key] = "integer >= 0"
+    return payload
 
 
 def _fail_property_candidates(message: str) -> NoReturn:

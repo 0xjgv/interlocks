@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import keyword
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -24,10 +25,12 @@ from interlocks.tasks.property_candidates import (
     _caution_line,
     _child_reference,
     _empty_candidate_lines,
+    _filter_by_max_property_refs,
     _has_property_decorator,
     _iter_source_files,
     _known_side_effect_call,
     _looks_like_class_symbol,
+    _max_property_refs,
     _module_relpath,
     _node_side_effect_cautions,
     _property_attribute_symbols,
@@ -438,7 +441,49 @@ def test_property_candidates_json_preserves_counts_and_scope(
     assert payload["unreferenced_count"] == state.unreferenced_count
     assert payload["shown"] == len(shown)
     assert payload["candidates"] == [candidate.to_json() for candidate in shown]
+    assert "max_property_refs" not in payload
     assert "next_actions" not in payload
+
+
+@given(ref_counts=st.lists(st.integers(min_value=0, max_value=8), max_size=10))
+def test_filter_by_max_property_refs_keeps_only_shallow_references(
+    ref_counts: list[int],
+) -> None:
+    candidates = [
+        PropertyCandidate(
+            path=f"pkg/mod_{index}.py",
+            name=f"parse_{index}",
+            line=index + 1,
+            score=10,
+            reasons=("typed generated inputs",),
+            cautions=(),
+            strategies={},
+            property_refs=refs,
+        )
+        for index, refs in enumerate(ref_counts)
+    ]
+
+    assert _filter_by_max_property_refs(candidates, None) == candidates
+    for max_refs in range(3):
+        assert _filter_by_max_property_refs(candidates, max_refs) == [
+            candidate for candidate in candidates if candidate.property_refs <= max_refs
+        ]
+
+
+@given(max_refs=st.integers(min_value=0, max_value=20), uncovered=st.booleans())
+def test_max_property_refs_parses_uncovered_shortcut_and_value(
+    max_refs: int,
+    uncovered: bool,
+) -> None:
+    argv = ["interlocks", "property-candidates", f"--max-refs={max_refs}"]
+    if uncovered:
+        argv.append("--uncovered")
+    old_argv = sys.argv
+    try:
+        sys.argv = argv
+        assert _max_property_refs() == (0 if uncovered else max_refs)
+    finally:
+        sys.argv = old_argv
 
 
 @given(total=st.integers(min_value=1, max_value=20))
@@ -469,6 +514,7 @@ def test_uncovered_empty_message_reports_scope_and_all_referenced(total: int) ->
         all_candidates=candidates,
         candidates=[],
         shown=[],
+        max_property_refs=0,
     )
 
     lines = _empty_candidate_lines(state)
@@ -482,6 +528,52 @@ def test_uncovered_empty_message_reports_scope_and_all_referenced(total: int) ->
         "Add deeper invariants where property references are shallow.",
     )
     assert "rerun without `--uncovered`" in lines[1]
+
+
+@given(
+    total=st.integers(min_value=1, max_value=20), max_refs=st.integers(min_value=1, max_value=5)
+)
+def test_max_refs_empty_message_reports_shallow_reference_filter(
+    total: int, max_refs: int
+) -> None:
+    candidates = [
+        PropertyCandidate(
+            path=f"pkg/mod_{index}.py",
+            name=f"parse_{index}",
+            line=index + 1,
+            score=10,
+            reasons=("typed generated inputs",),
+            cautions=(),
+            strategies={},
+            property_refs=max_refs + 1,
+        )
+        for index in range(total)
+    ]
+    state = _PropertyCandidatesState(
+        cfg=InterlockConfig(
+            project_root=Path(),
+            src_dir=Path("pkg"),
+            test_dir=Path("tests"),
+            test_runner="pytest",
+            test_invoker="python",
+        ),
+        scope_ref="HEAD",
+        include_referenced=True,
+        all_candidates=candidates,
+        candidates=[],
+        shown=[],
+        max_property_refs=max_refs,
+    )
+
+    lines = _empty_candidate_lines(state)
+    payload = _property_candidates_json(state)
+
+    assert payload["max_property_refs"] == max_refs
+    assert lines[0] == (
+        f"  all {total} ranked candidate(s) in changed vs HEAD have more than "
+        f"{max_refs} property-test reference(s)"
+    )
+    assert "higher `--max-refs`" in lines[1]
 
 
 def test_empty_candidate_state_reports_greenfield_next_actions() -> None:

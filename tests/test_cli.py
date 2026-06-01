@@ -1364,7 +1364,7 @@ def test_flag_sets_for_property_candidates_partition_exactly() -> None:
 
     assert boolean_names == frozenset({"--json", "--uncovered"})
     assert optional_names == frozenset({"--changed"})
-    assert value_prefixes == ("--limit=",)
+    assert value_prefixes == ("--max-refs=", "--limit=")
 
 
 def test_flag_sets_treat_value_shaped_flags_as_values(

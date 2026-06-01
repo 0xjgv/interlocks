@@ -698,7 +698,8 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
         "Rank functions for property-test hardening",
         "Static, agent-readable report that ranks source functions likely to "
         "benefit from generated-input property tests; use `--changed=REF` to "
-        "scope the next pass and `--uncovered` to hide already referenced units. "
+        "scope the next pass, `--uncovered` to hide already referenced units, "
+        "and `--max-refs=N` to find shallowly referenced units. "
         "It writes no tests.",
         mutates=False,
         outputs=(),
@@ -719,6 +720,12 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
                 "boolean",
                 "off",
                 "hide candidates already referenced by property tests",
+            ),
+            FlagSpec(
+                "--max-refs=",
+                "value",
+                "",
+                "show only candidates with at most N property-test references",
             ),
             FlagSpec("--limit=", "value", "20", "maximum candidates to show; 0 means all"),
         ),
