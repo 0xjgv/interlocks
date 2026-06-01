@@ -133,6 +133,18 @@ def test_normalize_traceback_preserves_interlocks_count_and_collapses_externals(
     )
 
 
+@given(count=st.integers(min_value=0, max_value=30))
+def test_normalize_traceback_collapses_all_external_frames(count: int) -> None:
+    frames = [
+        (f"/usr/lib/python/generated_{index}.py", index + 1, f"f_{index}")
+        for index in range(count)
+    ]
+
+    normalized = normalize_traceback(_fake_tb_chain(frames), project_root=None)
+
+    assert normalized == (() if count == 0 else (ExternalFrames(count=count),))
+
+
 @given(tail=st.lists(_PATH_SEGMENTS, min_size=1, max_size=5))
 def test_is_interlocks_frame_matches_installed_package_prefix(tail: list[str]) -> None:
     pkg_root = Path(interlocks.__file__).resolve().parent

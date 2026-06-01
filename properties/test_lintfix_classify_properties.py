@@ -87,6 +87,29 @@ def test_classify_empty_patch_is_skipped_regardless_of_policy(mode: str, unsafe:
     assert result.patch_id == "R0"
 
 
+@given(patch_text=st.text(max_size=2_000), mode=_MODES, unsafe=st.booleans())
+def test_classify_projects_measured_cost_and_rule_identity(
+    patch_text: str,
+    mode: str,
+    unsafe: bool,
+) -> None:
+    budget = Budget("generated", 10_000, 10_000, 10_000, 10_000, allow_unsafe_fixes=True)
+    result = classify(
+        patch_text=patch_text,
+        diff_hunks={},
+        policy=RulePolicy("PX", mode, "other", 3),  # type: ignore[arg-type]
+        budget=budget,
+        unsafe=unsafe,
+    )
+
+    assert result.rule == "PX"
+    assert result.patch_id == "PX"
+    assert result.cost.files_touched == len(result.metrics.files_touched)
+    assert result.cost.changed_lines_total == result.metrics.changed_lines_total
+    assert result.cost.changed_lines_outside_diff == result.metrics.changed_lines_outside_diff
+    assert result.cost.unsafe is unsafe
+
+
 @given(mode=_MODES, unsafe=st.booleans(), changed_lines=st.integers(min_value=0, max_value=10))
 def test_decide_prioritizes_unsafe_empty_patch_policy_and_budget(
     mode: str,
@@ -268,3 +291,8 @@ def test_unsafe_risk_adds_fixed_penalty(candidate: CandidateMetrics, base: int) 
 @given(_PATHS)
 def test_path_risk_modifier_is_bounded(path: str) -> None:
     assert -2 <= _path_risk_modifier(path) <= 27
+
+
+@given(path=_PATHS)
+def test_path_risk_modifier_scores_migrations_as_risky(path: str) -> None:
+    assert _path_risk_modifier(f"app/migrations/{path}") >= 8
