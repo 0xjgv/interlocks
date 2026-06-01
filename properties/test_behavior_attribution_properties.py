@@ -603,6 +603,19 @@ def test_attribution_formatter_helpers_emit_one_detail_per_item(ids: list[str]) 
         assert behavior_id in "\n".join(info)
 
 
+@given(behavior_id=_ID)
+def test_attribution_formatter_helpers_name_their_failure_modes(behavior_id: str) -> None:
+    scenario = _scenario(behavior_id)
+    failure = AttributionClaimFailure(scenario, f"pkg:{behavior_id}")
+    behavior = _behavior(behavior_id, f"pkg:{behavior_id}")
+    informational = _behavior(behavior_id, None)
+
+    assert "did not reach" in "\n".join(_format_mis_attributed((failure,)))
+    assert "no claiming scenario reached it" in "\n".join(_format_unresolved((behavior,)))
+    assert "no per-scenario evidence" in "\n".join(_format_gaps((failure,)))
+    assert informational.summary in "\n".join(_format_informational((informational,)))
+
+
 @given(
     feature_path=st.text(min_size=1, max_size=50),
     scenario_line=st.integers(min_value=1, max_value=1_000_000),

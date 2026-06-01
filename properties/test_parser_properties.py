@@ -66,6 +66,11 @@ def test_json_object_loader_matches_json_object_contract(raw: str) -> None:
         assert loaded is None
 
 
+@given(payload=st.dictionaries(st.text(max_size=20), _JSON_VALUE, max_size=8))
+def test_json_object_loader_round_trips_objects(payload: dict[str, object]) -> None:
+    assert _loads_dict(json.dumps(payload)) == payload
+
+
 @given(st.text())
 def test_subprocess_event_parser_never_raises(line: str) -> None:
     event = _parse_subprocess_event(line)
@@ -106,6 +111,19 @@ def test_decode_scenario_key_accepts_only_string_path_and_positive_int_line(
         assert decoded == (Path(feature_path), scenario_line)
     else:
         assert decoded is None
+
+
+@given(
+    feature_path=st.text(min_size=1, max_size=80),
+    scenario_line=st.integers(min_value=1, max_value=1_000_000),
+)
+def test_decode_scenario_key_round_trips_encoded_keys(
+    feature_path: str,
+    scenario_line: int,
+) -> None:
+    encoded = _encode_scenario_key((Path(feature_path), scenario_line))
+
+    assert _decode_scenario_key(encoded) == (Path(feature_path), scenario_line)
 
 
 @given(
