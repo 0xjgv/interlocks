@@ -190,6 +190,38 @@ def test_pareto_frontier_drops_strictly_dominated_rules(helped: int, p95: float)
 
 
 @given(
+    rows=st.lists(
+        st.tuples(
+            st.integers(min_value=0, max_value=20),
+            st.floats(min_value=0, max_value=50),
+            st.booleans(),
+        ),
+        max_size=20,
+    )
+)
+def test_pareto_frontier_contains_exactly_non_dominated_rules(
+    rows: list[tuple[int, float, bool]],
+) -> None:
+    stats = tuple(
+        _stats(
+            rule=f"R{index}",
+            prs_helped=helped,
+            p95_outside=p95,
+            unsafe_seen=unsafe,
+        )
+        for index, (helped, p95, unsafe) in enumerate(rows)
+    )
+
+    frontier = _pareto_frontier(stats)
+
+    assert frontier == frozenset(
+        candidate.rule
+        for candidate in stats
+        if not any(_dominates(other, candidate) for other in stats if other is not candidate)
+    )
+
+
+@given(
     helped_a=st.integers(min_value=0, max_value=20),
     helped_b=st.integers(min_value=0, max_value=20),
     p95_a=st.floats(min_value=0, max_value=50),

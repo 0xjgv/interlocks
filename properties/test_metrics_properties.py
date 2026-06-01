@@ -257,6 +257,28 @@ def test_function_coverage_stays_in_unit_interval(
 
 
 @given(
+    hits=st.dictionaries(
+        keys=st.integers(min_value=-100, max_value=100),
+        values=st.integers(min_value=-3, max_value=3),
+        max_size=50,
+    ),
+    start=st.integers(min_value=-120, max_value=120),
+    end=st.integers(min_value=-120, max_value=120),
+)
+def test_function_coverage_matches_executable_line_hit_ratio(
+    hits: dict[int, int], start: int, end: int
+) -> None:
+    executable_hits = [hit for number, hit in hits.items() if start <= number <= end]
+    expected = (
+        sum(1 for hit in executable_hits if hit > 0) / len(executable_hits)
+        if executable_hits
+        else 0.0
+    )
+
+    assert function_coverage(hits, start, end) == pytest.approx(expected)
+
+
+@given(
     ccn=st.integers(min_value=1, max_value=50),
     hits=st.lists(st.integers(min_value=0, max_value=1), min_size=1, max_size=25),
     threshold_delta=st.floats(min_value=0.1, max_value=10, allow_nan=False),

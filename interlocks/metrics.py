@@ -187,8 +187,8 @@ def coverage_line_rate(cov_file: Path | None = None) -> float | None:
 
 def function_coverage(lines: dict[int, int], start: int, end: int) -> float:
     """Fraction of executable lines between ``start``/``end`` that were hit."""
-    in_range = [n for n in range(start, end + 1) if n in lines]
-    return (sum(1 for n in in_range if lines[n] > 0) / len(in_range)) if in_range else 0.0
+    hits = [hit for number, hit in lines.items() if start <= number <= end]
+    return (sum(1 for hit in hits if hit > 0) / len(hits)) if hits else 0.0
 
 
 def lizard_functions(src_arg: str) -> list[FunctionStats]:

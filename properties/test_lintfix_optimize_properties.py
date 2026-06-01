@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import asdict
-from typing import Any
+from typing import Any, cast
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -29,6 +29,8 @@ from interlocks.lintfix.optimize import (
     candidates_from_plan,
     optimize,
 )
+from interlocks.lintfix.rules import Mode
+from interlocks.lintfix.stats import RuleStats
 from interlocks.lintfix.verify import BatchVerifyResult
 from interlocks.tasks import fix_optimize as fix_optimize_mod
 
@@ -63,6 +65,7 @@ _CANDIDATE = candidates().filter(bool).map(lambda items: items[0])
 _RULE = st.from_regex(r"[A-Z][A-Z0-9]{1,5}", fullmatch=True)
 _FILE = st.from_regex(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,20}\.py", fullmatch=True)
 _KIND = st.sampled_from(["lint", "format", "other"])
+_MODE = st.sampled_from(("auto", "escrow", "advisory", "skip"))
 _ARG = st.text(
     alphabet=st.characters(blacklist_characters="\r\n"),
     min_size=1,
@@ -135,6 +138,39 @@ def test_candidates_from_plan_projects_planned_candidate_fields(
     assert candidate.value >= 0
 
 
+@given(
+    mode=_MODE,
+    candidate_unsafe=st.booleans(),
+    stats_unsafe=st.booleans(),
+    prs_helped=st.integers(min_value=0, max_value=20),
+    diagnostic_count=st.integers(min_value=0, max_value=20),
+)
+def test_candidates_from_plan_applies_policy_safety_and_stats_support(
+    mode: str,
+    candidate_unsafe: bool,
+    stats_unsafe: bool,
+    prs_helped: int,
+    diagnostic_count: int,
+) -> None:
+    planned = _planned(
+        "F401",
+        mode=cast("Mode", mode),
+        unsafe=candidate_unsafe,
+        diagnostic_count=diagnostic_count,
+    )
+    stats = _rule_stats("F401", prs_helped=prs_helped, unsafe_seen=stats_unsafe)
+
+    [baseline] = candidates_from_plan((planned,))
+    [candidate] = candidates_from_plan((planned,), {"F401": stats})
+
+    assert candidate.selectable is (mode == "auto" and not candidate_unsafe)
+    assert candidate.unsafe is candidate_unsafe
+    if mode != "skip" and not stats_unsafe:
+        assert candidate.value == baseline.value + (prs_helped * 5)
+    else:
+        assert candidate.value == baseline.value
+
+
 @given(candidates())
 def test_search_returns_only_budget_fitting_conflict_free_plans(
     items: tuple[Candidate, ...],
@@ -188,6 +224,46 @@ def test_try_extend_rejects_conflicts_and_extends_fitting_candidates(
 
 
 @given(
+    dimension=st.sampled_from(("outside_diff", "changed_lines", "files", "risk")),
+    outside=st.integers(min_value=1, max_value=20),
+    changed=st.integers(min_value=1, max_value=20),
+    files=st.integers(min_value=1, max_value=5),
+    risk=st.integers(min_value=1, max_value=20),
+)
+def test_try_extend_rejects_each_budget_dimension_overflow(
+    dimension: str,
+    outside: int,
+    changed: int,
+    files: int,
+    risk: int,
+) -> None:
+    candidate = Candidate(
+        rule="R0",
+        value=1,
+        cost=CostVector(outside_diff=outside, changed_lines=changed, files=files, risk=risk),
+        files=tuple(f"file_{index}.py" for index in range(files)),
+        selectable=True,
+        policy_mode="auto",
+    )
+    budget_values = {
+        "max_outside_diff_lines": outside,
+        "max_changed_lines": changed,
+        "max_files": files,
+        "max_risk": risk,
+    }
+    budget_key = {
+        "outside_diff": "max_outside_diff_lines",
+        "changed_lines": "max_changed_lines",
+        "files": "max_files",
+        "risk": "max_risk",
+    }[dimension]
+    budget_values[budget_key] -= 1
+    budget = Budget("generated", **budget_values)
+
+    assert _try_extend(_Plan(), 0, candidate, budget) is None
+
+
+@given(
     value=st.integers(min_value=0, max_value=100),
     outside=st.integers(min_value=0, max_value=20),
     changed=st.integers(min_value=0, max_value=20),
@@ -214,6 +290,34 @@ def test_prune_dominated_drops_worse_equal_or_lower_value_plans(
     assert better in pruned
     assert worse not in pruned
     assert _dominates(better, worse)
+
+
+_PLAN = st.builds(
+    _Plan,
+    selected=st.frozensets(st.integers(min_value=0, max_value=20), max_size=4),
+    value=st.integers(min_value=0, max_value=200),
+    cost=st.builds(
+        CostVector,
+        outside_diff=st.integers(min_value=0, max_value=20),
+        changed_lines=st.integers(min_value=0, max_value=50),
+        files=st.integers(min_value=0, max_value=10),
+        risk=st.integers(min_value=0, max_value=20),
+    ),
+    files=st.frozensets(_FILE, max_size=4),
+)
+
+
+@given(plans=st.lists(_PLAN, max_size=20))
+def test_prune_dominated_is_idempotent_and_leaves_no_dominated_pairs(
+    plans: list[_Plan],
+) -> None:
+    pruned = _prune_dominated(plans)
+
+    assert _prune_dominated(pruned) == pruned
+    for index, left in enumerate(pruned):
+        for right in pruned[index + 1 :]:
+            assert not _dominates(left, right)
+            assert not _dominates(right, left)
 
 
 @given(
@@ -353,11 +457,13 @@ def _planned(
     kind: str = "lint",
     files: tuple[str, ...] = ("sample.py",),
     diagnostic_count: int = 1,
+    mode: Mode = "auto",
+    unsafe: bool = False,
 ) -> plan_module.PlannedCandidate:
     return plan_module.PlannedCandidate(
         classification=Classification(
             rule=rule,
-            mode="auto",
+            mode=mode,
             metrics=_metrics(files),
             cost=CandidateCost(
                 files_touched=len(files),
@@ -369,7 +475,7 @@ def _planned(
             patch_id=rule,
         ),
         diff_text=f"diff-{rule}",
-        unsafe=False,
+        unsafe=unsafe,
         diagnostic_count=diagnostic_count,
         mutation_class="other",
         kind=kind,
@@ -392,6 +498,25 @@ def _candidate(
         policy_mode="auto",
         unsafe=False,
         kind=kind,
+    )
+
+
+def _rule_stats(rule: str, *, prs_helped: int, unsafe_seen: bool) -> RuleStats:
+    return RuleStats(
+        rule=rule,
+        mutation_class="other",
+        current_mode="auto",
+        prs_with_candidate=prs_helped,
+        prs_helped=prs_helped,
+        median_changed_lines=0.0,
+        p95_changed_lines=0.0,
+        median_outside_diff_lines=0.0,
+        p95_outside_diff_lines=0.0,
+        unsafe_seen=unsafe_seen,
+        revert_signal=0,
+        on_pareto_frontier=False,
+        recommended_mode="auto",
+        rationale="",
     )
 
 
