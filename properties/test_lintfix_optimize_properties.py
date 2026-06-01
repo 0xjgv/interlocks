@@ -155,6 +155,18 @@ def test_search_returns_only_budget_fitting_conflict_free_plans(
         assert len(flattened_files) == len(set(flattened_files))
 
 
+@given(candidates())
+def test_search_can_select_all_fitting_non_conflicting_candidates(
+    items: tuple[Candidate, ...],
+) -> None:
+    budget = _budget_for_all(items)
+    expected = frozenset(index for index, candidate in enumerate(items) if candidate.selectable)
+
+    plans = _search(items, budget)
+
+    assert any(plan.selected == expected for plan in plans)
+
+
 @given(candidate=_CANDIDATE, overlaps=st.booleans())
 def test_try_extend_rejects_conflicts_and_extends_fitting_candidates(
     candidate: Candidate,

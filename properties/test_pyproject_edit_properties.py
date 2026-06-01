@@ -62,6 +62,16 @@ def test_array_scan_unquoted_plain_character_does_not_close(ch: str) -> None:
     assert scan.depth == 0
 
 
+@given(depth=st.integers(min_value=1, max_value=10))
+def test_array_scan_unquoted_closes_only_outer_array(depth: int) -> None:
+    scan = _ArrayValueScan(depth=depth)
+
+    closed = scan._consume_unquoted("]")
+
+    assert closed is (depth == 1)
+    assert scan.depth == depth - 1
+
+
 @given(before=_BODY_LINES, body=_BODY_LINES, after=_BODY_LINES)
 def test_mutmut_slice_returns_only_tool_mutmut_body(
     before: list[str],
@@ -102,3 +112,18 @@ tests_dir = ["tests/"]
 
     assert f"paths_to_mutate = {_format_array(replacement)}" in rewritten
     assert 'tests_dir = ["tests/"]' in rewritten
+
+
+@given(existing=_PATHS, replacement=_PATHS)
+def test_rewrite_is_idempotent_after_replacing_single_line_array(
+    existing: list[str],
+    replacement: list[str],
+) -> None:
+    source = f"""\
+[tool.mutmut]
+paths_to_mutate = {_format_array(existing)}
+"""
+
+    rewritten = _rewrite(source, replacement)
+
+    assert _rewrite(rewritten, replacement) == rewritten

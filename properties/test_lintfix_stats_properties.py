@@ -169,6 +169,18 @@ def test_aggregate_one_matches_generated_observation_model(
     assert stats.revert_signal == sum(1 for row in rows if row[4])
 
 
+@given(rule=st.sampled_from(["F401", "I001", "C4", "UNKNOWN999"]))
+def test_aggregate_one_preserves_policy_identity_with_no_observations(rule: str) -> None:
+    stats = _aggregate_one(rule, ())
+
+    assert stats.rule == rule
+    assert stats.prs_with_candidate == 0
+    assert stats.prs_helped == 0
+    assert stats.median_changed_lines == 0
+    assert stats.p95_outside_diff_lines == 0
+    assert stats.recommended_mode == stats.current_mode
+
+
 @given(helped=st.integers(min_value=0, max_value=20), p95=st.floats(min_value=0, max_value=50))
 def test_pareto_frontier_drops_strictly_dominated_rules(helped: int, p95: float) -> None:
     dominant = _stats(rule="F401", prs_helped=helped + 1, p95_outside=p95)
@@ -222,6 +234,22 @@ def test_recommend_prioritizes_unsafe_and_observation_floor(
         assert "floor=3" in rationale
     else:
         assert mode in {"auto", "escrow"}
+
+
+@given(revert_signal=st.integers(min_value=1, max_value=20))
+def test_recommend_demotes_reverted_auto_rules(revert_signal: int) -> None:
+    stats = _stats(
+        rule="F401",
+        current_mode="auto",
+        prs_with_candidate=3,
+        unsafe_seen=False,
+        revert_signal=revert_signal,
+    )
+
+    mode, rationale = _recommend(stats, on_frontier=True)
+
+    assert mode == "escrow"
+    assert "reverted" in rationale
 
 
 @given(exact=st.booleans(), on_frontier=st.booleans(), p95=st.floats(min_value=0, max_value=10))
