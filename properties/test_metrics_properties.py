@@ -451,6 +451,35 @@ def test_parse_lizard_extracts_generated_rows(
     ]
 
 
+@given(
+    before_name=_NAMES,
+    after_name=_NAMES,
+    start=st.integers(min_value=1, max_value=10_000),
+    path=_PATHS,
+)
+def test_parse_lizard_ignores_rows_after_warnings_block(
+    before_name: str,
+    after_name: str,
+    start: int,
+    path: str,
+) -> None:
+    before = f"10 2 50 1 10 {before_name}@{start}-{start + 3}@{path}"
+    after = f"20 4 50 2 10 {after_name}@{start + 10}-{start + 13}@{path}"
+    stdout = f"{before}\n!!!! Warnings !!!!\n{after}\n"
+
+    assert _parse_lizard(stdout) == [
+        FunctionStats(
+            path=path,
+            name=before_name,
+            start=start,
+            end=start + 3,
+            nloc=10,
+            ccn=2,
+            args=1,
+        )
+    ]
+
+
 @given(st.text(max_size=2_000))
 def test_parse_mutmut_results_never_returns_non_mutant_keys(stdout: str) -> None:
     parsed = _parse_results(stdout)

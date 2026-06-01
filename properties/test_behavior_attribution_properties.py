@@ -426,6 +426,42 @@ def test_classify_claims_matches_generated_claim_model(rows: list[tuple[str, str
 
 
 @given(
+    behavior_rows=st.lists(
+        st.tuples(_ID, st.booleans()),
+        max_size=12,
+        unique_by=lambda row: row[0],
+    ),
+    scenario_ids=st.lists(_ID, max_size=12, unique=True),
+)
+def test_classify_claims_ignores_unknown_and_symbol_less_behaviors(
+    behavior_rows: list[tuple[str, bool]],
+    scenario_ids: list[str],
+) -> None:
+    behaviors_by_id = {
+        behavior_id: _behavior(behavior_id, f"pkg:{behavior_id}" if has_symbol else None)
+        for behavior_id, has_symbol in behavior_rows
+    }
+    scenarios = tuple(
+        _scenario(behavior_id, line=index + 1) for index, behavior_id in enumerate(scenario_ids)
+    )
+
+    mis_attributed, gaps, claimed_ids, attributed_ids = _classify_claims(
+        behaviors_by_id, scenarios, None
+    )
+
+    expected_claimed = {
+        behavior_id
+        for behavior_id in scenario_ids
+        if behavior_id in behaviors_by_id
+        and behaviors_by_id[behavior_id].public_symbol is not None
+    }
+    assert mis_attributed == []
+    assert claimed_ids == expected_claimed
+    assert attributed_ids == set()
+    assert {failure.scenario.behavior_id for failure in gaps} == expected_claimed
+
+
+@given(
     live_ids=st.lists(_ID, max_size=12, unique=True),
     claimed_ids=st.lists(_ID, max_size=12, unique=True),
 )

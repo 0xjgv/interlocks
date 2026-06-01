@@ -6,11 +6,13 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
+from unittest.mock import patch
 
 from hypothesis import given
 from hypothesis import strategies as st
 
 from interlocks import cli as cli_mod
+from interlocks import ui
 from interlocks.cli import (
     _HELP_GROUPS,
     TASKS,
@@ -325,6 +327,15 @@ def test_resolve_task_name_uses_first_positional_and_aliases(
     raw_args = [*leading_flags, requested, *trailing_args]
 
     assert _resolve_task_name(raw_args) == expected
+
+
+@given(flags=st.lists(_KNOWN_CHECK_FLAG, max_size=6))
+def test_resolve_task_name_returns_none_when_only_flags(flags: list[str]) -> None:
+    with (
+        patch.object(ui, "is_json", return_value=False),
+        patch("interlocks.cli.cmd_help_from_argv"),
+    ):
+        assert _resolve_task_name(flags) is None
 
 
 @given(flags=st.lists(_KNOWN_CHECK_FLAG, max_size=6))

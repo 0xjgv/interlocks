@@ -198,6 +198,36 @@ def test_parse_post_image_hunks_returns_normalized_file_hunks(
     }
 
 
+@given(
+    path=_PATHS,
+    first_start=_LINES,
+    first_count=_COUNTS,
+    second_start=_LINES,
+    second_count=_COUNTS,
+)
+def test_parse_post_image_hunks_preserves_multiple_hunks_for_one_file(
+    path: str,
+    first_start: int,
+    first_count: int,
+    second_start: int,
+    second_count: int,
+) -> None:
+    patch = f"""\
+--- a/{path}
++++ b/{path}
+@@ -1,1 +{first_start},{first_count} @@
+@@ -2,1 +{second_start},{second_count} @@
+"""
+    expected = [
+        *_expected_hunks(first_start, first_count),
+        *_expected_hunks(second_start, second_count),
+    ]
+
+    assert _parse_post_image_hunks(patch, _HUNK_HEADER, start_group=1, count_group=2) == {
+        path: expected
+    }
+
+
 @given(path=_PATHS, old_start=_LINES, old_count=_COUNTS, new_start=_LINES, new_count=_COUNTS)
 def test_parse_diff_returns_post_image_ranges(
     path: str,

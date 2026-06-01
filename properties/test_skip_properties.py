@@ -110,3 +110,25 @@ def test_filter_tasks_removes_skipped_labels_in_order(
     assert [call.args[0] for call in warn_skipped.call_args_list] == [
         label for label in labels if label in skipped
     ]
+
+
+@given(
+    labels=st.lists(st.sampled_from(_KNOWN_LABELS), unique=True),
+    skipped=st.sets(st.sampled_from(_KNOWN_LABELS)),
+)
+def test_filter_tasks_uses_default_label_when_task_label_missing(
+    labels: list[str],
+    skipped: set[str],
+) -> None:
+    tasks = [Task(f"{label} task", ["noop"], label=None) for label in labels]
+    policy = SkipPolicy(frozenset(skipped), "cli")
+
+    with patch("interlocks.skip.warn_skipped") as warn_skipped:
+        filtered = filter_tasks(tasks, policy)
+
+    assert [task.description.split(" ", 1)[0] for task in filtered] == [
+        label for label in labels if label not in skipped
+    ]
+    assert [call.args[0] for call in warn_skipped.call_args_list] == [
+        label for label in labels if label in skipped
+    ]
