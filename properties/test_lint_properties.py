@@ -84,3 +84,21 @@ def test_progressive_lint_summary_derives_verdict_from_ruff_result(
     assert summary.reason is None
     assert summary.examples == (lines[:10] if not passed else ())
     assert summary.omitted == (max(0, len(lines) - 10) if not passed else 0)
+
+
+_NONBLANK_LINE = st.text(
+    alphabet=st.characters(blacklist_characters="\r\n", blacklist_categories=("Cc", "Cs")),
+    min_size=1,
+    max_size=80,
+).filter(lambda line: bool(line.strip()))
+
+
+@given(lines=st.lists(_NONBLANK_LINE, min_size=11, max_size=40))
+def test_progressive_lint_summary_caps_failure_examples(lines: list[str]) -> None:
+    stdout = "\n".join(lines)
+
+    summary = _progressive_lint_summary(1, stdout, cap=0)
+
+    assert summary.status == "failed"
+    assert summary.examples == tuple(lines[:10])
+    assert summary.omitted == len(lines) - 10

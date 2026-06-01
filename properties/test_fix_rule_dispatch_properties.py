@@ -96,6 +96,17 @@ def test_fix_rule_status_prioritizes_failure_then_mode(
         assert status == "auto-eligible"
 
 
+@given(apply=st.booleans(), returncode=st.integers().filter(bool))
+def test_fix_rule_status_failure_precedes_auto_apply_state(
+    apply: bool,
+    returncode: int,
+) -> None:
+    classification = _classification("I001", "auto", ())
+    args = fix_rule._FixRuleArgs("I001", apply, "origin/main", "unblock", ("interlocks", "ci"))
+
+    assert fix_rule._fix_rule_status(classification, args, returncode) == "apply-failed"
+
+
 @given(
     mode=_MODES,
     rule=_RULES,

@@ -12,6 +12,7 @@ from hypothesis import strategies as st
 from interlocks.config import SKIP_LABELS, InterlockConfig
 from interlocks.defaults_path import TOOL_CONFIG_SPECS, ToolConfigSource
 from interlocks.tasks.config import (
+    _RESOLVED_RENDERERS,
     CONFIG_KEYS,
     _config_state,
     _config_usage,
@@ -66,6 +67,16 @@ def test_resolved_properties_dir_uses_project_relative_label(relpath: str) -> No
 
         assert _resolved_value(cfg, "properties_dir") == relpath
         assert _current_label(cfg, "properties_dir") == relpath
+
+
+@given(key=st.sampled_from(sorted(_RESOLVED_RENDERERS)))
+def test_resolved_renderer_keys_return_display_safe_values(key: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        cfg = _cfg(Path(raw_root))
+
+        value = _resolved_value(cfg, key)
+
+    assert not isinstance(value, Path)
 
 
 @given(st.lists(st.sampled_from(sorted(SKIP_LABELS)), unique=True, max_size=8))

@@ -124,6 +124,15 @@ def test_sources_detail_matches_enabled_source_names(sources: dict[str, bool]) -
         assert detail == "sources=none"
 
 
+@given(names=st.lists(st.text(min_size=1, max_size=10), max_size=8, unique=True))
+def test_sources_detail_collapses_all_truthy_sources(names: list[str]) -> None:
+    sources = dict.fromkeys(names, "present")
+
+    detail = _sources_detail({"sources": sources})
+
+    assert detail == ("sources=all" if names else "sources=none")
+
+
 @given(st.dictionaries(st.text(max_size=20), _JSON, max_size=10))
 def test_fix_metrics_summaries_never_raise_on_json_objects(payload: dict[str, Any]) -> None:
     plan = _summarize_plan(payload)
