@@ -97,6 +97,9 @@ _PROPERTIES = ClosurePath(
     "interlocks properties", "task", "executes generated-input property tests"
 )
 _AUDIT = ClosurePath("interlocks audit", "task", "vulnerability audit owns severity policy")
+_MISSING_PYPROJECT_NEXT_ACTION = (
+    "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults."
+)
 
 
 def cmd_evaluate() -> None:
@@ -111,8 +114,13 @@ def cmd_evaluate() -> None:
         else:
             _print_unreadable_config_report(start)
         return
+    if not (cfg.project_root / "pyproject.toml").is_file():
+        if ui.is_json():
+            ui.print_json(_missing_pyproject_payload())
+        else:
+            _print_missing_pyproject_report(start)
+        return
     report = evaluate(cfg)
-    report_next_actions = _report_next_actions(cfg)
 
     if ui.is_json():
         payload: dict[str, object] = {
@@ -121,8 +129,6 @@ def cmd_evaluate() -> None:
             "verdict": report.verdict,
             "checks": [_check_json(item) for item in report.items],
         }
-        if report_next_actions:
-            payload["next_actions"] = list(report_next_actions)
         ui.print_json(payload)
         return
 
@@ -137,10 +143,7 @@ def cmd_evaluate() -> None:
     ])
 
     ui.section("Next Actions")
-    actions = [
-        *report_next_actions,
-        *[_format_action(item) for item in report.items if item.next_action is not None],
-    ]
+    actions = [_format_action(item) for item in report.items if item.next_action is not None]
     ui.message_list(actions, empty="No local evaluation gaps detected.")
     ui.command_footer(start)
 
@@ -154,6 +157,27 @@ def _print_unreadable_config_report(start: float) -> None:
     ui.section("Next Actions")
     ui.message_list(["Fix pyproject.toml syntax, then rerun `interlocks evaluate`."])
     ui.command_footer(start)
+
+
+def _print_missing_pyproject_report(start: float) -> None:
+    ui.command_banner("evaluate", None)
+    ui.section("Checklist")
+    print("  pyproject.toml missing — cannot evaluate local checklist yet.")
+    ui.section("Score")
+    ui.kv_block([("total", f"0 / {_MAX_TOTAL}"), ("verdict", "NEEDS WORK")])
+    ui.section("Next Actions")
+    ui.message_list([_MISSING_PYPROJECT_NEXT_ACTION])
+    ui.command_footer(start)
+
+
+def _missing_pyproject_payload() -> dict[str, object]:
+    return {
+        "command": "evaluate",
+        "score": {"earned": 0, "max": _MAX_TOTAL},
+        "verdict": "NEEDS WORK",
+        "checks": [],
+        "next_actions": [_MISSING_PYPROJECT_NEXT_ACTION],
+    }
 
 
 def evaluate(cfg: InterlockConfig) -> EvaluationReport:
@@ -179,14 +203,6 @@ def evaluate(cfg: InterlockConfig) -> EvaluationReport:
         max_total=max_total,
         verdict=_verdict(total, max_total),
     )
-
-
-def _report_next_actions(cfg: InterlockConfig) -> tuple[str, ...]:
-    if not (cfg.project_root / "pyproject.toml").is_file():
-        return (
-            "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults.",
-        )
-    return ()
 
 
 def _feature_files(cfg: InterlockConfig) -> list[Path]:

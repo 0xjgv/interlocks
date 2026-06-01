@@ -31,13 +31,13 @@ from interlocks.tasks.evaluate import (
     _format_action,
     _item,
     _latest_mutation_completed,
+    _missing_pyproject_payload,
     _mutation_item,
     _mutation_rerun_action,
     _pr_speed_evidence_action,
     _pr_speed_item,
     _properties_item,
     _read_ci_evidence,
-    _report_next_actions,
     _security_item,
     _tool_section,
     _verdict,
@@ -72,22 +72,16 @@ def _cfg(root: Path) -> InterlockConfig:
     )
 
 
-@given(has_pyproject=st.booleans())
-def test_report_next_actions_only_bootstraps_missing_pyproject(has_pyproject: bool) -> None:
-    with TemporaryDirectory() as raw_root:
-        root = Path(raw_root)
-        if has_pyproject:
-            (root / "pyproject.toml").write_text(
-                "[project]\nname = 'probe'\nversion = '0.0.0'\n",
-                encoding="utf-8",
-            )
-        cfg = _cfg(root)
+def test_missing_pyproject_payload_stops_before_scorecard_checks() -> None:
+    payload = _missing_pyproject_payload()
 
-        actions = _report_next_actions(cfg)
-
-    assert bool(actions) is not has_pyproject
-    if actions:
-        assert "interlocks init" in actions[0]
+    assert payload["command"] == "evaluate"
+    assert payload["score"] == {"earned": 0, "max": evaluate_mod._MAX_TOTAL}
+    assert payload["verdict"] == "NEEDS WORK"
+    assert payload["checks"] == []
+    assert payload["next_actions"] == [
+        "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults."
+    ]
 
 
 @given(

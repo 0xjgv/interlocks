@@ -1100,6 +1100,9 @@ def test_evaluate_json_without_pyproject_reports_init_next_action(
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "evaluate"
+    assert payload["score"] == {"earned": 0, "max": evaluate_mod._MAX_TOTAL}
+    assert payload["verdict"] == "NEEDS WORK"
+    assert payload["checks"] == []
     assert payload["next_actions"] == [
         "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults."
     ]
@@ -1117,8 +1120,8 @@ def test_evaluate_human_without_pyproject_reports_init_next_action(
 
     out = capsys.readouterr().out
     assert "Run `interlocks init` to scaffold pyproject.toml" in out
-    next_actions = out.split("Next Actions", maxsplit=1)[1]
-    assert next_actions.index("Run `interlocks init`") < next_actions.index("[acceptance]")
+    assert "[acceptance]" not in out
+    assert "[properties]" not in out
 
 
 def test_evaluate_check_json_serializes_optional_action_and_closure() -> None:
