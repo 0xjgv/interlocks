@@ -45,11 +45,8 @@ def cmd_config() -> None:
     # `--json` is a declared global output flag for `config`; consume it here so
     # it never trips the positional-arg validation. Mode is read via `ui.is_json()`.
     args = [arg for arg in subcommand_args("config") if arg != "--json"]
-    if args and args[0] == "show":
-        _cmd_config_show(args[1:])
+    if _handle_config_subcommand(args):
         return
-    if args:
-        _fail_config_usage()
     project_root = find_project_root()
     pyproject = project_root / "pyproject.toml"
     cfg = load_optional_config() if pyproject.is_file() else None
@@ -58,9 +55,23 @@ def cmd_config() -> None:
     if ui.is_json():
         _print_config_json(cfg, pyproject, state=state)
         return
+    _print_config_human(cfg, pyproject_present=pyproject.is_file(), state=state)
 
+
+def _handle_config_subcommand(args: list[str]) -> bool:
+    if args and args[0] == "show":
+        _cmd_config_show(args[1:])
+        return True
+    if args:
+        _fail_config_usage()
+    return False
+
+
+def _print_config_human(
+    cfg: InterlockConfig | None, *, pyproject_present: bool, state: ConfigState
+) -> None:
     ui.section("Status")
-    _print_status(cfg, pyproject_present=pyproject.is_file())
+    _print_status(cfg, pyproject_present=pyproject_present)
 
     ui.section("Config keys")
     _print_keys(cfg, state=state)
@@ -80,7 +91,7 @@ def cmd_config() -> None:
         print(line)
 
     ui.section("Next steps")
-    _print_next_steps(cfg, pyproject_present=pyproject.is_file())
+    _print_next_steps(cfg, pyproject_present=pyproject_present)
 
 
 def _config_state(cfg: InterlockConfig | None, *, pyproject_present: bool) -> ConfigState:

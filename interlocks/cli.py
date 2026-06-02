@@ -127,31 +127,33 @@ def cmd_task_help(task_name: str) -> None:
 
 
 def cmd_gate_help() -> None:
-    names = _nested_command_names("gate")
-    if ui.is_json():
-        ui.print_json({
-            **_task_help_payload("gate"),
-            "subcommands": [_help_command_payload(name) for name in names],
-        })
-        return
-    cmd_task_help("gate")
-    ui.section("Gates")
-    width = max(len(name) for name in names) + 2
-    for name in names:
-        _, description = TASKS[name]
-        _print_command_row(name, description, width)
+    _cmd_nested_help("gate", "Gates")
 
 
 def cmd_hook_help() -> None:
-    names = _nested_command_names("hook")
+    _cmd_nested_help("hook", "Hooks")
+
+
+def _cmd_nested_help(parent: str, section: str) -> None:
+    names = _nested_command_names(parent)
+    if _emit_nested_help_json(parent, names):
+        return
+    cmd_task_help(parent)
+    ui.section(section)
+    _print_nested_commands(names)
+
+
+def _emit_nested_help_json(parent: str, names: tuple[str, ...]) -> bool:
     if ui.is_json():
         ui.print_json({
-            **_task_help_payload("hook"),
+            **_task_help_payload(parent),
             "subcommands": [_help_command_payload(name) for name in names],
         })
-        return
-    cmd_task_help("hook")
-    ui.section("Hooks")
+        return True
+    return False
+
+
+def _print_nested_commands(names: tuple[str, ...]) -> None:
     width = max(len(name) for name in names) + 2
     for name in names:
         _, description = TASKS[name]

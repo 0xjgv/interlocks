@@ -936,20 +936,20 @@ def _doc(name: str) -> CommandDoc:
 def _route_doc(
     source_name: str,
     route_name: str,
-    *,
-    usage: str | None = None,
-    summary: str | None = None,
-    when_to_use: str | None = None,
-    mutates_note: str | None = None,
+    **overrides: str | None,
 ) -> CommandDoc:
     source = _doc(source_name)
     return replace(
         source,
         name=route_name,
-        summary=summary or source.summary,
-        when_to_use=when_to_use or source.when_to_use,
-        usage=usage or route_name,
-        mutates_note=source.mutates_note if mutates_note is None else mutates_note,
+        summary=overrides.get("summary") or source.summary,
+        when_to_use=overrides.get("when_to_use") or source.when_to_use,
+        usage=overrides.get("usage") or route_name,
+        mutates_note=(
+            source.mutates_note
+            if overrides.get("mutates_note") is None
+            else overrides["mutates_note"]
+        ),
     )
 
 

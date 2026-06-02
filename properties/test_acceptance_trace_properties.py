@@ -136,10 +136,14 @@ def test_format_trace_evidence_sections_follow_loaded_evidence(
     reached_flags: list[bool],
     failure: str | None,
 ) -> None:
-    pairs = tuple(
-        TraceSymbolEvidence(symbol, reached_flags[index % len(reached_flags)])
-        for index, symbol in enumerate(symbols)
-    ) if reached_flags else tuple(TraceSymbolEvidence(symbol, False) for symbol in symbols)
+    pairs = (
+        tuple(
+            TraceSymbolEvidence(symbol, reached_flags[index % len(reached_flags)])
+            for index, symbol in enumerate(symbols)
+        )
+        if reached_flags
+        else tuple(TraceSymbolEvidence(symbol, False) for symbol in symbols)
+    )
     evidence = AcceptanceTraceEvidence(pairs, failure)
 
     message = format_trace_evidence(evidence)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import asdict
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -29,10 +29,12 @@ from interlocks.lintfix.optimize import (
     candidates_from_plan,
     optimize,
 )
-from interlocks.lintfix.rules import Mode
 from interlocks.lintfix.stats import RuleStats
 from interlocks.lintfix.verify import BatchVerifyResult
 from interlocks.tasks import fix_optimize as fix_optimize_mod
+
+if TYPE_CHECKING:
+    from interlocks.lintfix.rules import Mode
 
 
 @st.composite

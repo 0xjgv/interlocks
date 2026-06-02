@@ -150,10 +150,10 @@ def test_fix_optimize_explicit_falsey_options_still_override_argv(apply: bool) -
     ):
         resolved = fix_optimize._resolve_options("", "", apply, "", ())
 
-    assert resolved.base == ""
-    assert resolved.budget_name == ""
+    assert not resolved.base
+    assert not resolved.budget_name
     assert resolved.apply is apply
-    assert resolved.stats_path == ""
+    assert not resolved.stats_path
     assert resolved.verify_cmd == ()
 
 
@@ -184,7 +184,7 @@ def test_fix_optimize_argv_budget_precedence(
 
     assert resolved.base == base
     assert resolved.budget_name == ("renovation" if renovate else mutation_budget)
-    assert resolved.stats_path == ""
+    assert not resolved.stats_path
 
 
 @given(verify_cmd=_VERIFY_CMDS)

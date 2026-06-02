@@ -1071,7 +1071,7 @@ def test_contract_type_lowercases_string_type_only(value: object) -> None:
 def test_contract_type_is_empty_without_string_type(contract: dict[str, object]) -> None:
     contract.pop("type", None)
 
-    assert _contract_type(contract) == ""
+    assert not _contract_type(contract)
 
 
 def _complexity_score_action_for(

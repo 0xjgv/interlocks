@@ -170,13 +170,14 @@ def test_property_coverage_command_preserves_coverage_run_order(
     profile: str,
     coverage_args: list[str],
 ) -> None:
+    project = Path("generated-project")
     cfg = InterlockConfig(
-        project_root=Path("/tmp/project"),
-        src_dir=Path("/tmp/project/pkg"),
-        test_dir=Path("/tmp/project/tests"),
+        project_root=project,
+        src_dir=project / "pkg",
+        test_dir=project / "tests",
         test_runner="pytest",
         test_invoker="python",
-        properties_dir=Path("/tmp/project/properties"),
+        properties_dir=project / "properties",
     )
 
     cmd = _coverage_property_test_command(
@@ -187,7 +188,7 @@ def test_property_coverage_command_preserves_coverage_run_order(
 
     run_index = cmd.index("run")
     append_index = cmd.index(_COVERAGE_APPEND_FLAG)
-    runner_index = cmd.index("/tmp/project/.interlocks/property_coverage_runner.py")
+    runner_index = cmd.index(str(project / ".interlocks" / "property_coverage_runner.py"))
     profile_index = cmd.index(f"--hypothesis-profile={profile}")
     assert cmd[run_index - 1] == "coverage"
     assert run_index < append_index < runner_index < profile_index

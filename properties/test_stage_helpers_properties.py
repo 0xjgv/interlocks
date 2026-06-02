@@ -56,17 +56,17 @@ def test_parallel_tasks_keeps_non_none_optional_tasks_in_order(
         ),
         patch.object(check_stage, "_acceptance_task", lambda _cfg, _scope: maybe(2)),
         patch.object(check_stage, "_properties_task", lambda _cfg, _scope: maybe(3)),
+        TemporaryDirectory() as raw_root,
     ):
-        with TemporaryDirectory() as raw_root:
-            root = Path(raw_root)
-            cfg = InterlockConfig(
-                project_root=root,
-                src_dir=root / "src",
-                test_dir=root / "tests",
-                test_runner="pytest",
-                test_invoker="python",
-            )
-            resolved = check_stage._parallel_tasks(cfg, scope_ref, scoped_files)
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        resolved = check_stage._parallel_tasks(cfg, scope_ref, scoped_files)
 
     assert resolved == [task for index, task in enumerate(tasks) if present[index]]
 
@@ -117,17 +117,17 @@ def test_parallel_tasks_threads_scope_and_dependent_tasks(
         patch.object(check_stage, "_acceptance_task", fake_acceptance),
         patch.object(check_stage, "_properties_task", fake_properties),
         patch.object(check_stage, "_test_task", fake_test),
+        TemporaryDirectory() as raw_root,
     ):
-        with TemporaryDirectory() as raw_root:
-            root = Path(raw_root)
-            cfg = InterlockConfig(
-                project_root=root,
-                src_dir=root / "src",
-                test_dir=root / "tests",
-                test_runner="pytest",
-                test_invoker="python",
-            )
-            resolved = check_stage._parallel_tasks(cfg, scope_ref, scoped_files)
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        resolved = check_stage._parallel_tasks(cfg, scope_ref, scoped_files)
 
     assert seen == {
         "typecheck_files": scoped_files,
@@ -338,7 +338,7 @@ def test_test_task_matches_readiness_scope_and_ignore_args(
         with (
             patch.object(check_stage, "project_env_ready", lambda _cfg: ready),
             patch.object(check_stage, "task_test", fake_task_test),
-            patch.object(check_stage, "warn_skip", lambda message: skipped.append(message)),
+            patch.object(check_stage, "warn_skip", skipped.append),
             patch.object(
                 check_stage,
                 "record_skip",
@@ -402,19 +402,19 @@ def test_acceptance_task_matches_readiness_scope_and_classification(
         ),
         patch.object(check_stage, "task_acceptance_with_attribution", lambda _cfg: runnable),
         patch.object(check_stage, "acceptance_failure_task", lambda _classification: failure),
+        TemporaryDirectory() as raw_root,
     ):
-        with TemporaryDirectory() as raw_root:
-            root = Path(raw_root)
-            cfg = InterlockConfig(
-                project_root=root,
-                src_dir=root / "src",
-                test_dir=root / "tests",
-                test_runner="pytest",
-                test_invoker="python",
-                run_acceptance_in_check=run_in_check,
-            )
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            run_acceptance_in_check=run_in_check,
+        )
 
-            task = check_stage._acceptance_task(cfg, scope_ref)
+        task = check_stage._acceptance_task(cfg, scope_ref)
 
     if not ready or not run_in_check or scope_ref is not None:
         assert task is None

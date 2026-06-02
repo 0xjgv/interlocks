@@ -178,10 +178,13 @@ def test_duplicate_behavior_ids_depends_only_on_behavior_id(
     duplicate_index: int,
 ) -> None:
     duplicate = ids[duplicate_index % len(ids)]
-    behaviors = tuple(
-        Behavior(behavior_id, f"task-{index}", f"title-{index}")
-        for index, behavior_id in enumerate(ids)
-    ) + (Behavior(duplicate, "different-task", "different-title"),)
+    behaviors = (
+        *(
+            Behavior(behavior_id, f"task-{index}", f"title-{index}")
+            for index, behavior_id in enumerate(ids)
+        ),
+        Behavior(duplicate, "different-task", "different-title"),
+    )
 
     assert _duplicate_behavior_ids(behaviors) == (duplicate,)
 

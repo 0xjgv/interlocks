@@ -41,6 +41,7 @@ from interlocks.tasks.acceptance import task_acceptance_with_attribution
 from interlocks.tasks.behavior_attribution import cmd_behavior_attribution_cached_advisory
 from interlocks.tasks.crap import cmd_crap_cached_advisory
 from interlocks.tasks.deps import task_deps
+from interlocks.tasks.lint import task_lint
 from interlocks.tasks.properties import task_properties
 from interlocks.tasks.test import task_test
 from interlocks.tasks.typecheck import task_typecheck
@@ -91,9 +92,12 @@ def _run_check_sections(
     skip_policy: SkipPolicy,
 ) -> None:
     ui.section("Quality Checks")
-    _run_budgeted_mutation(base=scope_ref or "HEAD", skip_policy=skip_policy)
+    base = scope_ref or "HEAD"
+    _run_budgeted_mutation(base=base, skip_policy=skip_policy)
     ui.section("Parallel")
-    run_tasks(_parallel_tasks(cfg, scope_ref, scoped_files))
+    run_tasks(
+        _parallel_tasks(cfg, scope_ref, scoped_files, _residual_lint_files(base, scoped_files))
+    )
     ui.section("Advisory")
     _run_advisory(scope_ref, scoped_files, skip_policy)
 
@@ -119,17 +123,27 @@ def _print_scope(scope_ref: str | None, scoped_files: list[str] | None) -> None:
 
 
 def _parallel_tasks(
-    cfg: InterlockConfig, scope_ref: str | None, scoped_files: list[str] | None
+    cfg: InterlockConfig,
+    scope_ref: str | None,
+    scoped_files: list[str] | None,
+    residual_lint_files: list[str] | None = None,
 ) -> list[Task]:
     acceptance = _acceptance_task(cfg, scope_ref)
     properties = _properties_task(cfg, scope_ref)
     optional = (
+        task_lint(residual_lint_files) if residual_lint_files else None,
         task_typecheck(scoped_files),
         _test_task(cfg, scope_ref, acceptance, properties),
         acceptance,
         properties,
     )
     return [t for t in optional if t is not None]
+
+
+def _residual_lint_files(base: str, scoped_files: list[str] | None) -> list[str]:
+    if scoped_files is not None:
+        return scoped_files
+    return sorted(changed_py_files_vs(base))
 
 
 def _test_task(

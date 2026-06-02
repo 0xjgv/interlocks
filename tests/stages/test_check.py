@@ -78,9 +78,9 @@ def tmp_project(make_tmp_project: TmpProjectFactory) -> Path:
     )
 
 
-def _run_check(cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_check(cwd: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-P", "-m", "interlocks.cli", "check"],
+        [sys.executable, "-P", "-m", "interlocks.cli", "check", *extra],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -291,7 +291,7 @@ def test_check_skips_format_when_micro_budget_would_touch_outside_hunk(tmp_proje
     )
     (tmp_project / "interlocks" / "core.py").write_text(dirty, encoding="utf-8")
 
-    result = _run_check(tmp_project)
+    result = _run_check(tmp_project, "--skip=lint")
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     payload = json.loads((tmp_project / ".lintfix" / "optimize.json").read_text(encoding="utf-8"))

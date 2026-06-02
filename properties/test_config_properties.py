@@ -612,7 +612,7 @@ def test_complete_value_sources_covers_all_default_and_override_keys(
 
     complete = _complete_value_sources(sources, table, overrides=overrides)
 
-    assert _DEFAULT_VALUE_SOURCE_KEYS <= complete.keys()
+    assert complete.keys() >= _DEFAULT_VALUE_SOURCE_KEYS
     assert sources.keys() <= complete.keys()
     assert overrides.keys() <= complete.keys()
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import suppress
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
@@ -357,10 +358,9 @@ def test_help_groups_payload_preserves_declared_group_order(advanced: bool) -> N
     assert [group["name"] for group in payload] == [
         group_name for group_name, _names in expected_groups
     ]
-    assert [
-        [command["name"] for command in group["commands"]]
-        for group in payload
-    ] == [list(names) for _group_name, names in expected_groups]
+    assert [[command["name"] for command in group["commands"]] for group in payload] == [
+        list(names) for _group_name, names in expected_groups
+    ]
 
 
 @given(advanced=st.booleans())
@@ -419,11 +419,11 @@ def test_resolve_task_name_reports_unknown_first_positional(
     command: str,
     leading_flags: list[str],
 ) -> None:
-    with patch("interlocks.cli._fail_unknown_command", side_effect=RuntimeError) as fail_unknown:
-        try:
-            _resolve_task_name([*leading_flags, command, "check"])
-        except RuntimeError:
-            pass
+    with (
+        patch("interlocks.cli._fail_unknown_command", side_effect=RuntimeError) as fail_unknown,
+        suppress(RuntimeError),
+    ):
+        _resolve_task_name([*leading_flags, command, "check"])
 
     assert fail_unknown.call_args is not None
     assert fail_unknown.call_args.args == (command,)

@@ -250,7 +250,7 @@ def test_glyph_and_color_helpers_strip_color_when_color_disabled(char: str, colo
     runner_mod.ui.use_color = lambda: False  # type: ignore[assignment]
     try:
         assert _glyph(char, color) == char
-        assert _c(color) == ""
+        assert not _c(color)
     finally:
         runner_mod.ui.use_color = original
 
@@ -439,7 +439,7 @@ def test_stage_json_omits_evidence_path_only_for_none(
     with_empty_evidence = stage_json(command, passed=passed, elapsed=elapsed, evidence_path="")
 
     assert "evidence_path" not in without_evidence
-    assert with_empty_evidence["evidence_path"] == ""
+    assert not with_empty_evidence["evidence_path"]
 
 
 @given(command=st.text(min_size=1, max_size=30), error=st.text(min_size=1, max_size=120))
@@ -487,7 +487,7 @@ def test_default_display_is_single_line_and_hides_config_paths(head: str, rest: 
 
 
 def test_default_display_returns_empty_string_for_empty_command() -> None:
-    assert _default_display([]) == ""
+    assert not _default_display([])
 
 
 @given(
@@ -556,11 +556,11 @@ def test_is_python_module_invocation_requires_python_m_and_module(
         alphabet=string.ascii_letters + string.digits + "_.-",
         min_size=1,
         max_size=20,
-    ).filter(lambda value: value not in {"python", "python3", Path(sys.executable).name}),
+    ).filter(lambda value: value not in {"python", "python3", Path(sys.executable).name, "."}),
     tail=st.lists(_DISPLAY_TOKEN, max_size=8),
 )
 def test_display_head_uses_basename_for_non_python_commands(head: str, tail: list[str]) -> None:
-    cmd = [f"/tmp/tools/{head}", *tail]
+    cmd = [f"/workspace/tools/{head}", *tail]
 
     assert _display_head_and_rest(cmd) == (head, tail)
 
@@ -570,10 +570,10 @@ def test_display_head_uses_basename_for_non_python_commands(head: str, tail: lis
         alphabet=string.ascii_letters + string.digits + "_.-",
         min_size=1,
         max_size=20,
-    ).filter(lambda value: value not in {"python", "python3", Path(sys.executable).name})
+    ).filter(lambda value: value not in {"python", "python3", Path(sys.executable).name, "."})
 )
 def test_display_head_handles_single_non_python_command(head: str) -> None:
-    assert _display_head_and_rest([f"/tmp/tools/{head}"]) == (head, [])
+    assert _display_head_and_rest([f"/workspace/tools/{head}"]) == (head, [])
 
 
 @given(
@@ -748,7 +748,7 @@ def test_parallel_json_start_statuses_are_silent_outside_json_mode(tasks: list[T
     finally:
         sys.argv = original
 
-    assert err.getvalue() == ""
+    assert not err.getvalue()
 
 
 @given(st.text(max_size=300))

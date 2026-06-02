@@ -111,7 +111,7 @@ def test_dir_prefix_adds_slash_only_for_non_root_dirs(directory: str) -> None:
 def test_dir_prefix_output_is_empty_or_single_slash_terminated(directory: str) -> None:
     prefix = mutation._dir_prefix(directory)
 
-    assert prefix == "" or prefix.endswith("/")
+    assert not prefix or prefix.endswith("/")
     assert not prefix.endswith("//")
 
 

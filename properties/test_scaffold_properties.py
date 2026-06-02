@@ -80,7 +80,7 @@ def test_next_actions_without_declared_dependency_removes_all_dependency_actions
     extra_actions: list[str],
 ) -> None:
     action = "Add pytest-bdd."
-    actions = tuple([action, *extra_actions, action])
+    actions = (action, *extra_actions, action)
 
     result = next_actions_without_declared_dependency(
         {"dependency-groups": {"dev": ["pytest-bdd>=8"]}},

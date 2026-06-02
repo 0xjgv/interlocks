@@ -449,25 +449,35 @@ def _next_steps(
 def _blocked_next_steps(rows: list[CheckRow], blockers: tuple[str, ...]) -> list[str]:
     by_label = {row.label: row for row in rows}
     steps: list[str] = []
-    if _is_fail(by_label, "pyproject"):
-        steps.append(
-            "Run `interlocks init` to scaffold a project, then rerun `interlocks doctor`."
-        )
-    if _is_fail(by_label, "src dir") or _is_fail(by_label, "test dir"):
-        steps.append(
-            "Create the missing source/test paths or update `[tool.interlocks]`, "
-            "then rerun `interlocks doctor`."
-        )
-    if _is_fail(by_label, "venv"):
-        steps.append(
-            "Create a project environment (`uv sync`, or "
-            "`python -m venv .venv && pip install -e .`), then rerun `interlocks doctor`."
-        )
-    if any("unsupported preset" in blocker for blocker in blockers):
-        steps.append("Choose a supported preset, then rerun `interlocks doctor`.")
-    if any("cannot read" in blocker for blocker in blockers):
-        steps.append("Fix `pyproject.toml`, then rerun `interlocks doctor`.")
+    for labels, message in _BLOCKED_ROW_STEPS:
+        if any(_is_fail(by_label, label) for label in labels):
+            steps.append(message)
+    for needle, message in _BLOCKED_BLOCKER_STEPS:
+        if any(needle in blocker for blocker in blockers):
+            steps.append(message)
     return steps or ["Fix blockers in Setup Checklist above, then rerun `interlocks doctor`."]
+
+
+_BLOCKED_ROW_STEPS = (
+    (
+        ("pyproject",),
+        "Run `interlocks init` to scaffold a project, then rerun `interlocks doctor`.",
+    ),
+    (
+        ("src dir", "test dir"),
+        "Create the missing source/test paths or update `[tool.interlocks]`, "
+        "then rerun `interlocks doctor`.",
+    ),
+    (
+        ("venv",),
+        "Create a project environment (`uv sync`, or "
+        "`python -m venv .venv && pip install -e .`), then rerun `interlocks doctor`.",
+    ),
+)
+_BLOCKED_BLOCKER_STEPS = (
+    ("unsupported preset", "Choose a supported preset, then rerun `interlocks doctor`."),
+    ("cannot read", "Fix `pyproject.toml`, then rerun `interlocks doctor`."),
+)
 
 
 def _is_warn(by_label: dict[str, CheckRow], label: str) -> bool:

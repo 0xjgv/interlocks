@@ -460,7 +460,7 @@ def test_count_sentence_reports_only_present_counts(count: int, label: str) -> N
 
 @given(label=st.text(min_size=1, max_size=40))
 def test_count_sentence_omits_zero_counts(label: str) -> None:
-    assert stats._count_sentence(0, label) == ""
+    assert not stats._count_sentence(0, label)
 
 
 @given(coverage=st.one_of(st.none(), _PERCENT_FLOAT), coverage_min=_PERCENT_FLOAT)
@@ -477,9 +477,9 @@ def test_coverage_gap_sentence_reports_only_configured_shortfalls(
 
 @given(coverage=_PERCENT_FLOAT)
 def test_coverage_gap_sentence_omits_equal_or_disabled_floor(coverage: float) -> None:
-    assert stats._coverage_gap_sentence(coverage, coverage) == ""
-    assert stats._coverage_gap_sentence(coverage, 0.0) == ""
-    assert stats._coverage_gap_sentence(None, coverage) == ""
+    assert not stats._coverage_gap_sentence(coverage, coverage)
+    assert not stats._coverage_gap_sentence(coverage, 0.0)
+    assert not stats._coverage_gap_sentence(None, coverage)
 
 
 @given(
@@ -518,12 +518,12 @@ def test_mutation_gap_sentence_reports_only_configured_shortfalls(
 def test_mutation_gap_sentence_accepts_exact_floor(score: float) -> None:
     mutation = MutationSummary(killed=1, survived=1, timeout=0, score=score, completed=True)
 
-    assert stats._mutation_gap_sentence(mutation, score) == ""
+    assert not stats._mutation_gap_sentence(mutation, score)
 
 
 @given(floor=st.floats(max_value=0, allow_nan=False, allow_infinity=False))
 def test_mutation_gap_sentence_disabled_floor_suppresses_missing_mutation(floor: float) -> None:
-    assert stats._mutation_gap_sentence(None, floor) == ""
+    assert not stats._mutation_gap_sentence(None, floor)
 
 
 @given(
