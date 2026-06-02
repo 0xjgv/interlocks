@@ -161,6 +161,13 @@ def test_normalize_traceback_collapses_all_external_frames(count: int) -> None:
     assert normalized == (() if count == 0 else (ExternalFrames(count=count),))
 
 
+@given(tail=st.lists(_PATH_SEGMENTS, max_size=5))
+def test_normalize_traceback_none_is_empty_with_any_project_root(tail: list[str]) -> None:
+    project_root = Path("project", *tail)
+
+    assert normalize_traceback(None, project_root=project_root) == ()
+
+
 @given(tail=st.lists(_PATH_SEGMENTS, min_size=1, max_size=5))
 def test_is_interlocks_frame_matches_installed_package_prefix(tail: list[str]) -> None:
     pkg_root = Path(interlocks.__file__).resolve().parent

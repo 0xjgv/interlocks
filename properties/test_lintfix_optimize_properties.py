@@ -203,6 +203,13 @@ def test_search_can_select_all_fitting_non_conflicting_candidates(
     assert any(plan.selected == expected for plan in plans)
 
 
+@given(candidates())
+def test_search_never_selects_non_selectable_candidates(items: tuple[Candidate, ...]) -> None:
+    plans = _search(items, _budget_for_all(items))
+
+    assert all(items[index].selectable for plan in plans for index in plan.selected)
+
+
 @given(candidate=_CANDIDATE, overlaps=st.booleans())
 def test_try_extend_rejects_conflicts_and_extends_fitting_candidates(
     candidate: Candidate,

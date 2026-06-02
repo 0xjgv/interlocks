@@ -655,6 +655,13 @@ def test_format_attribution_failure_line_count_matches_sections(
     assert line_count == expected
 
 
+def test_format_attribution_failure_empty_result_is_single_header() -> None:
+    assert (
+        format_attribution_failure(AttributionResult())
+        == "behavior-attribution: scenario claims do not match runtime evidence"
+    )
+
+
 @given(ids=st.lists(_ID, max_size=8, unique=True))
 def test_attribution_formatter_helpers_emit_one_detail_per_item(ids: list[str]) -> None:
     failures = tuple(

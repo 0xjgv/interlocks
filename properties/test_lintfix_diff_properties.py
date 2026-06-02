@@ -101,6 +101,24 @@ def test_capture_diff_header_registers_normalized_post_image_path(path: str) -> 
     assert by_file == {path: []}
 
 
+@given(_LINE_TEXT.filter(lambda line: not line.startswith(("diff --git a/", "--- ", "+++ "))))
+def test_capture_diff_header_rejects_non_headers_without_mutation(line: str) -> None:
+    state = _DiffParseState(
+        current_path="current.py",
+        old_header_path="a/current.py",
+        git_post_path="current.py",
+    )
+    by_file = {"current.py": [Hunk(1, 1)]}
+
+    assert not _capture_diff_header(line, state, by_file)
+    assert state == _DiffParseState(
+        current_path="current.py",
+        old_header_path="a/current.py",
+        git_post_path="current.py",
+    )
+    assert by_file == {"current.py": [Hunk(1, 1)]}
+
+
 @given(path=_PATHS, b_prefix=st.booleans(), metadata=_LINE_TEXT)
 def test_post_image_path_extracts_git_headers(
     path: str,
@@ -390,6 +408,28 @@ def test_deleted_numstat_removed_never_raises(raw: str) -> None:
 @given(removed=st.integers(min_value=0, max_value=1_000_000), path=_PATHS)
 def test_deleted_numstat_removed_extracts_python_deletions(removed: int, path: str) -> None:
     assert _deleted_numstat_removed(f"0\t{removed}\t{path}") == removed
+
+
+def test_add_numstat_line_ignores_binary_rows_without_mutation() -> None:
+    totals = _AuthorEditTotals(additions=1, deletions=2, replacement_pairs=3, deleted_file_lines=4)
+
+    counted = _add_numstat_line(totals, "-\t-\tdeleted.py", {"deleted.py"})
+
+    assert counted is None
+    assert totals == _AuthorEditTotals(
+        additions=1,
+        deletions=2,
+        replacement_pairs=3,
+        deleted_file_lines=4,
+    )
+
+
+@given(removed=st.integers(min_value=0, max_value=1_000_000), path=_NON_PY_PATHS)
+def test_deleted_numstat_removed_ignores_non_python_deletions(
+    removed: int,
+    path: str,
+) -> None:
+    assert _deleted_numstat_removed(f"0\t{removed}\t{path}") == 0
 
 
 @given(base=st.text(max_size=30), stdout=st.text(max_size=200))

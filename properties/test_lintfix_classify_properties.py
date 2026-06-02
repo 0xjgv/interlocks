@@ -114,6 +114,22 @@ def test_classify_projects_measured_cost_and_rule_identity(
     assert result.cost.unsafe is unsafe
 
 
+@given(path=_PATHS, mode=_MODES)
+def test_classify_patch_id_includes_measured_files(path: str, mode: str) -> None:
+    patch_text = f"+++ {path}\n@@ -1 +1 @@\n+generated\n"
+    budget = Budget("generated", 10_000, 10_000, 10_000, 10_000, allow_unsafe_fixes=True)
+
+    result = classify(
+        patch_text=patch_text,
+        diff_hunks={},
+        policy=RulePolicy("PX", mode, "other", 0),  # type: ignore[arg-type]
+        budget=budget,
+    )
+
+    assert result.metrics.files_touched == (path,)
+    assert result.patch_id == f"PX:{path}"
+
+
 @given(mode=_MODES, unsafe=st.booleans(), changed_lines=st.integers(min_value=0, max_value=10))
 def test_decide_prioritizes_unsafe_empty_patch_policy_and_budget(
     mode: str,
@@ -377,3 +393,8 @@ def test_path_risk_modifier_is_bounded(path: str) -> None:
 @given(path=_PATHS)
 def test_path_risk_modifier_scores_migrations_as_risky(path: str) -> None:
     assert _path_risk_modifier(f"app/migrations/{path}") >= 8
+
+
+def test_path_risk_modifier_discounts_plain_test_paths() -> None:
+    assert _path_risk_modifier("pkg/example.py") == 0
+    assert _path_risk_modifier("tests/example.py") == -2

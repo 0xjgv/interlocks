@@ -135,6 +135,25 @@ _DUMP_LINE = st.text(
 )
 
 
+@given(
+    flag=st.from_regex(r"--[a-z][a-z0-9-]{0,20}", fullmatch=True),
+    default=st.text(max_size=20),
+    args=st.lists(_ARGV_TOKEN, max_size=12),
+)
+def test_arg_flag_value_returns_none_when_flag_absent(
+    flag: str,
+    default: str,
+    args: list[str],
+) -> None:
+    absent_args = [arg for arg in args if arg != flag and not arg.startswith(f"{flag}=")]
+    old_argv = sys.argv
+    try:
+        sys.argv = ["interlocks", *absent_args]
+        assert arg_flag_value(flag, default) is None
+    finally:
+        sys.argv = old_argv
+
+
 def _captured_dump_and_exit(
     rc: int, stdout: str | None, stderr: str | None
 ) -> tuple[int | str | None, str]:
@@ -472,6 +491,16 @@ def test_clean_display_args_preserves_benign_args(args: list[str]) -> None:
 
 
 @given(
+    prefix=st.lists(_BENIGN_DISPLAY_TOKEN, max_size=8), flag=st.sampled_from(_CONFIG_PATH_FLAGS)
+)
+def test_clean_display_args_removes_dangling_config_path_flag(
+    prefix: list[str],
+    flag: str,
+) -> None:
+    assert _clean_display_args([*prefix, flag]) == prefix
+
+
+@given(
     module=st.from_regex(r"[A-Za-z_][A-Za-z0-9_.]{0,30}", fullmatch=True),
     tail=st.lists(_DISPLAY_TOKEN, max_size=8),
 )
@@ -570,6 +599,10 @@ def test_merged_env_single_override_does_not_mutate_process_env(key: str) -> Non
     assert merged[key] == "generated"
 
 
+def test_merged_env_empty_env_avoids_process_env_copy() -> None:
+    assert _merged_env(()) is None
+
+
 @given(
     returncode=st.integers(min_value=0, max_value=5),
     elapsed=st.floats(min_value=0, max_value=100, allow_nan=False),
@@ -612,6 +645,19 @@ def test_status_prefers_test_summary_over_elapsed_detail(count: int, duration: s
         None,
         "ok",
     )
+
+
+@given(returncode=st.sampled_from([0, 2]))
+def test_status_without_elapsed_suffix_has_no_detail(returncode: int) -> None:
+    result = RunResult(
+        Task("Sample", ["sample"], allowed_rcs=(0, 2)),
+        returncode,
+        "",
+        "",
+        12.3,
+    )
+
+    assert _status(result, elapsed_suffix=False) == ("ok", None, "ok")
 
 
 @given(st.lists(st.booleans(), max_size=8))

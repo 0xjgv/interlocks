@@ -181,6 +181,29 @@ def test_aggregate_one_preserves_policy_identity_with_no_observations(rule: str)
     assert stats.recommended_mode == stats.current_mode
 
 
+@given(rows=st.lists(st.tuples(_LINES, _LINES), min_size=1, max_size=30))
+def test_aggregate_one_reports_changed_line_quantiles(rows: list[tuple[int, int]]) -> None:
+    samples = [
+        _sample(
+            rule="F401",
+            classification="auto",
+            total=total,
+            outside=outside,
+            unsafe=False,
+            reverted=False,
+            commit=f"c{index}",
+        )
+        for index, (total, outside) in enumerate(rows)
+    ]
+
+    stats = _aggregate_one("F401", samples)
+
+    assert stats.median_changed_lines == quantile([row[0] for row in rows], 0.5)
+    assert stats.p95_changed_lines == quantile([row[0] for row in rows], 0.95)
+    assert stats.median_outside_diff_lines == quantile([row[1] for row in rows], 0.5)
+    assert stats.p95_outside_diff_lines == quantile([row[1] for row in rows], 0.95)
+
+
 @given(helped=st.integers(min_value=0, max_value=20), p95=st.floats(min_value=0, max_value=50))
 def test_pareto_frontier_drops_strictly_dominated_rules(helped: int, p95: float) -> None:
     dominant = _stats(rule="F401", prs_helped=helped + 1, p95_outside=p95)
@@ -282,6 +305,20 @@ def test_recommend_demotes_reverted_auto_rules(revert_signal: int) -> None:
 
     assert mode == "escrow"
     assert "reverted" in rationale
+
+
+def test_recommend_keeps_prefix_fallbacks_out_of_auto() -> None:
+    stats = _stats(
+        rule="UP999",
+        current_mode="escrow",
+        prs_with_candidate=10,
+        p95_outside=0,
+    )
+
+    mode, rationale = _recommend(stats, on_frontier=True)
+
+    assert mode == "escrow"
+    assert "prefix-fallback" in rationale
 
 
 @given(exact=st.booleans(), on_frontier=st.booleans(), p95=st.floats(min_value=0, max_value=10))

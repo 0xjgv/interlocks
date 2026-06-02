@@ -577,3 +577,25 @@ def test_complete_value_sources_covers_all_default_and_override_keys(
     assert _DEFAULT_VALUE_SOURCE_KEYS <= complete.keys()
     assert sources.keys() <= complete.keys()
     assert overrides.keys() <= complete.keys()
+
+
+@given(
+    sources=st.dictionaries(_VALUE_SOURCE_KEYS, _VALUE_SOURCE_VALUES, max_size=10),
+    table=st.dictionaries(_VALUE_SOURCE_KEYS, _EXPLICIT_VALUE, max_size=10),
+    overrides=st.dictionaries(_OVERRIDE_SOURCE_KEYS, _EXPLICIT_VALUE, max_size=10),
+)
+def test_complete_value_sources_does_not_mutate_inputs(
+    sources: dict[str, str],
+    table: dict[str, object],
+    overrides: dict[str, object],
+) -> None:
+    original_sources = dict(sources)
+    original_table = dict(table)
+    original_overrides = dict(overrides)
+
+    complete = _complete_value_sources(sources, table, overrides=overrides)
+
+    assert complete is not sources
+    assert sources == original_sources
+    assert table == original_table
+    assert overrides == original_overrides
