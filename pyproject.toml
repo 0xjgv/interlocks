@@ -74,7 +74,8 @@ pytest_args = ["-q"]
 # + interlocks.config.require_pyproject whose unit tests don't cover every branch.
 # Ratchet back to 65+ after beefing up in-process tests for those new modules.
 mutation_min_score = 60.0
-mutation_max_runtime = 1800
+# Full self-dogfood mutation currently enumerates ~25k mutants on GitHub runners.
+mutation_max_runtime = 5400
 
 # PR-CI dogfood: incremental mutation only mutates files changed vs origin/main,
 # keeping PR latency bounded. Nightly still runs the full suite + score gate.
