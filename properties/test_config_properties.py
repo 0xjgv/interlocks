@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, cast
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -386,6 +387,20 @@ def test_interlock_config_tool_version_prefers_override_then_default(
     expected = override if override is not None else TOOL_DEFAULTS[tool]
     assert cfg.tool_version(tool) == expected
     assert InterlockConfig.tool_version(cfg, tool) == expected
+
+
+@given(name=st.text(min_size=1, max_size=20).filter(lambda value: value not in TOOL_DEFAULTS))
+def test_interlock_config_tool_version_rejects_unknown_tools(name: str) -> None:
+    cfg = InterlockConfig(
+        project_root=Path(),
+        src_dir=Path("src"),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+    )
+
+    with pytest.raises(KeyError):
+        cfg.tool_version(name)
 
 
 @given(invoker=st.sampled_from(["python", "uv"]), has_venv=st.booleans())

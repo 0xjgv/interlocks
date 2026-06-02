@@ -97,6 +97,22 @@ def test_tracer_without_public_symbols_never_records_reached_symbols(
     assert reached == set()
 
 
+@given(
+    module=_MODULES,
+    function=_IDENT,
+    event=st.text().filter(lambda value: value != "call"),
+)
+def test_tracer_ignores_non_call_events(module: str, function: str, event: str) -> None:
+    reached: set[str] = set()
+    symbol = f"{module}:{function}"
+    trace = _tracer((symbol,), reached)
+
+    returned = trace(_frame(function, module), event, None)
+
+    assert returned is trace
+    assert reached == set()
+
+
 @given(st.none())
 def test_missing_trace_evidence_message_is_stable(evidence: None) -> None:
     assert "advisory runtime detail" in format_trace_evidence(evidence)

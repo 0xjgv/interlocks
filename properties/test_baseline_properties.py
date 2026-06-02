@@ -74,6 +74,13 @@ def test_floor_is_not_strictly_better_than_itself(floor: BaselineFloor) -> None:
     assert is_strictly_better(floor, floor) is False
 
 
+@given(floors())
+def test_empty_floor_is_never_strictly_better_than_existing_floor(
+    floor: BaselineFloor,
+) -> None:
+    assert is_strictly_better(BaselineFloor(), floor) is False
+
+
 @given(floors(), floors())
 def test_merged_floor_cannot_regress_against_inputs(
     left: BaselineFloor, right: BaselineFloor

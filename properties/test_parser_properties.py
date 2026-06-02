@@ -181,6 +181,11 @@ def test_subprocess_command_returns_none_without_positional_or_args_keyword(
     assert _subprocess_command((), kwargs) is None
 
 
+@given(command=_JSON_VALUE)
+def test_subprocess_command_uses_args_keyword_without_positionals(command: object) -> None:
+    assert _subprocess_command((), {"args": command}) == command
+
+
 @given(command=st.one_of(st.none(), st.text(max_size=30), st.lists(st.text(max_size=30))))
 def test_supports_python_sitecustomize_matches_python_executable_names(command: object) -> None:
     supported = _supports_python_sitecustomize(command)
@@ -273,6 +278,26 @@ def test_subprocess_tracer_without_public_symbols_never_records_reached_symbols(
     trace = _tracer_for_subprocess((), reached)
 
     returned = trace(_frame(module, function), "call", None)
+
+    assert returned is trace
+    assert reached == set()
+
+
+@given(
+    module=_MODULE,
+    function=_PY_IDENTIFIER,
+    event=st.text().filter(lambda value: value != "call"),
+)
+def test_subprocess_tracer_ignores_non_call_events(
+    module: str,
+    function: str,
+    event: str,
+) -> None:
+    reached: set[str] = set()
+    symbol = f"{module}:{function}"
+    trace = _tracer_for_subprocess((symbol,), reached)
+
+    returned = trace(_frame(module, function), event, None)
 
     assert returned is trace
     assert reached == set()

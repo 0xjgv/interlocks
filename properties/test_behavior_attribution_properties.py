@@ -241,6 +241,27 @@ def test_evidence_is_fresh_returns_false_for_missing_evidence_without_reading_in
     assert fresh is False
 
 
+def test_evidence_is_fresh_uses_default_evidence_path_when_path_is_omitted() -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = SimpleNamespace(project_root=root)
+        evidence = behavior_attribution_mod.evidence_path(cfg)  # type: ignore[arg-type]
+        evidence.parent.mkdir()
+        evidence.write_text("{}", encoding="utf-8")
+
+        def no_inputs(_cfg: object) -> tuple[Path, ...]:
+            return ()
+
+        original = behavior_attribution_mod._attribution_inputs
+        behavior_attribution_mod._attribution_inputs = no_inputs  # type: ignore[assignment]
+        try:
+            fresh = evidence_is_fresh(cfg)  # type: ignore[arg-type]
+        finally:
+            behavior_attribution_mod._attribution_inputs = original
+
+    assert fresh is True
+
+
 @given(ids=st.lists(_ID, max_size=8, unique=True))
 def test_validate_current_project_skips_registry_without_public_symbols(ids: list[str]) -> None:
     registry = BehaviorRegistry(tuple(_behavior(behavior_id, None) for behavior_id in ids))
