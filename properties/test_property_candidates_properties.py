@@ -63,6 +63,10 @@ from interlocks.tasks.property_candidates import (
 _IDENT = st.from_regex(r"[a-zA-Z_][a-zA-Z0-9_]{0,20}", fullmatch=True).filter(
     lambda value: not keyword.iskeyword(value) and value != "module"
 )
+_STRATEGY_TEXT = st.text(
+    alphabet=st.characters(blacklist_characters="\r\n"),
+    max_size=20,
+).filter(lambda value: value != "tmp_path-derived Path")
 _SIDE_EFFECT_METHOD = st.sampled_from([
     "chmod",
     "close",
@@ -686,6 +690,43 @@ def test_property_candidate_detail_lines_match_optional_fields(
         assert str(property_refs) in refs_line
 
 
+@given(
+    pairs=st.lists(st.tuples(_IDENT, _STRATEGY_TEXT), max_size=6, unique_by=lambda item: item[0])
+)
+def test_strategy_line_preserves_strategy_insertion_order(
+    pairs: list[tuple[str, str]],
+) -> None:
+    strategies = dict(pairs)
+    line = _strategy_line(strategies)
+
+    if not pairs:
+        assert line is None
+    else:
+        assert line == "      strategies: " + ", ".join(
+            f"{name}={strategy}" for name, strategy in pairs
+        )
+
+
+@given(
+    pairs=st.lists(st.tuples(_IDENT, _STRATEGY_TEXT), max_size=6, unique_by=lambda item: item[0]),
+    include_path_strategy=st.booleans(),
+)
+def test_add_strategy_signals_scores_typed_inputs_and_filesystem_caution_separately(
+    pairs: list[tuple[str, str]],
+    include_path_strategy: bool,
+) -> None:
+    strategies = dict(pairs)
+    if include_path_strategy:
+        strategies["path"] = "tmp_path-derived Path"
+    signals = _CandidateSignals()
+
+    _add_strategy_signals(signals, strategies)
+
+    assert signals.score == ((3 if strategies else 0) - (2 if include_path_strategy else 0))
+    assert ("typed generated inputs" in signals.reasons) is bool(strategies)
+    assert ("filesystem fixture required" in signals.cautions) is include_path_strategy
+
+
 @given(names=st.lists(_IDENT, min_size=1, max_size=10, unique=True))
 def test_property_reference_counts_detect_module_resolved_generated_names(
     names: list[str],
@@ -818,6 +859,68 @@ def test_record_instance_aliases_ignores_non_constructor_values(
     _record_instance_aliases(cfg, aliases, target_nodes, ast.Name(value_name, ast.Load()))
 
     assert aliases.instances == {}
+
+
+@given(alias=_IDENT)
+def test_record_import_aliases_ignores_unknown_modules(alias: str) -> None:
+    cfg = InterlockConfig(
+        project_root=Path(),
+        src_dir=Path(),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+    )
+    node = ast.parse(f"import missing.generated as {alias}").body[0]
+    assert isinstance(node, ast.Import)
+    modules: dict[str, str] = {}
+
+    _record_import_aliases(cfg, node, modules)
+
+    assert modules == {}
+
+
+@given(alias=_IDENT)
+def test_record_import_aliases_removes_ambiguous_local_aliases(alias: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "one.py").write_text("", encoding="utf-8")
+        (pkg / "two.py").write_text("", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        tree = ast.parse(f"import pkg.one as {alias}\nimport pkg.two as {alias}\n")
+        modules: dict[str, str] = {}
+        ambiguous: set[str] = set()
+
+        for node in tree.body:
+            assert isinstance(node, ast.Import)
+            _record_import_aliases(cfg, node, modules, ambiguous)
+
+    assert modules == {}
+    assert ambiguous == {alias}
+
+
+@given(parts=st.lists(_IDENT, max_size=5).map(tuple))
+def test_reference_for_module_parts_returns_none_without_matching_module(
+    parts: tuple[str, ...],
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "pkg",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        assert _reference_for_module_parts(cfg, parts) is None
 
 
 @given(name=_IDENT, method=_IDENT)

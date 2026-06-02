@@ -37,10 +37,11 @@ _SURVIVORS = st.lists(
     ),
     max_size=30,
 )
-_TARGET_GLOBS = st.lists(
-    st.from_regex(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.\*", fullmatch=True),
-    max_size=40,
+_TARGET_GLOB = st.from_regex(
+    r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.\*",
+    fullmatch=True,
 )
+_TARGET_GLOBS = st.lists(_TARGET_GLOB, max_size=40)
 
 
 @dataclass(frozen=True)
@@ -307,6 +308,15 @@ def test_mutation_target_fields_cap_targets_without_losing_count(
         assert "truncated_targets" not in fields
 
 
+@given(globs=st.lists(_TARGET_GLOB, max_size=mutation._MUTATION_TARGET_LIMIT))
+def test_mutation_target_fields_omit_truncation_at_display_limit(globs: list[str]) -> None:
+    fields = mutation._mutation_target_fields(globs)
+
+    assert fields["targets"] == globs
+    assert fields["target_count"] == len(globs)
+    assert "truncated_targets" not in fields
+
+
 @given(
     score=_PERCENT,
     completed=st.booleans(),
@@ -454,6 +464,16 @@ def test_mutation_failed_requires_floor_and_complete_evidence(
     assert failed is (floor is not None and (not completed or score < floor))
 
 
+@given(score=_PERCENT, floor=_PERCENT)
+def test_mutation_failed_treats_incomplete_enforced_run_as_failure(
+    score: float,
+    floor: float,
+) -> None:
+    summary = MutationSummary(killed=1, survived=1, timeout=0, score=score)
+
+    assert mutation._mutation_failed(summary, floor, completed=False) is True
+
+
 @given(floor=st.one_of(st.none(), _PERCENT), completed=st.booleans())
 def test_mutation_no_results_failed_requires_enforced_incomplete_run(
     floor: float | None, completed: bool
@@ -491,6 +511,30 @@ def test_mutation_skip_payload_is_stable(reason: str, elapsed: float, next_actio
     assert payload["next_action"] == next_action
     assert payload["min_coverage"] == 70.0
     assert payload["coverage_pct"] == 85.123
+
+
+@given(
+    min_coverage=st.one_of(st.none(), _PERCENT),
+    coverage_pct=st.one_of(st.none(), _PERCENT),
+)
+def test_mutation_skip_payload_includes_optional_coverage_only_when_present(
+    min_coverage: float | None,
+    coverage_pct: float | None,
+) -> None:
+    payload = mutation._mutation_skip_payload(
+        reason="generated",
+        elapsed=1.25,
+        next_action="rerun",
+        min_coverage=min_coverage,
+        coverage_pct=coverage_pct,
+    )
+
+    assert ("min_coverage" in payload) is (min_coverage is not None)
+    assert ("coverage_pct" in payload) is (coverage_pct is not None)
+    if min_coverage is not None:
+        assert payload["min_coverage"] == min_coverage
+    if coverage_pct is not None:
+        assert payload["coverage_pct"] == round(coverage_pct, 3)
 
 
 @given(

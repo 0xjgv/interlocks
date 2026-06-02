@@ -144,6 +144,40 @@ def test_flag_suspicious_matches_assertion_light_contract(
     assert flagged == ([inspection] if should_flag else [])
 
 
+@given(
+    rows=st.lists(
+        st.tuples(
+            _PATH,
+            _IDENT,
+            st.integers(min_value=0, max_value=20),
+            st.integers(min_value=0, max_value=8),
+            st.integers(min_value=0, max_value=8),
+        ),
+        max_size=20,
+    )
+)
+def test_flag_suspicious_preserves_input_order_for_flagged_rows(
+    rows: list[tuple[str, str, int, int, int]],
+) -> None:
+    inspections = [
+        TestInspection(
+            file=file,
+            name=name,
+            loc=loc,
+            assert_count=assert_count,
+            trivial_asserts=min(trivial_asserts, assert_count),
+        )
+        for file, name, loc, assert_count, trivial_asserts in rows
+    ]
+
+    assert stats._flag_suspicious(inspections) == [
+        inspection
+        for inspection in inspections
+        if inspection.loc > SUSPICIOUS_MIN_LOC
+        and inspection.assert_count in (0, inspection.trivial_asserts)
+    ]
+
+
 @given(context_name=_IDENT)
 def test_is_pytest_assert_with_matches_supported_pytest_context_managers(
     context_name: str,
@@ -224,6 +258,13 @@ def test_delta_arrow_matches_delta_sign(delta: float) -> None:
     assert stats._delta_arrow(delta) == expected
 
 
+@given(magnitude=st.floats(min_value=0.001, max_value=1_000, allow_nan=False))
+def test_delta_arrow_has_exact_zero_boundary(magnitude: float) -> None:
+    assert stats._delta_arrow(magnitude) == "\u2191"
+    assert stats._delta_arrow(-magnitude) == "\u2193"
+    assert stats._delta_arrow(0.0) == "="
+
+
 @given(crap=_FINITE_FLOAT, crap_max=_FINITE_FLOAT)
 def test_crap_color_matches_threshold_bands(crap: float, crap_max: float) -> None:
     if crap > crap_max + stats.CRAP_RED_MARGIN:
@@ -234,6 +275,14 @@ def test_crap_color_matches_threshold_bands(crap: float, crap_max: float) -> Non
         expected = stats.GREEN
 
     assert stats._crap_color(crap, crap_max) == expected
+
+
+@given(crap_max=_FINITE_FLOAT)
+def test_crap_color_keeps_red_boundary_exclusive(crap_max: float) -> None:
+    assert stats._crap_color(crap_max - 0.001, crap_max) == stats.GREEN
+    assert stats._crap_color(crap_max, crap_max) == stats.YELLOW
+    assert stats._crap_color(crap_max + stats.CRAP_RED_MARGIN, crap_max) == stats.YELLOW
+    assert stats._crap_color(crap_max + stats.CRAP_RED_MARGIN + 0.001, crap_max) == stats.RED
 
 
 @given(
@@ -357,6 +406,13 @@ def test_coverage_gap_sentence_reports_only_configured_shortfalls(
     assert bool(sentence) is expect_gap
     if expect_gap:
         assert sentence == f"coverage {coverage:.0f}% below {coverage_min:.0f}%"
+
+
+@given(coverage=_PERCENT_FLOAT)
+def test_coverage_gap_sentence_omits_equal_or_disabled_floor(coverage: float) -> None:
+    assert stats._coverage_gap_sentence(coverage, coverage) == ""
+    assert stats._coverage_gap_sentence(coverage, 0.0) == ""
+    assert stats._coverage_gap_sentence(None, coverage) == ""
 
 
 @given(
@@ -637,6 +693,18 @@ def test_mutation_action_message_distinguishes_partial_runs(
 
 
 @given(floor=_PERCENT_FLOAT, max_runtime=st.integers(min_value=0, max_value=10_000))
+def test_mutation_action_message_accepts_missing_summary(
+    floor: float,
+    max_runtime: int,
+) -> None:
+    message = stats._mutation_action_message(None, floor, max_runtime)
+
+    assert "timed out" not in message
+    assert f"interlocks mutation --min-score={floor:.0f}" in message
+    assert (f"--max-runtime={max_runtime}" in message) is (max_runtime > 0)
+
+
+@given(floor=_PERCENT_FLOAT, max_runtime=st.integers(min_value=0, max_value=10_000))
 def test_mutation_retry_command_includes_runtime_only_when_positive(
     floor: float,
     max_runtime: int,
@@ -691,6 +759,20 @@ def test_trust_refresh_command_preserves_requested_output_shape(
     assert command.startswith("interlocks trust --refresh")
     assert ("--json" in command) is json_mode
     assert ("--no-trend" in command) is no_trend
+
+
+@given(json_mode=st.booleans(), no_trend=st.booleans())
+def test_trust_refresh_command_uses_stable_flag_order(
+    json_mode: bool,
+    no_trend: bool,
+) -> None:
+    expected = "interlocks trust --refresh"
+    if json_mode:
+        expected += " --json"
+    if no_trend:
+        expected += " --no-trend"
+
+    assert stats._trust_refresh_command(json_mode=json_mode, no_trend=no_trend) == expected
 
 
 @given(floor=st.floats(min_value=0, max_value=100, allow_nan=False, allow_infinity=False))

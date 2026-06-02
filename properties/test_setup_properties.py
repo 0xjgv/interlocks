@@ -92,6 +92,28 @@ def test_check_payload_includes_fix_action_only_when_missing(
         assert payload["next_actions"] == ["fix it", "consider progressive"]
 
 
+@given(
+    mode=st.text(max_size=20),
+    fix_message=st.text(max_size=40),
+    extra_lines=st.lists(st.text(max_size=40), max_size=6),
+)
+def test_check_payload_with_no_statuses_preserves_extra_lines_without_fix_action(
+    mode: str,
+    fix_message: str,
+    extra_lines: list[str],
+) -> None:
+    payload = _check_payload(
+        mode=mode,
+        statuses=[],
+        fix_message=fix_message,
+        extra_lines=extra_lines,
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "installed"
+    assert payload["next_actions"] == extra_lines
+
+
 @given(check=st.booleans(), ci=st.booleans(), json_mode=st.booleans(), verbose=st.booleans())
 def test_parse_args_accepts_supported_setup_flags(
     check: bool,
