@@ -37,7 +37,7 @@ Unpinned `uvx` is acceptable for ad hoc or exploratory runs because it follows t
 
 ```sh
 uvx --from 'interlocks>=0.2,<0.3' il ci
-uvx --from interlocks==0.2.0 il ci
+uvx --from interlocks==0.2.1 il ci
 ```
 
 For frequent local human use, `uv tool install interlocks` is appropriate; `pipx install interlocks` is the alternative installed path.

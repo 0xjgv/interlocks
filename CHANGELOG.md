@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-02
+
+### Added
+
+- JSON output support for the main agent-facing commands, including `check`,
+  `ci`, `evaluate`, `trust`, `doctor`, and `config`.
+- Rule-scoped lint-fix tooling with fix planning, replay, annotation,
+  metrics, optimization, and CI/adoption evidence helpers.
+- Property-testing workflow support, including property candidate discovery,
+  shallow-reference detection, Hypothesis profile wiring, and expanded
+  property coverage across core helpers.
+- Progressive adoption helpers, including baseline ratcheting and a layered
+  import-linter template.
+
+### Changed
+
+- Simplified the CLI surface around workflow-first commands while keeping
+  advanced gates discoverable through structured help and explain output.
+- Made default-mode output quieter and more truthful for `check`, `doctor`,
+  `setup`, and related workflow commands.
+- Improved mutation and changed-only behavior with a `since` override,
+  mutator skip aliases, and environment-readiness guards.
+- Tightened release and CI dogfooding with nightly, wheel smoke, action
+  self-test, and green-main publishing guards.
+
+### Fixed
+
+- Rejected malformed dependency names during project detection.
+- Preserved explicit lint-fix resolver values.
+- Avoided resolved config values when no project is present.
+- Stopped scorecard evaluation cleanly when project metadata is missing.
+- Made scaffold, init, acceptance, and setup paths more idempotent.
+- Prevented stray non-JSON text from leaking onto stdout in JSON mode.
+
 ## [0.2.0] - 2026-05-08
 
 ### Breaking

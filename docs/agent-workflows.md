@@ -85,7 +85,7 @@ For repeatable CI, pin or range-pin the package spec:
 
 ```bash
 uvx --from 'interlocks>=0.2,<0.3' il ci
-uvx --from interlocks==0.2.0 il ci
+uvx --from interlocks==0.2.1 il ci
 ```
 
 If interlocks is already installed in the CI environment, run:
