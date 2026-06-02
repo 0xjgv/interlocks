@@ -15,6 +15,7 @@ from interlocks.config import (
     python_command_prefix,
 )
 from interlocks.defaults_path import path as defaults_path
+from interlocks.hypothesis_profiles import PROPERTY_PROFILES, hypothesis_profile_setup_source
 from interlocks.runner import (
     Task,
     arg_value,
@@ -34,7 +35,6 @@ from interlocks.scaffold import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-PROPERTY_PROFILES = ("check", "ci", "nightly", "default")
 _PROPERTY_PROFILE_SET = frozenset(PROPERTY_PROFILES)
 _SCAFFOLD_EXAMPLE = "test_example_properties.py"
 _INIT_PROPERTIES_DEP_ACTION = "Add `hypothesis>=6` to test/dev dependencies if it is missing."
@@ -103,11 +103,7 @@ def _pytest_with_profiles_cmd(
     cfg: InterlockConfig, properties_dir: str, profile: str
 ) -> list[str]:
     code = (
-        "from hypothesis import settings; "
-        "settings.register_profile('check', max_examples=15, deadline=None); "
-        "settings.register_profile('ci', max_examples=100, deadline=None); "
-        "settings.register_profile('nightly', max_examples=500, deadline=None); "
-        "import pytest, sys; "
+        hypothesis_profile_setup_source() + "\nimport pytest, sys; "
         "raise SystemExit(pytest.main(sys.argv[1:]))"
     )
     return [

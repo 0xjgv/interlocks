@@ -15,6 +15,7 @@ from interlocks.config import (
     python_command_prefix,
 )
 from interlocks.defaults_path import has_project_config, path
+from interlocks.hypothesis_profiles import PROPERTY_PROFILES, hypothesis_profile_setup_source
 from interlocks.runner import (
     Task,
     arg_flag_value,
@@ -25,7 +26,6 @@ from interlocks.runner import (
     warn_skip,
 )
 from interlocks.tasks.properties import (
-    PROPERTY_PROFILES,
     _hypothesis_import_check_cmd,
     _properties_dir_arg,
     property_test_files,
@@ -33,15 +33,10 @@ from interlocks.tasks.properties import (
 
 _PROPERTY_PROFILE_SET = frozenset(PROPERTY_PROFILES)
 _COVERAGE_APPEND_FLAG = "--append"
-_PROPERTY_COVERAGE_RUNNER = """\
-from hypothesis import settings
-settings.register_profile('check', max_examples=15, deadline=None)
-settings.register_profile('ci', max_examples=100, deadline=None)
-settings.register_profile('nightly', max_examples=500, deadline=None)
-import pytest
-import sys
-raise SystemExit(pytest.main(sys.argv[1:]))
-"""
+_PROPERTY_COVERAGE_RUNNER = (
+    hypothesis_profile_setup_source()
+    + "\nimport pytest\nimport sys\nraise SystemExit(pytest.main(sys.argv[1:]))\n"
+)
 
 
 def _coverage_rcfile_args(cfg: InterlockConfig) -> list[str]:
