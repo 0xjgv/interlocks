@@ -70,6 +70,8 @@ _KNOWN_CHECK_FLAG_VALUES = (
 )
 _KNOWN_CHECK_FLAG = st.sampled_from(_KNOWN_CHECK_FLAG_VALUES)
 _TASK_NAME = st.sampled_from(tuple(sorted(TASKS)))
+_DOC_TASK_NAME = st.sampled_from(tuple(sorted(cli_mod.COMMAND_DOCS_BY_NAME)))
+_UNKNOWN_DOC_COMMAND = _COMMAND.filter(lambda name: name not in cli_mod.COMMAND_DOCS_BY_NAME)
 _PRESET_ARGS = st.lists(
     st.from_regex(r"[a-z][a-z0-9-]{0,12}", fullmatch=True),
     max_size=3,
@@ -130,6 +132,28 @@ def test_detected_summary_line_uses_resolved_config_labels(
     assert line == (
         f"Detected: preset={preset or '(none)'}, src={src}, tests={tests}, runner={runner}"
     )
+
+
+@given(src=_REL_PATH, tests=_REL_PATH, runner=_RUNNER)
+def test_detected_summary_line_renders_missing_preset_as_none_label(
+    src: str,
+    tests: str,
+    runner: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / src,
+            test_dir=root / tests,
+            test_runner=cast("TestRunner", runner),
+            test_invoker="python",
+            preset=None,
+        )
+
+        line = _detected_summary_line(cfg)
+
+    assert line.startswith("Detected: preset=(none), ")
 
 
 @given(preset=_PRESET, src=_REL_PATH, tests=_REL_PATH, runner=_RUNNER)
@@ -284,6 +308,22 @@ def test_maybe_handle_presets_set_delegates_only_when_positionals_follow_command
         assert calls == [args]
 
 
+def test_maybe_handle_presets_set_ignores_flag_only_invocation() -> None:
+    outcome, calls = _run_maybe_handle_presets_set(["--json", "--verbose"])
+
+    assert outcome is False
+    assert calls == []
+
+
+def test_maybe_handle_presets_set_returns_false_for_direct_flag_only_argv() -> None:
+    old_argv = sys.argv
+    sys.argv = ["interlocks", "presets", "--json", "--verbose"]
+    try:
+        assert _maybe_handle_presets_set() is False
+    finally:
+        sys.argv = old_argv
+
+
 @given(advanced=st.booleans())
 def test_help_groups_payload_lists_known_commands_without_duplicates(advanced: bool) -> None:
     payload = _help_groups_payload(advanced=advanced)
@@ -327,6 +367,13 @@ def test_help_command_payload_projects_registered_command_row(task_name: str) ->
     assert payload["name"] == task_name
     assert payload["summary"] == TASKS[task_name][1]
     assert isinstance(payload["aliases"], list)
+
+
+@given(task_name=_DOC_TASK_NAME)
+def test_help_command_payload_reuses_command_doc_index_payload(task_name: str) -> None:
+    doc = cli_mod.COMMAND_DOCS_BY_NAME[task_name]
+
+    assert _help_command_payload(task_name) == cli_mod.command_index_payload(doc)
 
 
 @given(
@@ -444,6 +491,15 @@ def test_task_help_payload_projects_command_doc_metadata() -> None:
     assert any(flag["name"] == "--json" for flag in payload["flags"])
     assert isinstance(payload["exit_codes"], list)
     assert any(entry["code"] == 0 for entry in payload["exit_codes"])
+
+
+@given(task_name=_UNKNOWN_DOC_COMMAND)
+def test_task_help_payload_falls_back_for_private_task_names(task_name: str) -> None:
+    assert _task_help_payload(task_name) == {
+        "command": task_name,
+        "usage": f"usage: interlocks {task_name}",
+        "flags": [],
+    }
 
 
 def test_quiet_removed_payload_points_to_current_output_modes() -> None:

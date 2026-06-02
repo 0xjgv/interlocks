@@ -125,6 +125,13 @@ def test_parse_feature_behaviors_aggregates_files_in_sorted_order(
     assert parsed.scenario_behaviors == tuple(sorted(expected))
 
 
+@given(st.none())
+def test_parse_feature_behaviors_empty_input_has_zero_scenarios(_unused: None) -> None:
+    parsed = parse_feature_behaviors(())
+
+    assert parsed == FeatureBehaviorParse(0, ())
+
+
 @given(
     live_ids=st.lists(_ID, max_size=8, unique=True),
     scenario_ids=st.lists(_ID, max_size=8),
@@ -191,6 +198,16 @@ def test_traceable_totals_for_parsed_features_counts_unique_marked_scenarios(
     })
 
 
+@given(scenario_count=st.integers(min_value=0, max_value=100))
+def test_traceable_totals_for_parsed_features_reports_zero_traceable_without_markers(
+    scenario_count: int,
+) -> None:
+    assert traceable_totals_for_parsed_features(FeatureBehaviorParse(scenario_count, ())) == (
+        scenario_count,
+        0,
+    )
+
+
 @given(scenario_ids=st.lists(_ID, max_size=10))
 def test_behavior_coverage_for_parsed_features_is_complete_without_project_registry(
     scenario_ids: list[str],
@@ -220,6 +237,32 @@ def test_behavior_coverage_for_parsed_features_is_complete_without_project_regis
 
     assert result.is_complete
     assert result.coverage.behaviors == ()
+
+
+@given(scenario_ids=st.lists(_ID, max_size=10))
+def test_behavior_coverage_for_parsed_features_ignores_scenarios_without_pyproject_registry(
+    scenario_ids: list[str],
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "interlocks",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        parsed = FeatureBehaviorParse(
+            scenario_count=len(scenario_ids),
+            scenario_behaviors=tuple(
+                ScenarioBehavior(behavior_id, Path("generated.feature"), "generated", index + 1)
+                for index, behavior_id in enumerate(scenario_ids)
+            ),
+        )
+
+        result = behavior_coverage_for_parsed_features(cfg, parsed)
+
+    assert result == validate_behavior_coverage((), ())
 
 
 @given(behavior_id=_ID)

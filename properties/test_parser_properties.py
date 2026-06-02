@@ -160,6 +160,15 @@ def test_subprocess_command_uses_first_positional_before_kwargs(
     assert command == (args[0] if args else kw_args)
 
 
+@given(kwargs=st.dictionaries(st.text(max_size=20), _JSON_VALUE, max_size=5))
+def test_subprocess_command_returns_none_without_positional_or_args_keyword(
+    kwargs: dict[str, object],
+) -> None:
+    kwargs.pop("args", None)
+
+    assert _subprocess_command((), kwargs) is None
+
+
 @given(command=st.one_of(st.none(), st.text(max_size=30), st.lists(st.text(max_size=30))))
 def test_supports_python_sitecustomize_matches_python_executable_names(command: object) -> None:
     supported = _supports_python_sitecustomize(command)
@@ -215,6 +224,20 @@ def test_subprocess_tracer_records_matching_public_symbol(module: str, function:
 
     assert returned is trace
     assert reached == {symbol}
+
+
+@given(module=_MODULE, function=_PY_IDENTIFIER)
+def test_subprocess_tracer_without_public_symbols_never_records_reached_symbols(
+    module: str,
+    function: str,
+) -> None:
+    reached: set[str] = set()
+    trace = _tracer_for_subprocess((), reached)
+
+    returned = trace(_frame(module, function), "call", None)
+
+    assert returned is trace
+    assert reached == set()
 
 
 @given(scenario_line=st.one_of(st.booleans(), st.integers(max_value=0)))

@@ -83,6 +83,20 @@ def test_tracer_records_matching_call_frame_and_returns_itself(module: str, func
     assert reached == {symbol}
 
 
+@given(module=_MODULES, function=_IDENT)
+def test_tracer_without_public_symbols_never_records_reached_symbols(
+    module: str,
+    function: str,
+) -> None:
+    reached: set[str] = set()
+    trace = _tracer((), reached)
+
+    returned = trace(_frame(function, module), "call", None)
+
+    assert returned is trace
+    assert reached == set()
+
+
 @given(st.none())
 def test_missing_trace_evidence_message_is_stable(evidence: None) -> None:
     assert "advisory runtime detail" in format_trace_evidence(evidence)

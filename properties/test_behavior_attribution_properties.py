@@ -212,6 +212,19 @@ def test_evidence_is_fresh_depends_on_existing_input_mtimes(
     assert fresh is (evidence_exists and not expected_stale)
 
 
+@given(name=_ID)
+def test_evidence_is_fresh_returns_false_for_missing_evidence_without_reading_inputs(
+    name: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        missing = root / f"{name}.json"
+
+        fresh = evidence_is_fresh(object(), missing)  # type: ignore[arg-type]
+
+    assert fresh is False
+
+
 @given(ids=st.lists(_ID, max_size=8, unique=True))
 def test_validate_current_project_skips_registry_without_public_symbols(ids: list[str]) -> None:
     registry = BehaviorRegistry(tuple(_behavior(behavior_id, None) for behavior_id in ids))

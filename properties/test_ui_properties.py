@@ -70,6 +70,17 @@ def test_row_options_normalizes_detail_state_and_force(
     assert normalized_force is force
 
 
+@given(options=st.dictionaries(st.text(max_size=20), st.integers(), max_size=5))
+def test_row_options_uses_defaults_without_supported_option_keys(
+    options: dict[str, int],
+) -> None:
+    options.pop("detail", None)
+    options.pop("state", None)
+    options.pop("force", None)
+
+    assert ui._row_options(options) == (None, "ok", False)
+
+
 @given(
     is_json=st.booleans(),
     verbose=st.booleans(),
@@ -91,6 +102,15 @@ def test_suppress_row_matches_json_verbose_force_contract(
     assert suppressed is (is_json or (not force and not verbose and state != "fail"))
 
 
+@given(state=st.sampled_from(("ok", "warn", "fail")))
+def test_suppress_row_keeps_forced_non_json_rows_visible(state: ui.State) -> None:
+    with (
+        patch.object(ui, "is_json", return_value=False),
+        patch.object(ui, "is_verbose", return_value=False),
+    ):
+        assert ui._suppress_row(force=True, state=state) is False
+
+
 @given(
     status=_TEXT, detail=st.one_of(st.none(), _TEXT), state=st.sampled_from(("ok", "warn", "fail"))
 )
@@ -103,6 +123,16 @@ def test_row_suffix_joins_detail_and_status_without_color(
         suffix = ui._row_suffix(status, detail, state)
 
     assert suffix == (f"{detail} {status}" if detail else status)
+
+
+@given(status=_TEXT, state=st.sampled_from(("ok", "warn", "fail")))
+def test_row_suffix_treats_empty_detail_like_missing_detail(
+    status: str,
+    state: ui.State,
+) -> None:
+    with patch.object(ui, "use_color", return_value=False):
+        assert ui._row_suffix(status, "", state) == status
+        assert ui._row_suffix(status, None, state) == status
 
 
 @given(code=_TEXT, text=_TEXT, use_color=st.booleans())
