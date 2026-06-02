@@ -45,6 +45,13 @@ def test_array_scan_consume_matches_single_line_array_detection(tail: str) -> No
     assert closed is not _value_is_multiline(value)
 
 
+def test_array_scan_consume_closes_outer_array_on_matching_bracket() -> None:
+    scan = _ArrayValueScan()
+
+    assert scan.consume("[") is False
+    assert scan.consume("]") is True
+
+
 @given(st.characters(blacklist_characters="'\\"))
 def test_array_scan_quoted_single_quote_stays_open(ch: str) -> None:
     scan = _ArrayValueScan(quote="'")

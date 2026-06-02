@@ -36,6 +36,13 @@ def test_created_paths_returns_only_created_entries(actions: list[str]) -> None:
     ]
 
 
+@given(actions=st.lists(st.text(max_size=20).filter(lambda value: value != "created"), max_size=8))
+def test_created_paths_is_empty_without_created_actions(actions: list[str]) -> None:
+    files = [scaffold_file(f"path-{index}", action) for index, action in enumerate(actions)]
+
+    assert created_paths(files) == []
+
+
 @given(declared=st.booleans())
 def test_next_actions_without_declared_dependency_omits_declared_dependency(
     declared: bool,

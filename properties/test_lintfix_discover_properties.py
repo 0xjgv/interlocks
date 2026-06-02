@@ -184,6 +184,10 @@ def test_candidates_from_buckets_are_sorted_plain_snapshots(
     )
 
 
+def test_candidates_from_buckets_returns_empty_tuple_for_no_buckets() -> None:
+    assert _candidates_from_buckets({}) == ()
+
+
 @given(st.lists(_PAYLOAD_ENTRIES, max_size=40))
 def test_ruff_diagnostic_parser_matches_generated_reference(payload: list[object]) -> None:
     assert parse_diagnostics(json.dumps(payload)) == _expected_candidates(payload)

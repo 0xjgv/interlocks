@@ -71,6 +71,20 @@ def test_cli_raw_merges_repeated_skip_values(chunks: list[list[str]]) -> None:
         sys.argv = original
 
 
+@given(
+    argv=st.lists(
+        st.text(max_size=20).filter(lambda value: not value.startswith("--skip=")), max_size=12
+    )
+)
+def test_cli_raw_returns_none_without_skip_flags(argv: list[str]) -> None:
+    original = sys.argv
+    sys.argv = ["interlocks", "ci", *argv]
+    try:
+        assert _cli_raw() is None
+    finally:
+        sys.argv = original
+
+
 @given(_UNKNOWN_LABELS)
 def test_parse_csv_rejects_unknown_labels(label: str) -> None:
     with redirect_stderr(StringIO()), pytest.raises(SystemExit) as exc:
@@ -90,6 +104,14 @@ def test_skip_usage_payload_lists_known_label_domain(command: str | None, messag
     assert payload["error"] == message
     assert payload["known_labels"] == sorted(SKIP_LABELS)
     assert "--skip=" in str(payload["usage"])
+
+
+@given(message=st.text(min_size=1, max_size=80))
+def test_skip_usage_payload_defaults_command_to_interlocks(message: str) -> None:
+    payload = _skip_usage_payload(message, command=None)
+
+    assert payload["command"] == "interlocks"
+    assert payload["error"] == message
 
 
 @given(

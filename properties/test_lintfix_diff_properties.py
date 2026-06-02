@@ -161,6 +161,13 @@ def test_file_hunks_contains_matches_any_member_hunk(
     assert FileHunks.contains(file_hunks, line) is any(Hunk.contains(hunk, line) for hunk in hunks)
 
 
+@given(line=_LINES)
+def test_file_hunks_contains_is_false_without_hunks(line: int) -> None:
+    file_hunks = FileHunks("generated.py", ())
+
+    assert FileHunks.contains(file_hunks, line) is False
+
+
 @given(st.text(max_size=2_000))
 def test_diff_parsers_never_return_invalid_hunks(raw: str) -> None:
     parsed = _parse_diff(raw)
@@ -205,6 +212,17 @@ def test_parse_post_image_hunks_returns_normalized_file_hunks(
     assert _parse_post_image_hunks(patch, _HUNK_HEADER, start_group=1, count_group=2) == {
         path: list(_expected_hunks(start, count))
     }
+
+
+@given(files=st.one_of(st.none(), st.lists(_PATHS, max_size=5).map(tuple)))
+def test_author_edit_cost_empty_base_returns_zero_cost(files: tuple[str, ...] | None) -> None:
+    cost = author_edit_cost("", files=files)
+
+    assert cost.additions == 0
+    assert cost.deletions == 0
+    assert cost.replacement_pairs == 0
+    assert cost.deleted_file_lines == 0
+    assert cost.total == 0
 
 
 @given(

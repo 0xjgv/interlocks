@@ -412,6 +412,22 @@ def test_budget_overflow_reports_first_exceeded_dimension(dimension: str) -> Non
     )
 
 
+def test_budget_overflow_allows_values_equal_to_budget_limits() -> None:
+    budget = Budget(
+        "exact", max_files=2, max_changed_lines=3, max_outside_diff_lines=4, max_risk=5
+    )
+    candidate = Candidate(
+        rule="R0",
+        value=1,
+        cost=CostVector(outside_diff=4, changed_lines=3, files=2, risk=5),
+        files=("a.py", "b.py"),
+        selectable=True,
+        policy_mode="auto",
+    )
+
+    assert _budget_overflow(candidate, _Plan(), budget) is None
+
+
 def test_rejection_reason_reports_unsafe_policy_conflict_budget_or_displacement() -> None:
     budget = Budget("tiny", max_files=2, max_changed_lines=2, max_outside_diff_lines=1, max_risk=2)
     selected = _candidate("R0", files=("same.py",), value=10)

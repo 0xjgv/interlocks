@@ -339,3 +339,9 @@ def test_promotion_eligible_requires_frontier_low_churn_no_reverts_and_escrow(
     assert eligible is (
         on_frontier and p95 <= 5 and revert_signal == 0 and current_mode == "escrow"
     )
+
+
+def test_promotion_eligible_accepts_exact_outside_diff_threshold() -> None:
+    stats = _stats(current_mode="escrow", p95_outside=5.0, revert_signal=0)
+
+    assert _promotion_eligible(stats, on_frontier=True) is True

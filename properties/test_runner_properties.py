@@ -225,6 +225,17 @@ def test_glyph_and_color_helpers_honor_use_color(
         runner_mod.ui.use_color = original
 
 
+@given(char=st.text(max_size=5), color=st.text(max_size=10))
+def test_glyph_and_color_helpers_strip_color_when_color_disabled(char: str, color: str) -> None:
+    original = runner_mod.ui.use_color
+    runner_mod.ui.use_color = lambda: False  # type: ignore[assignment]
+    try:
+        assert _glyph(char, color) == char
+        assert _c(color) == ""
+    finally:
+        runner_mod.ui.use_color = original
+
+
 @given(
     flag_name=st.from_regex(r"[a-z][a-z0-9-]{0,20}", fullmatch=True),
     default=st.text(max_size=20),
@@ -424,6 +435,10 @@ def test_default_display_is_single_line_and_hides_config_paths(head: str, rest: 
     assert "/workspace/split-ruff.toml" not in display
 
 
+def test_default_display_returns_empty_string_for_empty_command() -> None:
+    assert _default_display([]) == ""
+
+
 @given(
     prefix=st.lists(_DISPLAY_TOKEN, max_size=8),
     flag=st.sampled_from(_CONFIG_PATH_FLAGS),
@@ -467,6 +482,14 @@ def test_display_head_collapses_python_module_invocations(module: str, tail: lis
     assert _display_head_and_rest(cmd) == (f"python -m {module}", tail)
 
 
+@given(head=_DISPLAY_TOKEN, cmd=st.lists(_DISPLAY_TOKEN, max_size=2))
+def test_is_python_module_invocation_requires_python_m_and_module(
+    head: str,
+    cmd: list[str],
+) -> None:
+    assert _is_python_module_invocation(head, cmd) is False
+
+
 @given(
     head=st.text(
         alphabet=string.ascii_letters + string.digits + "_.-",
@@ -500,6 +523,14 @@ def test_uvx_tool_builds_isolated_tool_invocation(
     assert tuple(cmd[3:script_index]) == UV_INDEX_FLAG
     assert cmd[script_index] == (entrypoint or package)
     assert cmd[script_index + 1 :] == args
+
+
+@given(package=st.text(min_size=1, max_size=20), version=st.text(min_size=1, max_size=20))
+def test_uvx_tool_uses_package_as_default_entrypoint(package: str, version: str) -> None:
+    cmd = uvx_tool(package, version=version)
+    script_index = 3 + len(UV_INDEX_FLAG)
+
+    assert cmd[script_index] == package
 
 
 @given(
@@ -613,6 +644,24 @@ def test_parallel_json_start_statuses_emit_only_declared_running_tasks(
     ]
 
 
+@given(
+    tasks=st.lists(
+        st.builds(lambda label: Task(label, ["noop"], label=label), _DISPLAY_TOKEN), max_size=5
+    )
+)
+def test_parallel_json_start_statuses_are_silent_outside_json_mode(tasks: list[Task]) -> None:
+    original = sys.argv
+    err = io.StringIO()
+    sys.argv = ["interlocks", "ci"]
+    try:
+        with redirect_stderr(err):
+            _print_parallel_json_start_statuses(tasks)
+    finally:
+        sys.argv = original
+
+    assert err.getvalue() == ""
+
+
 @given(st.text(max_size=300))
 def test_json_progress_command_is_bounded(command: str) -> None:
     progress = _json_progress_command(command)
@@ -622,3 +671,9 @@ def test_json_progress_command_is_bounded(command: str) -> None:
         assert progress == command
     else:
         assert progress.endswith("…")
+
+
+def test_json_progress_command_truncates_at_exact_display_boundary() -> None:
+    command = "x" * 97
+
+    assert _json_progress_command(command) == ("x" * 95) + "…"

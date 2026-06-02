@@ -89,6 +89,22 @@ def test_newest_existing_mtime_ignores_missing_paths(
         assert newest is None
 
 
+@given(mtimes=st.lists(st.integers(min_value=1, max_value=1_000_000), min_size=1, max_size=12))
+def test_newest_existing_mtime_is_order_independent(mtimes: list[int]) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        paths: list[Path] = []
+        for index, mtime in enumerate(mtimes):
+            path = root / f"present-{index}.txt"
+            path.write_text("", encoding="utf-8")
+            os.utime(path, (mtime, mtime))
+            paths.append(path)
+
+        newest = _newest_existing_mtime(iter(reversed(paths)))
+
+    assert newest == pytest.approx(max(mtimes))
+
+
 @given(completed=_JSON_SCALARS)
 def test_mutation_evidence_completed_accepts_only_booleans(completed: object) -> None:
     evidence = {"completed": completed}
