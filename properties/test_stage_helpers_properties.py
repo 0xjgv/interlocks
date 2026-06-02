@@ -24,6 +24,14 @@ def test_should_run_mutation_preserves_legacy_flag_for_off_mode(
     assert _should_run_mutation(mode, run_in_ci=run_in_ci) is (mode != "off" or run_in_ci)
 
 
+@given(mode=st.sampled_from(["incremental", "full"]), run_in_ci=st.booleans())
+def test_should_run_mutation_always_runs_explicit_ci_modes(
+    mode: str,
+    run_in_ci: bool,
+) -> None:
+    assert _should_run_mutation(mode, run_in_ci=run_in_ci) is True
+
+
 @given(
     present=st.lists(st.booleans(), min_size=4, max_size=4),
     scope_ref=st.one_of(st.none(), st.text(max_size=20)),

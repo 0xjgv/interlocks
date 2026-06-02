@@ -254,6 +254,11 @@ def test_baseline_value_formatting_rounds_to_at_most_two_decimals(value: float) 
         assert len(formatted.rsplit(".", 1)[1]) <= 2
 
 
+@given(value=st.integers(min_value=0, max_value=1000))
+def test_baseline_value_formatting_omits_decimal_for_whole_numbers(value: int) -> None:
+    assert _fmt(float(value)) == str(value)
+
+
 @given(floors())
 def test_floor_show_payload_marks_empty_floor_and_next_action(floor: BaselineFloor) -> None:
     payload = _floor_show_payload(_PayloadConfig(), floor)  # type: ignore[arg-type]

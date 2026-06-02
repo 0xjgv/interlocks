@@ -32,3 +32,28 @@ def test_audit_network_payload_shape_is_stable(
     assert payload["status"] == status
     assert payload["elapsed_seconds"] == round(elapsed, 3)
     assert ("reason" in payload) is (reason is not None)
+
+
+@given(
+    passed=st.booleans(),
+    status=st.text(max_size=40),
+    elapsed=st.floats(allow_nan=False, allow_infinity=False, width=32),
+    reason=st.one_of(st.none(), st.text(max_size=80)),
+)
+def test_audit_network_payload_has_no_extra_machine_fields(
+    passed: bool,
+    status: str,
+    elapsed: float,
+    reason: str | None,
+) -> None:
+    payload = _audit_network_payload(
+        passed=passed,
+        status=status,
+        elapsed=elapsed,
+        reason=reason,
+    )
+
+    expected = {"command", "passed", "status", "elapsed_seconds"}
+    if reason is not None:
+        expected.add("reason")
+    assert set(payload) == expected
