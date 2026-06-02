@@ -122,6 +122,46 @@ def test_format_message_preserves_explicit_file_count(
     assert f": {files_touched} files," in message
 
 
+_SINGLE_LINE = st.text(
+    alphabet=st.characters(blacklist_characters="\r\n"),
+    min_size=1,
+    max_size=40,
+)
+
+
+@given(rule=_SINGLE_LINE, patch_path=_SINGLE_LINE)
+def test_format_message_adds_review_suffix_only_for_escrow_patch(
+    rule: str,
+    patch_path: str,
+) -> None:
+    escrow = _format_message({
+        "rule": rule,
+        "classification": "escrow",
+        "files": [],
+        "patch_path": patch_path,
+    })
+    advisory = _format_message({
+        "rule": rule,
+        "classification": "advisory",
+        "files": [],
+        "patch_path": patch_path,
+    })
+
+    assert escrow.endswith(f"Patch staged at {patch_path}; review before applying.")
+    assert "Patch staged" not in advisory
+
+
+@given(rule=_SINGLE_LINE)
+def test_format_message_auto_classification_names_apply_command(rule: str) -> None:
+    message = _format_message({
+        "rule": rule,
+        "classification": "auto",
+        "files": [],
+    })
+
+    assert message.endswith(f"Apply with `interlocks fix-rule --rule={rule} --apply`.")
+
+
 @given(payload=st.dictionaries(st.text(max_size=20), _JSONISH, max_size=10))
 def test_iter_candidates_ignores_malformed_plan_payloads(
     payload: dict[str, object],

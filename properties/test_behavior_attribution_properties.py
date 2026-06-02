@@ -461,6 +461,51 @@ def test_classify_claims_matches_generated_claim_model(rows: list[tuple[str, str
     }
 
 
+@given(rows=st.lists(st.tuples(_ID, _CLAIM_STATUS), max_size=12, unique_by=lambda row: row[0]))
+def test_classify_claims_reports_failures_in_sorted_scenario_order(
+    rows: list[tuple[str, str]],
+) -> None:
+    behaviors_by_id = {
+        behavior_id: _behavior(behavior_id, f"pkg:{behavior_id}") for behavior_id, _ in rows
+    }
+    scenarios = tuple(
+        reversed(
+            tuple(
+                _scenario(behavior_id, line=index + 1)
+                for index, (behavior_id, _) in enumerate(rows)
+            )
+        )
+    )
+    status_by_id = dict(rows)
+    evidence = AttributionEvidence(
+        tuple(
+            ScenarioReach(
+                scenario.feature_path,
+                scenario.scenario_line,
+                frozenset(
+                    {f"pkg:{scenario.behavior_id}"}
+                    if status_by_id[scenario.behavior_id] == "match"
+                    else {"other"}
+                ),
+            )
+            for scenario in scenarios
+            if status_by_id[scenario.behavior_id] != "gap"
+        ),
+        created_at=1.0,
+    )
+
+    mis_attributed, gaps, _claimed_ids, _attributed_ids = _classify_claims(
+        behaviors_by_id, scenarios, evidence
+    )
+
+    assert [failure.scenario for failure in mis_attributed] == sorted(
+        scenario for scenario in scenarios if status_by_id[scenario.behavior_id] == "miss"
+    )
+    assert [failure.scenario for failure in gaps] == sorted(
+        scenario for scenario in scenarios if status_by_id[scenario.behavior_id] == "gap"
+    )
+
+
 @given(
     behavior_rows=st.lists(
         st.tuples(_ID, st.booleans()),

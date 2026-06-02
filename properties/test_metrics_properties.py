@@ -552,6 +552,20 @@ def test_parse_lizard_ignores_rows_after_warnings_block(
     ]
 
 
+@given(rows=st.lists(st.tuples(_NAMES, _PATHS), max_size=12))
+def test_parse_lizard_preserves_valid_row_order_through_noise(
+    rows: list[tuple[str, str]],
+) -> None:
+    stdout = "\n".join(
+        f"noise {index}\n10 2 50 1 10 {name}@{index + 1}-{index + 3}@{path}"
+        for index, (name, path) in enumerate(rows)
+    )
+
+    parsed = _parse_lizard(stdout)
+
+    assert [(row.name, row.path) for row in parsed] == rows
+
+
 @given(st.text(max_size=2_000))
 def test_parse_mutmut_results_never_returns_non_mutant_keys(stdout: str) -> None:
     parsed = _parse_results(stdout)
@@ -575,6 +589,21 @@ def test_parse_mutmut_results_groups_generated_rows(rows: list[tuple[str, str]])
         expected.setdefault(status, []).append(key)
 
     assert _parse_results(stdout) == expected
+
+
+@given(
+    key=_NAMES.map(lambda name: f"interlocks.pkg.{name}__mutmut_1"),
+    status=st.text(
+        alphabet=st.characters(blacklist_categories=("Cc", "Cs")),
+        min_size=1,
+        max_size=40,
+    ).filter(lambda value: bool(value.strip())),
+)
+def test_parse_mutmut_results_strips_outer_whitespace_only(
+    key: str,
+    status: str,
+) -> None:
+    assert _parse_results(f"  {key}: {status}  \n") == {status.rstrip(): [key]}
 
 
 @given(

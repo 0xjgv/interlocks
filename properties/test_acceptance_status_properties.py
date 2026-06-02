@@ -100,6 +100,30 @@ def test_acceptance_runner_off_always_disables(require_acceptance: bool) -> None
     assert status is AcceptanceStatus.DISABLED
 
 
+@given(require_acceptance=st.booleans())
+def test_acceptance_runner_off_preserves_configured_feature_dir_detail(
+    require_acceptance: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        features_dir = root / "tests" / "features"
+        classified = classify_acceptance_with_details(
+            InterlockConfig(
+                project_root=root,
+                src_dir=root,
+                test_dir=root / "tests",
+                test_runner="pytest",
+                test_invoker="python",
+                acceptance_runner="off",
+                features_dir=features_dir,
+                require_acceptance=require_acceptance,
+            )
+        )
+
+    assert classified.status is AcceptanceStatus.DISABLED
+    assert classified.features_dir == features_dir
+
+
 @given(
     state=st.sampled_from(["none", "missing-dir", "empty-dir", "no-scenarios", "scenario"]),
     require_acceptance=st.booleans(),

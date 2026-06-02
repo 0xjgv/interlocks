@@ -51,6 +51,31 @@ def test_fix_rule_explicit_falsey_values_still_override_argv(apply: bool) -> Non
     assert resolved == fix_rule._FixRuleArgs("", apply, "", "", ())
 
 
+@given(rule=_WORDS, base=_WORDS, budget=_WORDS, apply=st.booleans(), verify_cmd=_VERIFY_CMDS)
+def test_fix_rule_argv_defaults_are_used_when_kwargs_are_none(
+    rule: str,
+    base: str,
+    budget: str,
+    apply: bool,
+    verify_cmd: tuple[str, ...],
+) -> None:
+    raw_verify = " ".join(shlex.quote(word) for word in verify_cmd)
+    argv = _argv(
+        "fix-rule",
+        f"--rule={rule}",
+        f"--base={base}",
+        f"--budget={budget}",
+        f"--verify-cmd={raw_verify}",
+    )
+    if apply:
+        argv.append("--apply")
+
+    with patch.object(sys, "argv", argv):
+        resolved = fix_rule._resolve_args(None, None, None, None, None)
+
+    assert resolved == fix_rule._FixRuleArgs(rule, apply, base, budget, verify_cmd)
+
+
 @given(verify_cmd=_VERIFY_CMDS)
 def test_fix_rule_verify_cmd_splits_shell_words(verify_cmd: tuple[str, ...]) -> None:
     raw = " ".join(shlex.quote(word) for word in verify_cmd)
@@ -130,6 +155,36 @@ def test_fix_optimize_explicit_falsey_options_still_override_argv(apply: bool) -
     assert resolved.apply is apply
     assert resolved.stats_path == ""
     assert resolved.verify_cmd == ()
+
+
+@given(
+    base=_WORDS,
+    budget=st.sampled_from(["unblock", "renovation"]),
+    mutation_budget=st.sampled_from(["quick", "strict"]),
+    renovate=st.booleans(),
+)
+def test_fix_optimize_argv_budget_precedence(
+    base: str,
+    budget: str,
+    mutation_budget: str,
+    renovate: bool,
+) -> None:
+    argv = _argv(
+        "fix-optimize",
+        f"--base={base}",
+        f"--budget={budget}",
+        f"--mutation-budget={mutation_budget}",
+        "--no-stats",
+    )
+    if renovate:
+        argv.append("--renovate")
+
+    with patch.object(sys, "argv", argv):
+        resolved = fix_optimize._resolve_options(None, None, None, None, ("interlocks", "ci"))
+
+    assert resolved.base == base
+    assert resolved.budget_name == ("renovation" if renovate else mutation_budget)
+    assert resolved.stats_path == ""
 
 
 @given(verify_cmd=_VERIFY_CMDS)

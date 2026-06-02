@@ -102,6 +102,14 @@ def test_missing_trace_evidence_message_is_stable(evidence: None) -> None:
     assert "advisory runtime detail" in format_trace_evidence(evidence)
 
 
+def test_missing_trace_evidence_message_is_single_line_action() -> None:
+    message = format_trace_evidence(None)
+
+    assert "\n" not in message
+    assert message.startswith("acceptance trace evidence unavailable")
+    assert "`interlocks acceptance --trace`" in message
+
+
 @given(
     symbols=st.lists(_SYMBOLS, max_size=12, unique=True),
     reached_flags=st.lists(st.booleans(), max_size=12),

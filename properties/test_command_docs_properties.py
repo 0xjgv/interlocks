@@ -109,6 +109,15 @@ def test_flag_sets_for_task_partition_declared_flag_kinds(task_name: str) -> Non
     assert value_prefixes == tuple(spec.name for spec in doc.flags if spec.name.endswith("="))
 
 
+@given(task_name=st.sampled_from(_TASK_NAMES))
+def test_flag_sets_for_task_are_disjoint(task_name: str) -> None:
+    boolean_names, optional_names, value_prefixes = _flag_sets_for_task(task_name)
+
+    assert boolean_names.isdisjoint(optional_names)
+    assert boolean_names.isdisjoint(value_prefixes)
+    assert optional_names.isdisjoint(value_prefixes)
+
+
 @given(task_name=st.text().filter(lambda name: name not in COMMAND_DOCS_BY_NAME))
 def test_flag_sets_for_unknown_task_are_empty(task_name: str) -> None:
     assert _flag_sets_for_task(task_name) == (frozenset(), frozenset(), ())

@@ -154,3 +154,17 @@ def test_filter_tasks_uses_default_label_when_task_label_missing(
     assert [call.args[0] for call in warn_skipped.call_args_list] == [
         label for label in labels if label in skipped
     ]
+
+
+@given(labels=st.lists(st.sampled_from(_KNOWN_LABELS), unique=True))
+def test_filter_tasks_with_empty_policy_keeps_all_tasks_and_emits_no_warnings(
+    labels: list[str],
+) -> None:
+    tasks = [Task(f"{label} task", ["noop"], label=label) for label in labels]
+    policy = SkipPolicy(frozenset(), "project")
+
+    with patch("interlocks.skip.warn_skipped") as warn_skipped:
+        filtered = filter_tasks(tasks, policy)
+
+    assert filtered == tasks
+    assert warn_skipped.call_args_list == []

@@ -346,6 +346,13 @@ def test_tool_version_overrides_ignore_non_tables(raw: object) -> None:
     assert _tool_version_overrides({"tools": raw}) == {}
 
 
+@given(tool=st.sampled_from(tuple(TOOL_DEFAULTS)), raw_pin=st.text(max_size=20))
+def test_tool_version_overrides_strips_known_tool_pins(tool: str, raw_pin: str) -> None:
+    parsed = _tool_version_overrides({"tools": {tool: f"  {raw_pin}  "}})
+
+    assert parsed == ({tool: raw_pin.strip()} if raw_pin.strip() else {})
+
+
 @given(
     tool=st.sampled_from(tuple(TOOL_DEFAULTS)),
     override=st.one_of(st.none(), st.text(min_size=1, max_size=20)),
@@ -427,6 +434,13 @@ def test_arch_layers_override_ignores_missing_or_malformed_layers(raw: object) -
         return
 
     assert _arch_layers_override(table) == ()
+
+
+@given(layers=st.lists(st.text(max_size=20), max_size=10))
+def test_arch_layers_override_drops_blank_layers_without_reordering(layers: list[str]) -> None:
+    parsed = _arch_layers_override({"arch_layers": {"layers": [f" {layer} " for layer in layers]}})
+
+    assert parsed == tuple(layer.strip() for layer in layers if layer.strip())
 
 
 @given(key=_STRING_CONFIG_KEYS, value=_EXPLICIT_VALUE)

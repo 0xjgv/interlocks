@@ -255,6 +255,24 @@ def test_parse_post_image_hunks_preserves_multiple_hunks_for_one_file(
     }
 
 
+@given(path=_PATHS, start=_LINES, count=_COUNTS)
+def test_parse_post_image_hunks_ignores_hunks_before_file_header(
+    path: str,
+    start: int,
+    count: int,
+) -> None:
+    patch = f"""\
+@@ -9,1 +999,1 @@
+--- a/{path}
++++ b/{path}
+@@ -1,1 +{start},{count} @@
+"""
+
+    assert _parse_post_image_hunks(patch, _HUNK_HEADER, start_group=1, count_group=2) == {
+        path: list(_expected_hunks(start, count))
+    }
+
+
 @given(path=_PATHS, old_start=_LINES, old_count=_COUNTS, new_start=_LINES, new_count=_COUNTS)
 def test_parse_diff_returns_post_image_ranges(
     path: str,

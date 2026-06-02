@@ -80,6 +80,22 @@ def test_crash_fingerprint_is_stable_hex(
     assert _HEX16.fullmatch(first)
 
 
+@given(
+    frames=st.lists(
+        st.tuples(st.text(max_size=30), st.text(max_size=30)), min_size=2, max_size=20
+    ),
+    exception_type=st.text(max_size=50),
+)
+def test_crash_fingerprint_keeps_frame_order_in_identity(
+    frames: list[tuple[str, str]],
+    exception_type: str,
+) -> None:
+    reversed_frames = list(reversed(frames))
+
+    if frames != reversed_frames:
+        assert compute(frames, exception_type) != compute(reversed_frames, exception_type)
+
+
 @given(user=_SEGMENTS, tail=st.lists(_SEGMENTS, max_size=5))
 def test_scrub_path_redacts_macos_user_segment(user: str, tail: list[str]) -> None:
     raw = "/".join(["/Users", user, *tail])
@@ -248,6 +264,13 @@ def test_encode_body_within_cap_preserves_small_bodies(body: str) -> None:
 
     if len(quote(body, safe="")) <= _BODY_ENCODED_CAP:
         assert unquote(encoded) == body
+
+
+@given(body=st.text(alphabet=st.characters(blacklist_categories=("Cs",)), max_size=200))
+def test_encode_body_within_cap_is_url_encoded(body: str) -> None:
+    encoded = _encode_body_within_cap(body, local_path=None)
+
+    assert quote(unquote(encoded), safe="") == encoded
 
 
 @given(

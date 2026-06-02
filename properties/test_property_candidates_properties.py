@@ -603,6 +603,37 @@ def test_filter_by_max_property_refs_keeps_only_shallow_references(
         ]
 
 
+@given(
+    ref_counts=st.lists(st.integers(min_value=0, max_value=8), max_size=10),
+    low=st.integers(min_value=0, max_value=8),
+    high=st.integers(min_value=0, max_value=8),
+)
+def test_filter_by_max_property_refs_is_monotonic(
+    ref_counts: list[int],
+    low: int,
+    high: int,
+) -> None:
+    low, high = sorted((low, high))
+    candidates = [
+        PropertyCandidate(
+            path=f"pkg/mod_{index}.py",
+            name=f"parse_{index}",
+            line=index + 1,
+            score=10,
+            reasons=("typed generated inputs",),
+            cautions=(),
+            strategies={},
+            property_refs=refs,
+        )
+        for index, refs in enumerate(ref_counts)
+    ]
+
+    shallow = {candidate.name for candidate in _filter_by_max_property_refs(candidates, low)}
+    broader = {candidate.name for candidate in _filter_by_max_property_refs(candidates, high)}
+
+    assert shallow <= broader
+
+
 @given(max_refs=st.integers(min_value=0, max_value=20), uncovered=st.booleans())
 def test_max_property_refs_parses_uncovered_shortcut_and_value(
     max_refs: int,

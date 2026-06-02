@@ -60,6 +60,9 @@ _KNOWN_COMMAND = st.sampled_from([
     ("unblock", "fix-optimize"),
     ("attribution", "behavior-attribution"),
 ])
+_UNKNOWN_COMMAND = _COMMAND.filter(
+    lambda value: value not in TASKS and value not in cli_mod.ALIASES
+)
 _KNOWN_CHECK_FLAG_VALUES = (
     "--changed",
     "--changed=HEAD",
@@ -360,6 +363,16 @@ def test_help_groups_payload_preserves_declared_group_order(advanced: bool) -> N
     ] == [list(names) for _group_name, names in expected_groups]
 
 
+@given(advanced=st.booleans())
+def test_help_groups_payload_commands_have_index_payload_shape(advanced: bool) -> None:
+    payload = _help_groups_payload(advanced=advanced)
+
+    for group in payload:
+        for command in group["commands"]:
+            assert set(command) >= {"name", "summary", "aliases"}
+            assert isinstance(command["aliases"], list)
+
+
 @given(task_name=_TASK_NAME)
 def test_help_command_payload_projects_registered_command_row(task_name: str) -> None:
     payload = _help_command_payload(task_name)
@@ -399,6 +412,21 @@ def test_resolve_task_name_returns_none_when_only_flags(flags: list[str]) -> Non
         patch("interlocks.cli.cmd_help_from_argv"),
     ):
         assert _resolve_task_name(flags) is None
+
+
+@given(command=_UNKNOWN_COMMAND, leading_flags=st.lists(_KNOWN_CHECK_FLAG, max_size=3))
+def test_resolve_task_name_reports_unknown_first_positional(
+    command: str,
+    leading_flags: list[str],
+) -> None:
+    with patch("interlocks.cli._fail_unknown_command", side_effect=RuntimeError) as fail_unknown:
+        try:
+            _resolve_task_name([*leading_flags, command, "check"])
+        except RuntimeError:
+            pass
+
+    assert fail_unknown.call_args is not None
+    assert fail_unknown.call_args.args == (command,)
 
 
 @given(flags=st.lists(_KNOWN_CHECK_FLAG, max_size=6))
