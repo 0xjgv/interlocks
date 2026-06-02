@@ -84,6 +84,14 @@ def test_array_scan_unquoted_plain_character_does_not_close(ch: str) -> None:
     assert scan.depth == 0
 
 
+@given(ch=st.sampled_from(['"', "'", "#"]))
+def test_array_scan_unquoted_openers_enter_quote_mode(ch: str) -> None:
+    scan = _ArrayValueScan()
+
+    assert scan._consume_unquoted(ch) is False
+    assert scan.quote == ch
+
+
 @given(depth=st.integers(min_value=1, max_value=10))
 def test_array_scan_unquoted_closes_only_outer_array(depth: int) -> None:
     scan = _ArrayValueScan(depth=depth)

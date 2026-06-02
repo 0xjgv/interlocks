@@ -1352,6 +1352,13 @@ def test_property_attribute_symbols_ignore_non_module_trees(relpath: str) -> Non
     assert _property_attribute_symbols_from_tree(ast.Expression(ast.Constant(1)), relpath) == set()
 
 
+@given(name=_IDENT)
+def test_property_attribute_symbols_ignore_plain_methods(name: str) -> None:
+    tree = ast.parse(f"class Parser:\n    def {name}(self) -> int:\n        return 1\n")
+
+    assert _property_attribute_symbols_from_tree(tree, "pkg/generated.py") == set()
+
+
 @given(
     decorator=st.sampled_from([
         "property",

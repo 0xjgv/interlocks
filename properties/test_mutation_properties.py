@@ -267,6 +267,15 @@ def test_mutation_progress_label_normalizes_spinner_text(label: str) -> None:
 
 
 @given(
+    line=st.from_regex(r"[A-Za-z0-9 ._-]{0,80}", fullmatch=True).filter(
+        lambda value: "/" not in value
+    )
+)
+def test_mutation_progress_label_ignores_plain_non_progress_lines(line: str) -> None:
+    assert mutation._mutation_progress_label(line) is None
+
+
+@given(
     checked=st.integers(min_value=0, max_value=100_000),
     total=st.one_of(st.none(), st.integers(min_value=-10, max_value=100_000)),
 )
@@ -350,6 +359,26 @@ def test_mutation_progress_completion_is_rounded_percentage(
     fields = mutation._mutation_progress_fields(checked, total)
 
     assert fields["completion_pct"] == round(min((checked / total) * 100, 100.0), 3)
+
+
+@given(
+    checked=st.integers(min_value=1, max_value=100_000),
+    remaining=st.integers(min_value=1, max_value=100_000),
+    elapsed=st.floats(min_value=0.0, max_value=10_000.0, allow_nan=False, allow_infinity=False),
+)
+def test_mutation_progress_fields_suppress_estimate_when_completed(
+    checked: int,
+    remaining: int,
+    elapsed: float,
+) -> None:
+    fields = mutation._mutation_progress_fields(
+        checked,
+        checked + remaining,
+        elapsed=elapsed,
+        completed=True,
+    )
+
+    assert "estimated_full_runtime_seconds" not in fields
 
 
 @given(
@@ -479,6 +508,34 @@ def test_mutation_result_score_failure_message_names_thresholds(
     )
 
     assert fields == {"error": f"Mutation score {score:.1f}% below threshold {min_score:.1f}%"}
+
+
+@given(score=_PERCENT)
+def test_mutation_result_message_fields_empty_on_completed_success(score: float) -> None:
+    summary = MutationSummary(killed=1, survived=1, timeout=0, score=score)
+    context = mutation._MutationPayloadContext(
+        min_score=60.0,
+        completed=True,
+        changed_only=False,
+        globs=None,
+        changed=None,
+        log_path=Path(".interlocks/mutation.log"),
+        elapsed=1.0,
+        max_runtime=600,
+        min_coverage=70.0,
+        coverage_pct=90.0,
+        total_mutants=None,
+    )
+
+    assert (
+        mutation._mutation_result_message_fields(
+            summary,
+            context,
+            failed=False,
+            score_failed=False,
+        )
+        == {}
+    )
 
 
 @given(

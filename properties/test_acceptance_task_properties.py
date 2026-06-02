@@ -77,6 +77,11 @@ def test_loads_pytest_plugin_rejects_dangling_plugin_flag(suffix: list[str]) -> 
     assert _loads_pytest_plugin([*suffix, "-p"]) is False
 
 
+@given(prefix=_ARGS)
+def test_loads_pytest_plugin_accepts_compact_plugin_after_args(prefix: list[str]) -> None:
+    assert _loads_pytest_plugin([*prefix, f"-p{PLUGIN_NAME}"]) is True
+
+
 @given(prefix=_ARGS, suffix=_ARGS)
 def test_plugin_name_as_plain_pytest_arg_does_not_block_injection(
     prefix: list[str], suffix: list[str]

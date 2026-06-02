@@ -79,6 +79,13 @@ def test_resolved_renderer_keys_return_display_safe_values(key: str) -> None:
     assert not isinstance(value, Path)
 
 
+def test_resolved_value_falls_back_to_config_attribute() -> None:
+    with TemporaryDirectory() as raw_root:
+        cfg = _cfg(Path(raw_root))
+
+        assert _resolved_value(cfg, "coverage_min") == cfg.coverage_min
+
+
 @given(st.lists(st.sampled_from(sorted(SKIP_LABELS)), unique=True, max_size=8))
 def test_current_label_formats_skip_set_in_sorted_order(labels: list[str]) -> None:
     with TemporaryDirectory() as raw_root:
@@ -235,6 +242,25 @@ def test_tool_source_rows_include_flag_for_bundled_source(tool: str, flag: str) 
     assert rows["source"] == "bundled"
     assert rows["path"] == "defaults/tool.toml"
     assert rows["flag"] == f"{flag} defaults/tool.toml"
+
+
+@given(tool=_TOOL_NAME, flag=_FLAG)
+def test_tool_source_rows_keep_stable_row_order(tool: str, flag: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = _cfg(root)
+        bundled_path = root / "defaults" / "tool.toml"
+        source = ToolConfigSource(
+            tool=tool,
+            source="bundled",
+            path=bundled_path,
+            bundled_path=bundled_path,
+            flag=flag,
+        )
+
+        rows = _tool_source_rows(cfg, source, bundled_only=False)
+
+    assert [key for key, _value in rows] == ["tool", "source", "path", "bundled_path", "flag"]
 
 
 @given(tool=_KNOWN_TOOL, bundled_only=st.booleans(), source_is_bundled=st.booleans())

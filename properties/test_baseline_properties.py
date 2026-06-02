@@ -245,6 +245,27 @@ def test_metric_regression_message_names_direction_and_values(
     assert ("above floor" in regression) is not higher_better
 
 
+@given(
+    field=st.sampled_from([field for field, _higher_better in METRICS]),
+    floor=_FINITE,
+    higher_better=st.booleans(),
+)
+def test_metric_regression_accepts_exact_floor(
+    field: str,
+    floor: float,
+    higher_better: bool,
+) -> None:
+    assert (
+        _metric_regression(
+            field,
+            measured=floor,
+            current_floor=floor,
+            higher_better=higher_better,
+        )
+        is None
+    )
+
+
 @given(_FINITE)
 def test_baseline_value_formatting_rounds_to_at_most_two_decimals(value: float) -> None:
     formatted = _fmt(value)

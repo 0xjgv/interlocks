@@ -138,6 +138,18 @@ def test_parse_args_accepts_supported_setup_flags(
     assert args.ci == ("github" if ci else None)
 
 
+def test_parse_args_defaults_without_optional_flags() -> None:
+    original = sys.argv
+    sys.argv = ["interlocks", "setup"]
+    try:
+        args = _parse_args()
+    finally:
+        sys.argv = original
+
+    assert args.check_only is False
+    assert args.ci is None
+
+
 @given(target=st.text(max_size=30).filter(lambda value: value != "github"))
 def test_parse_args_rejects_unsupported_ci_targets(target: str) -> None:
     original_argv = sys.argv

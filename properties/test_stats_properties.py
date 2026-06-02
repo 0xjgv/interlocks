@@ -107,6 +107,17 @@ def test_inspect_function_reports_exact_source_span(styles: list[str]) -> None:
     assert inspected.loc == (fn.end_lineno or fn.lineno) - fn.lineno + 1
 
 
+@given(name=_IDENT)
+def test_inspect_function_reports_zero_asserts_for_plain_functions(name: str) -> None:
+    fn = ast.parse(f"def {name}() -> None:\n    pass\n").body[0]
+    assert isinstance(fn, ast.FunctionDef)
+
+    inspected = stats._inspect_function(fn, "tests/test_generated.py", qualname=name)
+
+    assert inspected.assert_count == 0
+    assert inspected.trivial_asserts == 0
+
+
 @given(names=st.lists(_IDENT, max_size=8, unique=True))
 def test_inspect_tree_returns_top_level_and_class_test_functions(names: list[str]) -> None:
     top_level = "\n".join(f"def test_{name}():\n    pass\n" for name in names)
@@ -492,6 +503,11 @@ def test_mutation_gap_sentence_accepts_exact_floor(score: float) -> None:
     mutation = MutationSummary(killed=1, survived=1, timeout=0, score=score, completed=True)
 
     assert stats._mutation_gap_sentence(mutation, score) == ""
+
+
+@given(floor=st.floats(max_value=0, allow_nan=False, allow_infinity=False))
+def test_mutation_gap_sentence_disabled_floor_suppresses_missing_mutation(floor: float) -> None:
+    assert stats._mutation_gap_sentence(None, floor) == ""
 
 
 @given(

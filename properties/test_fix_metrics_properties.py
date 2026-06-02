@@ -148,6 +148,11 @@ def test_sources_detail_collapses_all_truthy_sources(names: list[str]) -> None:
     assert detail == ("sources=all" if names else "sources=none")
 
 
+@given(raw=st.one_of(st.none(), st.text(max_size=20), st.integers(), st.lists(_JSON, max_size=5)))
+def test_sources_detail_rejects_non_mapping_sources(raw: object) -> None:
+    assert _sources_detail({"sources": raw}) == "sources=none"
+
+
 @given(st.dictionaries(st.text(max_size=20), _JSON, max_size=10))
 def test_fix_metrics_summaries_never_raise_on_json_objects(payload: dict[str, Any]) -> None:
     plan = _summarize_plan(payload)

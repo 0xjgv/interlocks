@@ -220,6 +220,18 @@ def test_flatten_optimize_rejects_non_string_policy_modes(policy_mode: object) -
     assert _flatten_optimize({"policy_mode": policy_mode}) is None
 
 
+def test_flatten_optimize_preserves_candidate_identity_fields() -> None:
+    flattened = _flatten_optimize({
+        "policy_mode": "auto",
+        "rule": "I001",
+        "patch_path": ".lintfix/patches/I001.patch",
+    })
+
+    assert flattened is not None
+    assert flattened["rule"] == "I001"
+    assert flattened["patch_path"] == ".lintfix/patches/I001.patch"
+
+
 @given(
     found=st.booleans(),
     notice=st.integers(min_value=0, max_value=100),

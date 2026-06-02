@@ -125,6 +125,20 @@ def test_item_status_tracks_score(category: str, score: int, detail: str) -> Non
     assert item.closure is None
 
 
+@given(category=_CATEGORY, score=st.integers(min_value=0, max_value=3), action=_ACTION)
+def test_item_preserves_explicit_closure(
+    category: str,
+    score: int,
+    action: str,
+) -> None:
+    closure = ClosurePath("custom command", "stage", "custom owner")
+
+    item = _item(category, score, "detail", action, closure=closure)
+
+    assert item.next_action == action
+    assert item.closure == closure
+
+
 @given(
     category=st.sampled_from([*sorted(_CI_CATEGORIES), "acceptance", "deps-freshness"]),
     action=_ACTION,

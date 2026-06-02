@@ -138,3 +138,16 @@ def test_progressive_lint_summary_caps_failure_examples(lines: list[str]) -> Non
     assert summary.status == "failed"
     assert summary.examples == tuple(lines[:10])
     assert summary.omitted == len(lines) - 10
+
+
+@given(returncode=st.sampled_from([0, 1]), stdout=st.text())
+def test_progressive_lint_summary_without_cap_always_passes(
+    returncode: int,
+    stdout: str,
+) -> None:
+    summary = _progressive_lint_summary(returncode, stdout, cap=None)
+
+    assert summary.passed is True
+    assert summary.status == "ok"
+    assert summary.examples == ()
+    assert summary.omitted == 0
