@@ -71,6 +71,10 @@ def test_private_measure_matches_public_measure_contract(patch_text: str) -> Non
     assert _measure(patch_text, {}) == measure(patch_text, {})
 
 
+def test_measure_empty_patch_has_zero_cost_shape() -> None:
+    assert _measure("", {}) == CandidateMetrics((), 0, 0, 0, 0, 0)
+
+
 @given(mode=_MODES, unsafe=st.booleans())
 def test_classify_empty_patch_is_skipped_regardless_of_policy(mode: str, unsafe: bool) -> None:
     budget = Budget("generated", 10, 100, 100, 100, allow_unsafe_fixes=True)
@@ -133,6 +137,20 @@ def test_decide_prioritizes_unsafe_empty_patch_policy_and_budget(
         assert reason == f"{mode} by policy"
 
 
+@given(changed_lines=st.integers(min_value=1, max_value=100))
+def test_decide_auto_downgrades_to_escrow_on_budget_failure(changed_lines: int) -> None:
+    metrics = CandidateMetrics(("sample.py",), changed_lines, changed_lines, 0, 0, 0)
+    cost = CandidateCost(1, changed_lines, 0, 0)
+    budget = Budget("generated", 1, changed_lines - 1, 10, 10, allow_unsafe_fixes=False)
+
+    decided_mode, reason = _decide("auto", metrics, cost, budget)
+
+    assert decided_mode == "escrow"
+    assert (
+        reason == f"auto downgraded to escrow: changed lines {changed_lines} > {changed_lines - 1}"
+    )
+
+
 @given(path=_PATHS, b_prefix=st.booleans())
 def test_capture_file_records_git_or_plain_post_image_path(path: str, b_prefix: bool) -> None:
     state = _MeasureState(files=[])
@@ -193,6 +211,14 @@ def test_capture_hunk_start_sets_old_line(start: int, count: int) -> None:
     assert state.old_line == start
 
 
+@given(line=st.text(max_size=120).filter(lambda value: not value.startswith("@@ -")))
+def test_capture_hunk_start_ignores_non_hunk_headers(line: str) -> None:
+    state = _MeasureState(files=[], old_line=123)
+
+    assert _capture_hunk_start(state, line) is False
+    assert state.old_line == 123
+
+
 @given(line=st.text(max_size=80), has_path=st.booleans())
 def test_skip_diff_line_requires_current_file_and_real_body_line(
     line: str, has_path: bool
@@ -201,6 +227,17 @@ def test_skip_diff_line_requires_current_file_and_real_body_line(
     expected = (not line) or not has_path or line.startswith(("---", "+++", "diff "))
 
     assert _skip_diff_line(state, line) is expected
+
+
+@given(
+    line=st.text(min_size=1, max_size=80).filter(
+        lambda value: not value.startswith(("---", "+++", "diff "))
+    )
+)
+def test_skip_diff_line_keeps_body_lines_when_current_file_is_known(line: str) -> None:
+    state = _MeasureState(files=["sample.py"], current_path="sample.py")
+
+    assert _skip_diff_line(state, line) is False
 
 
 @given(
@@ -226,6 +263,11 @@ def test_record_changed_line_updates_inside_outside_and_risk_counters(
     assert state.comment_deletes == (1 if deleted and body.startswith("#") else 0)
     assert state.control_flow_edits == (1 if body.startswith("if ") else 0)
     assert _line_inside(path, line, hunks)
+
+
+@given(path=_PATHS, line=st.integers(min_value=1, max_value=100))
+def test_line_inside_returns_false_for_missing_path(path: str, line: int) -> None:
+    assert _line_inside(path, line, {}) is False
 
 
 @given(path=_PATHS, line=st.integers(min_value=1, max_value=100), deleted=st.booleans())

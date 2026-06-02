@@ -56,6 +56,20 @@ def test_reset_invalid_container_preserves_matching_type_and_replaces_other_valu
         assert parent[key] is empty
 
 
+@given(key=_KEY, empty_kind=st.sampled_from(("dict", "list")))
+def test_reset_invalid_container_inserts_missing_container(
+    key: str,
+    empty_kind: str,
+) -> None:
+    parent: dict[str, object] = {}
+    empty: dict[str, object] | list[object] = {} if empty_kind == "dict" else []
+
+    result = _reset_invalid_container(parent, key, empty)
+
+    assert result is empty
+    assert parent == {key: empty}
+
+
 _STOP_ENTRY = st.one_of(
     st.none(),
     st.integers(),

@@ -103,6 +103,25 @@ def test_tool_config_source_returns_bundled_source_when_project_has_no_override(
     assert source.is_bundled is True
 
 
+@given(tool=_KNOWN_TOOL)
+def test_tool_config_source_returns_project_source_for_sidecar_override(tool: str) -> None:
+    spec = TOOL_CONFIG_SPECS[tool]
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        sidecar = next(iter(spec.sidecars), spec.filename)
+        (root / sidecar).write_text("", encoding="utf-8")
+        cfg = _Cfg(root, {"tool": {}})
+
+        source = tool_config_source(cast("InterlockConfig", cfg), tool)
+
+    assert source.tool == tool
+    assert source.source == f"project: {sidecar}"
+    assert source.path == root / sidecar
+    assert source.bundled_path == path(spec.filename)
+    assert source.flag == spec.flag
+    assert source.is_bundled is False
+
+
 @given(spec=_KNOWN_SPEC, owns_pyproject_section=st.booleans())
 def test_config_flag_if_absent_returns_bundled_flag_only_without_project_config(
     spec: ToolConfigSpec,
@@ -121,3 +140,22 @@ def test_config_flag_if_absent_returns_bundled_flag_only_without_project_config(
 
     expected = [] if owns_pyproject_section else [spec.flag, str(path(spec.filename))]
     assert flags == expected
+
+
+@given(spec=_KNOWN_SPEC)
+def test_config_flag_if_absent_omits_flag_when_sidecar_exists(spec: ToolConfigSpec) -> None:
+    sidecar = next(iter(spec.sidecars), spec.filename)
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        (root / sidecar).write_text("", encoding="utf-8")
+        cfg = _Cfg(root, {"tool": {}})
+
+        flags = config_flag_if_absent(
+            cast("InterlockConfig", cfg),
+            section=spec.section,
+            filename=spec.filename,
+            flag=spec.flag,
+            sidecars=(sidecar,),
+        )
+
+    assert flags == []

@@ -179,6 +179,16 @@ def test_read_dedup_keeps_only_finite_numeric_timestamps(rows: dict[str, object]
     assert loaded == expected
 
 
+@given(raw=st.text(max_size=200).filter(lambda value: not value.lstrip().startswith(("{", "["))))
+def test_read_dedup_returns_empty_for_missing_or_corrupt_dedup_file(raw: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        assert _read_dedup(root) == {}
+
+        (root / _DEDUP_FILE).write_text(raw, encoding="utf-8")
+        assert _read_dedup(root) == {}
+
+
 @given(
     fingerprint=_SEGMENTS,
     include_entry=st.booleans(),
@@ -200,6 +210,22 @@ def test_should_suppress_transport_matches_thirty_day_dedup_window(
         suppressed = should_suppress_transport(fingerprint, now=now)
 
     assert suppressed is (include_entry and (now - last_seen) < _THIRTY_DAYS_SECONDS)
+
+
+@given(fingerprint=_SEGMENTS, now=st.integers(min_value=0, max_value=10_000_000).map(float))
+def test_should_suppress_transport_boundary_is_strictly_less_than_thirty_days(
+    fingerprint: str,
+    now: float,
+) -> None:
+    with TemporaryDirectory() as raw_root, patch.dict(os.environ, {"XDG_CACHE_HOME": raw_root}):
+        directory = Path(raw_root) / "interlocks" / "crashes"
+        directory.mkdir(parents=True)
+        (directory / _DEDUP_FILE).write_text(
+            json.dumps({fingerprint: now - _THIRTY_DAYS_SECONDS}),
+            encoding="utf-8",
+        )
+
+        assert should_suppress_transport(fingerprint, now=now) is False
 
 
 @given(

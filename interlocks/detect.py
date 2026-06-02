@@ -87,7 +87,7 @@ def dependency_declared(pyproject: dict[str, Any], package: str) -> bool:
 
 def _iter_declared_dep_names(pyproject: dict[str, Any]) -> Iterator[str]:
     for dep in _iter_declared_deps(pyproject):
-        match = re.match(r"\s*([A-Za-z0-9_.-]+)", dep)
+        match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9_.-]*)", dep)
         if match is not None:
             yield match.group(1)
 

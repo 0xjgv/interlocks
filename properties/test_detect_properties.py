@@ -26,11 +26,7 @@ from interlocks.detect import (
 )
 
 _DEP = st.text(min_size=1, max_size=40)
-_DEP_NAME = st.text(
-    alphabet=string.ascii_letters + string.digits + "-_.",
-    min_size=1,
-    max_size=30,
-)
+_DEP_NAME = st.from_regex(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,29}", fullmatch=True)
 _MALFORMED_CONTAINER = st.one_of(
     st.none(),
     st.text(max_size=20),
@@ -138,6 +134,14 @@ def test_detect_features_dir_preserves_preference_order(
         assert detect_features_dir(root, custom_tests) == expected
 
 
+@given(custom_test_name=st.from_regex(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,20}", fullmatch=True))
+def test_detect_features_dir_returns_none_when_no_candidate_exists(custom_test_name: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+
+        assert detect_features_dir(root, root / custom_test_name) is None
+
+
 @given(
     has_uv_declared=st.booleans(),
     has_hatch_declared=st.booleans(),
@@ -203,6 +207,24 @@ def test_detect_src_dir_preserves_declared_and_layout_preference_order(
             else root
         ).resolve()
         assert detected == expected
+
+
+@given(has_init_package=st.booleans())
+def test_detect_src_dir_falls_back_to_src_dir_when_src_layout_has_no_package(
+    has_init_package: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        src = root / "src"
+        src.mkdir()
+        if has_init_package:
+            (src / "pkg").mkdir()
+            (src / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+
+        detected = detect_src_dir(root, {})
+
+    expected = src / "pkg" if has_init_package else src
+    assert detected == expected.resolve()
 
 
 @given(st.sampled_from(["off", "behave", "pytest-bdd"]))
@@ -314,6 +336,17 @@ def test_deps_mention_matches_declared_dependency_words(deps: list[str]) -> None
     )
 
 
+@given(pyproject=st.dictionaries(st.text(max_size=20), _MALFORMED_CONTAINER, max_size=5))
+def test_deps_mention_is_false_without_declared_dependency_lists(
+    pyproject: dict[str, object],
+) -> None:
+    pyproject.pop("project", None)
+    pyproject.pop("dependency-groups", None)
+    pyproject.pop("tool", None)
+
+    assert _deps_mention(_PYTEST_WORD, pyproject) is False
+
+
 @given(package=st.sampled_from(["hypothesis", "pytest-bdd", "some_pkg", "some.pkg"]))
 def test_dependency_declared_matches_normalized_distribution_name(package: str) -> None:
     pyproject = {"dependency-groups": {"dev": [f"{package}[extra]>=1"]}}
@@ -343,6 +376,20 @@ def test_iter_declared_dep_names_extracts_distribution_names(
     pyproject = {"project": {"dependencies": [f"  {name}{suffix}" for name in names]}}
 
     assert list(_iter_declared_dep_names(pyproject)) == names
+
+
+@given(
+    deps=st.lists(
+        st.text(max_size=20).filter(lambda value: not value.lstrip()[:1].isalnum()),
+        max_size=8,
+    )
+)
+def test_iter_declared_dep_names_ignores_strings_without_distribution_prefix(
+    deps: list[str],
+) -> None:
+    pyproject = {"project": {"dependencies": deps}}
+
+    assert list(_iter_declared_dep_names(pyproject)) == []
 
 
 @given(tool=st.text(min_size=1, max_size=20))

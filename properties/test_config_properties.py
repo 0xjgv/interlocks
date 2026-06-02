@@ -223,6 +223,13 @@ def test_preset_override_accepts_only_supported_presets(preset: object) -> None:
     assert parsed == (preset if preset in _SUPPORTED_PRESETS else None)
 
 
+@given(table=st.dictionaries(st.text(max_size=20), _EXPLICIT_VALUE, max_size=6))
+def test_preset_override_returns_none_when_preset_key_is_absent(table: dict[str, object]) -> None:
+    table.pop("preset", None)
+
+    assert _preset_override(table) is None
+
+
 @given(row=_ENUM_KEY_VALUES, value=st.one_of(st.text(max_size=30), st.integers(), st.booleans()))
 def test_enum_override_accepts_only_known_values(
     row: tuple[str, tuple[str, ...]], value: object
@@ -234,11 +241,29 @@ def test_enum_override_accepts_only_known_values(
     assert parsed == (value if value in options else None)
 
 
+@given(
+    row=_ENUM_KEY_VALUES, table=st.dictionaries(st.text(max_size=20), _EXPLICIT_VALUE, max_size=6)
+)
+def test_enum_override_returns_none_when_key_is_absent(
+    row: tuple[str, tuple[str, ...]],
+    table: dict[str, object],
+) -> None:
+    key, _options = row
+    table.pop(key, None)
+
+    assert _enum_override(table, key) is None
+
+
 @given(raw=st.one_of(st.booleans(), st.none(), st.integers(), st.text(max_size=20)))
 def test_coerce_bool_accepts_only_boolean_values(raw: object) -> None:
     parsed = _coerce_bool(raw)
 
     assert parsed == (raw if isinstance(raw, bool) else None)
+
+
+@given(raw=st.one_of(st.integers(), st.floats(allow_nan=False), st.text(max_size=20), st.none()))
+def test_coerce_bool_does_not_treat_truthy_or_falsy_non_bools_as_bool(raw: object) -> None:
+    assert _coerce_bool(raw) is None
 
 
 @given(st.text(max_size=30).filter(lambda value: value not in _SUPPORTED_PRESETS))
@@ -365,6 +390,25 @@ def test_project_env_ready_matches_invoker_and_in_tree_venv(
         ready = project_env_ready(cfg)
 
     assert ready is (invoker == "uv" or has_venv)
+
+
+@given(has_venv=st.booleans())
+def test_project_env_ready_uv_invoker_ignores_venv_presence(has_venv: bool) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        if has_venv:
+            interpreter = expected_target_interpreter(root)
+            interpreter.parent.mkdir(parents=True)
+            interpreter.write_text("", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "interlocks",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="uv",
+        )
+
+        assert project_env_ready(cfg) is True
 
 
 @given(st.lists(_ARCH_LAYER_VALUES, max_size=20))

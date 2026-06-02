@@ -104,3 +104,36 @@ def test_check_budget_reports_first_exceeded_limit(
         assert reason == f"risk {risk} > {max_risk}"
     else:
         assert reason is None
+
+
+@given(
+    files_touched=_COUNT,
+    changed_lines_total=_COUNT,
+    changed_lines_outside_diff=_COUNT,
+    risk=_COUNT,
+    unsafe=st.booleans(),
+)
+def test_check_budget_accepts_values_at_their_limits_when_unsafe_is_allowed(
+    files_touched: int,
+    changed_lines_total: int,
+    changed_lines_outside_diff: int,
+    risk: int,
+    unsafe: bool,
+) -> None:
+    cost = CandidateCost(
+        files_touched=files_touched,
+        changed_lines_total=changed_lines_total,
+        changed_lines_outside_diff=changed_lines_outside_diff,
+        risk=risk,
+        unsafe=unsafe,
+    )
+    budget = Budget(
+        name="generated",
+        max_files=files_touched,
+        max_changed_lines=changed_lines_total,
+        max_outside_diff_lines=changed_lines_outside_diff,
+        max_risk=risk,
+        allow_unsafe_fixes=True,
+    )
+
+    assert check_budget(cost, budget) is None
