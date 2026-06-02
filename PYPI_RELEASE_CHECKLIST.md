@@ -40,8 +40,13 @@ Regenerate the hash-pinned tool sidecar so `interlocks warm` can verify wheels i
 
 ```bash
 uv pip compile interlocks/defaults/tools.in \
+  --python-version 3.11 \
   --generate-hashes \
   -o interlocks/defaults/tools.txt
+for py in 3.11 3.12 3.13; do
+  target="$(mktemp -d)"
+  uv pip install --require-hashes --python "$py" --target "$target" -r interlocks/defaults/tools.txt
+done
 git add interlocks/defaults/tools.txt
 git diff --cached interlocks/defaults/tools.txt
 git commit -m "chore(tools): refresh hash-pinned tools.txt for vX.Y.Z"
