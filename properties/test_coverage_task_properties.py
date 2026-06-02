@@ -12,9 +12,11 @@ from hypothesis import strategies as st
 
 from interlocks.config import InterlockConfig
 from interlocks.tasks.coverage import (
+    _COVERAGE_APPEND_FLAG,
     _coverage_options,
     _coverage_progress_label,
     _coverage_progress_steps,
+    _coverage_property_test_command,
     _coverage_skip_payload,
     _property_coverage_pre_cmds,
 )
@@ -77,6 +79,35 @@ def test_coverage_options_resolve_cli_properties_and_threshold(
 
 
 @given(
+    default_profile=st.sampled_from(["check", "ci", "nightly", "default"]),
+    explicit_profile=st.sampled_from(["check", "ci", "nightly", "default", "custom"]),
+)
+def test_coverage_options_properties_flag_always_enables_properties(
+    default_profile: str,
+    explicit_profile: str,
+) -> None:
+    cfg = InterlockConfig(
+        project_root=Path(),
+        src_dir=Path("pkg"),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+        coverage_min=80,
+    )
+
+    with patch.object(sys, "argv", ["interlocks", "coverage", f"--properties={explicit_profile}"]):
+        _min_pct, include_properties, property_profile = _coverage_options(
+            cfg,
+            min_pct=None,
+            include_properties=False,
+            property_profile=default_profile,
+        )
+
+    assert include_properties is True
+    assert property_profile == explicit_profile
+
+
+@given(
     profile=st.sampled_from(["check", "ci", "nightly", "default"]),
     coverage_args=st.lists(
         st.sampled_from(["--branch", "--timid", "--rcfile=coverage.ini"]),
@@ -124,6 +155,86 @@ def test_property_coverage_pre_cmds_exist_only_when_property_files_exist(
 
 
 @given(
+    profile=st.sampled_from(["check", "ci", "nightly", "default"]),
+    coverage_args=st.lists(
+        st.sampled_from(["--branch", "--timid", "--rcfile=coverage.ini"]),
+        max_size=3,
+        unique=True,
+    ),
+)
+def test_property_coverage_command_preserves_coverage_run_order(
+    profile: str,
+    coverage_args: list[str],
+) -> None:
+    cfg = InterlockConfig(
+        project_root=Path("/tmp/project"),
+        src_dir=Path("/tmp/project/pkg"),
+        test_dir=Path("/tmp/project/tests"),
+        test_runner="pytest",
+        test_invoker="python",
+        properties_dir=Path("/tmp/project/properties"),
+    )
+
+    cmd = _coverage_property_test_command(
+        cfg,
+        coverage_args=tuple(coverage_args),
+        profile=profile,
+    )
+
+    run_index = cmd.index("run")
+    append_index = cmd.index(_COVERAGE_APPEND_FLAG)
+    runner_index = cmd.index("/tmp/project/.interlocks/property_coverage_runner.py")
+    profile_index = cmd.index(f"--hypothesis-profile={profile}")
+    assert cmd[run_index - 1] == "coverage"
+    assert run_index < append_index < runner_index < profile_index
+    assert cmd[append_index + 1 : append_index + 1 + len(coverage_args)] == coverage_args
+
+
+@given(
+    profile=st.sampled_from(["check", "ci", "nightly", "default"]),
+    coverage_args=st.lists(
+        st.sampled_from(["--branch", "--timid", "--rcfile=coverage.ini"]),
+        max_size=3,
+        unique=True,
+    ),
+)
+def test_property_coverage_pre_cmds_end_with_profiled_coverage_run(
+    profile: str,
+    coverage_args: list[str],
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        properties = root / "properties"
+        properties.mkdir()
+        (properties / "test_generated_properties.py").write_text(
+            "def test_generated() -> None:\n    assert True\n", encoding="utf-8"
+        )
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "pkg",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            properties_dir=properties,
+        )
+
+        cmds = _property_coverage_pre_cmds(
+            cfg,
+            coverage_args=tuple(coverage_args),
+            profile=profile,
+        )
+
+    assert len(cmds) == 3
+    assert "find_spec('hypothesis')" in " ".join(cmds[0])
+    assert "property_coverage_runner.py" in " ".join(cmds[1])
+    assert cmds[2] == _coverage_property_test_command(
+        cfg,
+        coverage_args=tuple(coverage_args),
+        profile=profile,
+    )
+
+
+@given(
     prefix=st.lists(st.text(min_size=1, max_size=10), max_size=3),
     suffix=st.lists(st.text(min_size=1, max_size=10), max_size=3),
     phase=st.sampled_from([
@@ -155,6 +266,18 @@ def test_coverage_progress_steps_map_precommands_and_append_report(
 
     assert steps[:-1] == tuple(_coverage_progress_label(cmd) for cmd in pre_cmds)
     assert steps[-1] == "coverage report"
+
+
+@given(
+    pre_cmds=st.lists(
+        st.lists(st.text(min_size=1, max_size=12), min_size=1, max_size=5),
+        max_size=8,
+    ).map(tuple)
+)
+def test_coverage_progress_steps_count_matches_precommands(
+    pre_cmds: tuple[list[str], ...],
+) -> None:
+    assert len(_coverage_progress_steps(pre_cmds)) == len(pre_cmds) + 1
 
 
 @given(cmd=st.lists(st.text(min_size=1, max_size=12), min_size=1, max_size=8))
@@ -200,4 +323,38 @@ def test_coverage_skip_payload_names_threshold_and_property_profile(
         "property_profile": profile if include_properties else None,
         "reason": reason,
         "next_actions": [next_action],
+    }
+
+
+@given(
+    min_pct=st.integers(min_value=0, max_value=100),
+    include_properties=st.booleans(),
+    profile=st.sampled_from(["check", "ci", "nightly", "default"]),
+    reason=st.text(max_size=100),
+    next_action=st.text(max_size=100),
+)
+def test_coverage_skip_payload_has_stable_machine_keys(
+    min_pct: int,
+    include_properties: bool,
+    profile: str,
+    reason: str,
+    next_action: str,
+) -> None:
+    assert set(
+        _coverage_skip_payload(
+            min_pct=min_pct,
+            include_properties=include_properties,
+            property_profile=profile,
+            reason=reason,
+            next_action=next_action,
+        )
+    ) == {
+        "command",
+        "passed",
+        "status",
+        "min_pct",
+        "include_properties",
+        "property_profile",
+        "reason",
+        "next_actions",
     }

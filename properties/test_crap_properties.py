@@ -83,6 +83,28 @@ def test_crap_context_projects_config_and_argv(
     assert context.command == f"CRAP --max={max_crap}"
 
 
+@given(max_crap=_SMALL_FLOAT, enforce_crap=st.booleans(), emit_json=st.booleans())
+def test_crap_context_uses_configured_threshold_without_cli_override(
+    max_crap: float,
+    enforce_crap: bool,
+    emit_json: bool,
+) -> None:
+    cfg = cast(
+        "InterlockConfig",
+        SimpleNamespace(crap_max=max_crap, enforce_crap=enforce_crap),
+    )
+
+    original_argv = sys.argv
+    try:
+        sys.argv = ["interlocks", "crap"]
+        context = _crap_context(cfg, emit_json=emit_json)
+    finally:
+        sys.argv = original_argv
+
+    assert context.max_crap == max_crap
+    assert context.command == f"CRAP --max={max_crap}"
+
+
 @given(row=_ROW)
 def test_crap_offender_payload_projects_row_fields(row: CrapRow) -> None:
     payload = _crap_offender_payload(row)
@@ -172,3 +194,65 @@ def test_crap_payload_counts_and_truncates_offenders(
     assert ("truncated_count" in payload) is (len(offenders) > _CRAP_JSON_OFFENDER_LIMIT)
     assert ("reason" in payload) is (reason is not None)
     assert ("next_action" in payload) is (next_action is not None)
+
+
+@given(
+    offenders=st.lists(_ROW, max_size=_CRAP_JSON_OFFENDER_LIMIT + 10),
+    function_count=_COUNT,
+    elapsed=_FINITE_FLOAT,
+    max_crap=_FINITE_FLOAT,
+    enforce_crap=st.booleans(),
+    changed_only=st.booleans(),
+    reason=st.one_of(st.none(), st.text(max_size=40)),
+    next_action=st.one_of(st.none(), st.text(max_size=40)),
+)
+def test_crap_payload_has_stable_machine_keys(
+    offenders: list[CrapRow],
+    function_count: int,
+    elapsed: float,
+    max_crap: float,
+    enforce_crap: bool,
+    changed_only: bool,
+    reason: str | None,
+    next_action: str | None,
+) -> None:
+    passed, status = _crap_status(len(offenders), enforce_crap)
+    payload = _crap_payload(
+        _CrapContext(
+            max_crap=max_crap,
+            enforce_crap=enforce_crap,
+            changed_only=changed_only,
+            json_mode=True,
+            command=f"CRAP --max={max_crap}",
+            start=0.0,
+        ),
+        _CrapPayloadState(
+            passed=passed,
+            status=status,
+            elapsed=elapsed,
+            function_count=function_count,
+            offenders=offenders,
+            reason=reason,
+            next_action=next_action,
+        ),
+    )
+
+    expected = {
+        "command",
+        "passed",
+        "status",
+        "elapsed_seconds",
+        "max_crap",
+        "enforce_crap",
+        "changed_only",
+        "function_count",
+        "offender_count",
+        "offenders",
+    }
+    if len(offenders) > _CRAP_JSON_OFFENDER_LIMIT:
+        expected.add("truncated_count")
+    if reason is not None:
+        expected.add("reason")
+    if next_action is not None:
+        expected.add("next_action")
+    assert set(payload) == expected

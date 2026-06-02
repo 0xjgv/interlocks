@@ -121,6 +121,39 @@ def test_key_widths_cover_all_rendered_config_columns(skip_labels: list[str]) ->
     assert widths.source >= max(len(_source_label(cfg, key.name)) for key in CONFIG_KEYS)
 
 
+@given(state=st.sampled_from(["missing", "unreadable"]))
+def test_key_widths_cover_unresolved_project_labels(state: str) -> None:
+    widths = _key_widths(None, state=state)  # type: ignore[arg-type]
+
+    assert widths.name >= max(len(key.name) for key in CONFIG_KEYS)
+    assert widths.type >= max(len(key.type) for key in CONFIG_KEYS)
+    assert widths.default >= max(len(key.default) for key in CONFIG_KEYS)
+    assert widths.current >= max(
+        len(_display_current_label(None, key.name, state=state)) for key in CONFIG_KEYS
+    )
+    assert widths.source >= max(
+        len(_display_source_label(None, key.name, state=state)) for key in CONFIG_KEYS
+    )
+
+
+@given(skip_labels=st.lists(st.sampled_from(sorted(SKIP_LABELS)), unique=True, max_size=8))
+def test_key_widths_are_exact_column_maxima(skip_labels: list[str]) -> None:
+    with TemporaryDirectory() as raw_root:
+        cfg = replace(_cfg(Path(raw_root)), skip=frozenset(skip_labels))
+
+        widths = _key_widths(cfg)
+
+    assert widths.name == max(len(key.name) for key in CONFIG_KEYS)
+    assert widths.type == max(len(key.type) for key in CONFIG_KEYS)
+    assert widths.default == max(len(key.default) for key in CONFIG_KEYS)
+    assert widths.current == max(
+        len(_display_current_label(cfg, key.name, state="unreadable")) for key in CONFIG_KEYS
+    )
+    assert widths.source == max(
+        len(_display_source_label(cfg, key.name, state="unreadable")) for key in CONFIG_KEYS
+    )
+
+
 def test_missing_config_display_labels_do_not_claim_resolved_defaults() -> None:
     assert _display_current_label(None, "coverage_min", state="missing") == "(not resolved)"
     assert _display_source_label(None, "coverage_min", state="missing") == "missing-project"
