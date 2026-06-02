@@ -182,6 +182,15 @@ def test_attribution_next_actions_prioritize_floor_failure(status: str) -> None:
     assert "scenario coverage" in actions[0]
 
 
+@given(status=st.text(max_size=30).filter(lambda value: value != "ok"))
+def test_attribution_next_actions_for_non_ok_status_name_attribution_task(status: str) -> None:
+    actions = behavior_attribution_task._attribution_next_actions(status, floor_failure=False)
+
+    assert actions == [
+        "Update behavior markers or scenario code, then rerun `interlocks behavior-attribution`."
+    ]
+
+
 @given(
     rows=st.lists(
         st.tuples(st.integers(min_value=-10, max_value=10), st.booleans()),
@@ -243,6 +252,24 @@ def test_validate_current_project_skips_registry_without_public_symbols(ids: lis
             behavior_attribution_task,
             "feature_files",
             side_effect=AssertionError("symbol-less registry should not read feature files"),
+        ),
+    ):
+        result = behavior_attribution_task._validate_current_project(_task_cfg())
+
+    assert result is None
+
+
+def test_validate_current_project_skips_empty_registry_without_feature_reads() -> None:
+    with (
+        patch.object(
+            behavior_attribution_task,
+            "behavior_registry_for_config",
+            return_value=BehaviorRegistry(()),
+        ),
+        patch.object(
+            behavior_attribution_task,
+            "feature_files",
+            side_effect=AssertionError("empty registry should not read feature files"),
         ),
     ):
         result = behavior_attribution_task._validate_current_project(_task_cfg())

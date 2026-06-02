@@ -193,6 +193,11 @@ def test_config_state_resolved_wins_over_pyproject_presence(pyproject_present: b
     assert _config_state(_cfg(Path()), pyproject_present=pyproject_present) == "resolved"
 
 
+@given(pyproject_present=st.booleans())
+def test_config_state_without_config_never_reports_resolved(pyproject_present: bool) -> None:
+    assert _config_state(None, pyproject_present=pyproject_present) in {"missing", "unreadable"}
+
+
 @given(
     tool=_TOOL_NAME,
     source_label=st.text(min_size=1, max_size=30).filter(lambda value: value != "bundled"),

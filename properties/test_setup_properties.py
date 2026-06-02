@@ -75,6 +75,24 @@ def test_setup_payload_preserves_mode_check_and_next_actions(
     assert payload["next_actions"] == next_actions
 
 
+@given(mode=st.text(max_size=20), check_only=st.booleans())
+def test_setup_payload_empty_statuses_are_installed_shape(
+    mode: str,
+    check_only: bool,
+) -> None:
+    payload = _setup_payload(
+        mode=mode,
+        check_only=check_only,
+        statuses=[],
+        next_actions=[],
+    )
+
+    assert payload["passed"] is True
+    assert payload["status"] == "installed"
+    assert payload["artifacts"] == []
+    assert payload["next_actions"] == []
+
+
 @given(installed=st.tuples(st.booleans(), st.booleans(), st.booleans(), st.booleans()))
 def test_check_payload_includes_fix_action_only_when_missing(
     installed: tuple[bool, bool, bool, bool],
@@ -90,6 +108,22 @@ def test_check_payload_includes_fix_action_only_when_missing(
         assert payload["next_actions"] == ["consider progressive"]
     else:
         assert payload["next_actions"] == ["fix it", "consider progressive"]
+
+
+@given(fix_message=st.text(max_size=40))
+def test_check_payload_with_missing_artifacts_uses_fix_action_only(
+    fix_message: str,
+) -> None:
+    payload = _check_payload(
+        mode="local",
+        statuses=_statuses((False, False, False, False)),
+        fix_message=fix_message,
+        extra_lines=[],
+    )
+
+    assert payload["check"] is True
+    assert payload["passed"] is False
+    assert payload["next_actions"] == [fix_message]
 
 
 @given(

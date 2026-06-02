@@ -136,6 +136,11 @@ def test_mutmut_slice_ignores_other_tables(table: str) -> None:
     assert _mutmut_slice(text) is None
 
 
+@given(lines=_BODY_LINES)
+def test_mutmut_slice_returns_none_without_mutmut_header(lines: list[str]) -> None:
+    assert _mutmut_slice("\n".join(lines)) is None
+
+
 @given(existing=_PATHS, replacement=_PATHS)
 def test_rewrite_replaces_generated_single_line_arrays(
     existing: list[str],

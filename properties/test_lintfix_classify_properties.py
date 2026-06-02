@@ -205,6 +205,19 @@ def test_capture_file_strips_git_prefix_with_matching_old_header(path: str) -> N
     assert state.files == [path]
 
 
+@given(previous=_PATHS, old_header=st.one_of(st.none(), _PATHS))
+def test_capture_file_clears_old_header_without_switching_for_dev_null(
+    previous: str,
+    old_header: str | None,
+) -> None:
+    state = _MeasureState(files=[], current_path=previous, old_header_path=old_header)
+
+    assert _capture_file(state, "+++ /dev/null")
+    assert state.current_path == previous
+    assert state.old_header_path is None
+    assert state.files == []
+
+
 @given(path=_PATHS)
 def test_normalize_post_image_path_strips_only_proven_git_prefixes(path: str) -> None:
     git_path = f"b/{path}"
@@ -385,6 +398,27 @@ def test_measure_body_line_ignores_non_diff_prefixes(
     assert state.inside == 0
     assert state.outside == 0
     assert state.old_line == line
+
+
+@given(
+    body=st.text(max_size=40),
+    path=_PATHS,
+    line=st.integers(min_value=1, max_value=100),
+)
+def test_measure_body_line_counts_deletions_outside_hunks_and_advances_old_line(
+    body: str,
+    path: str,
+    line: int,
+) -> None:
+    state = _MeasureState(files=[path], current_path=path, old_line=line)
+    hunks = {path: FileHunks(path, (Hunk(line + 1, line + 1),))}
+
+    _measure_body_line(state, f"-{body}", hunks)
+
+    assert state.total == 1
+    assert state.inside == 0
+    assert state.outside == 1
+    assert state.old_line == line + 1
 
 
 @given(

@@ -213,3 +213,14 @@ def test_alias_suffix_lists_sorted_aliases_for_canonical_name(name: str) -> None
 @given(st.text().filter(lambda name: name not in set(ALIASES.values())))
 def test_alias_suffix_is_empty_without_alias(name: str) -> None:
     assert not alias_suffix(name)
+
+
+@given(
+    st.sampled_from(
+        tuple(name for name in _CANONICAL_ALIASED_NAMES if len(aliases_for(name)) == 1)
+    )
+)
+def test_alias_suffix_uses_singular_label_for_one_alias(name: str) -> None:
+    [alias] = aliases_for(name)
+
+    assert alias_suffix(name) == f" (alias: {alias})"

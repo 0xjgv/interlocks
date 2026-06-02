@@ -31,3 +31,13 @@ def test_candidate_files_returns_unique_union(
 @given(rule=_RULE)
 def test_candidate_files_ignores_candidates_without_files(rule: str) -> None:
     assert _candidate_files((("lint", rule, ()), ("format", rule, ()))) == ()
+
+
+@given(file=_FILE, rules=st.lists(_RULE, min_size=1, max_size=8))
+def test_candidate_files_deduplicates_one_file_across_rules(
+    file: str,
+    rules: list[str],
+) -> None:
+    candidates = tuple(("lint", rule, (file,)) for rule in rules)
+
+    assert _candidate_files(candidates) == (file,)

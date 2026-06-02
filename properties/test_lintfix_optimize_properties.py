@@ -393,6 +393,21 @@ def test_build_selection_with_empty_plan_rejects_every_candidate(
     assert selection.total_cost == CostVector(0, 0, 0, 0)
 
 
+@given(name=st.text(min_size=1, max_size=30), items=candidates())
+def test_build_selection_carries_budget_name(name: str, items: tuple[Candidate, ...]) -> None:
+    budget = Budget(
+        name,
+        max_files=0,
+        max_changed_lines=0,
+        max_outside_diff_lines=0,
+        max_risk=0,
+    )
+
+    selection = _build_selection(items, budget, _Plan())
+
+    assert selection.budget_name == name
+
+
 @given(dimension=st.sampled_from(["outside", "changed", "files", "risk", "none"]))
 def test_budget_overflow_reports_first_exceeded_dimension(dimension: str) -> None:
     budget = Budget("tiny", max_files=1, max_changed_lines=1, max_outside_diff_lines=1, max_risk=1)

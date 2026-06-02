@@ -117,6 +117,17 @@ def test_mutation_evidence_completed_returns_none_without_evidence() -> None:
     assert _mutation_evidence_completed(None) is None
 
 
+@given(
+    payload=st.dictionaries(
+        st.text(max_size=12).filter(lambda key: key != "completed"), _JSON_SCALARS
+    )
+)
+def test_mutation_evidence_completed_returns_none_without_completed_key(
+    payload: dict[str, object],
+) -> None:
+    assert _mutation_evidence_completed(payload) is None
+
+
 @given(value=_JSON_SCALARS)
 def test_mutation_evidence_no_results_accepts_only_true_marker(value: object) -> None:
     assert mutation_evidence_no_results({"no_results": value}) is (value is True)
@@ -428,6 +439,14 @@ def test_parse_coverage_prefixes_source_relative_filenames_once(filename: str) -
     assert parsed == {"pkg/mod.py": {7: 1}}
 
 
+def test_parse_coverage_returns_empty_map_without_class_nodes() -> None:
+    with TemporaryDirectory() as raw_root:
+        path = Path(raw_root) / "coverage.xml"
+        ET.ElementTree(ET.Element("coverage")).write(path, encoding="utf-8")
+
+        assert parse_coverage(path) == {}
+
+
 @given(rate=_LINE_RATE_ATTR)
 def test_coverage_line_rate_accepts_only_unit_interval_rates(rate: str | None) -> None:
     with TemporaryDirectory() as raw_root:
@@ -684,6 +703,36 @@ def test_read_mutation_summary_without_cache_dirs_does_not_touch_tools(
             summary = read_mutation_summary(
                 require_interlocks_evidence=require_interlocks_evidence
             )
+        finally:
+            metrics_mod.capture = old_capture
+            metrics_mod.load_config = old_load_config
+            os.chdir(old_cwd)
+
+    assert summary is None
+
+
+@given(cache_dir=st.sampled_from(["mutants", ".mutmut-cache"]))
+def test_read_mutation_summary_requires_interlocks_evidence_before_tool_access(
+    cache_dir: str,
+) -> None:
+    def fail_capture(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("read_mutation_summary should not call mutmut without evidence")
+
+    old_capture = metrics_mod.capture
+    old_load_config = metrics_mod.load_config
+    old_cwd = Path.cwd()
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        (root / cache_dir).mkdir()
+        os.chdir(root)
+
+        def fake_load_config() -> SimpleNamespace:
+            return SimpleNamespace(project_root=root)
+
+        metrics_mod.capture = fail_capture  # type: ignore[assignment]
+        metrics_mod.load_config = fake_load_config  # type: ignore[assignment]
+        try:
+            summary = read_mutation_summary(require_interlocks_evidence=True)
         finally:
             metrics_mod.capture = old_capture
             metrics_mod.load_config = old_load_config

@@ -423,6 +423,25 @@ def test_stage_json_handles_empty_gate_accumulators(
     }
 
 
+@given(
+    command=st.text(max_size=30),
+    passed=st.booleans(),
+    elapsed=st.floats(allow_nan=False),
+)
+def test_stage_json_omits_evidence_path_only_for_none(
+    command: str,
+    passed: bool,
+    elapsed: float,
+) -> None:
+    reset_results()
+
+    without_evidence = stage_json(command, passed=passed, elapsed=elapsed)
+    with_empty_evidence = stage_json(command, passed=passed, elapsed=elapsed, evidence_path="")
+
+    assert "evidence_path" not in without_evidence
+    assert with_empty_evidence["evidence_path"] == ""
+
+
 @given(command=st.text(min_size=1, max_size=30), error=st.text(min_size=1, max_size=120))
 def test_preflight_error_payload_keeps_json_error_contract(command: str, error: str) -> None:
     payload = _preflight_error_payload(command, error)
@@ -544,6 +563,17 @@ def test_display_head_uses_basename_for_non_python_commands(head: str, tail: lis
     cmd = [f"/tmp/tools/{head}", *tail]
 
     assert _display_head_and_rest(cmd) == (head, tail)
+
+
+@given(
+    head=st.text(
+        alphabet=string.ascii_letters + string.digits + "_.-",
+        min_size=1,
+        max_size=20,
+    ).filter(lambda value: value not in {"python", "python3", Path(sys.executable).name})
+)
+def test_display_head_handles_single_non_python_command(head: str) -> None:
+    assert _display_head_and_rest([f"/tmp/tools/{head}"]) == (head, [])
 
 
 @given(

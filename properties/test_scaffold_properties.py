@@ -75,6 +75,23 @@ def test_next_actions_without_declared_dependency_preserves_actions_when_missing
     assert result is actions
 
 
+@given(extra_actions=st.lists(st.text(max_size=30), max_size=8))
+def test_next_actions_without_declared_dependency_removes_all_dependency_actions(
+    extra_actions: list[str],
+) -> None:
+    action = "Add pytest-bdd."
+    actions = tuple([action, *extra_actions, action])
+
+    result = next_actions_without_declared_dependency(
+        {"dependency-groups": {"dev": ["pytest-bdd>=8"]}},
+        dependency="pytest-bdd",
+        dependency_action=action,
+        actions=actions,
+    )
+
+    assert result == tuple(item for item in actions if item != action)
+
+
 @given(
     existing=st.booleans(),
     text=st.text(

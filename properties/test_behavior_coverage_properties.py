@@ -172,6 +172,20 @@ def test_duplicate_behavior_ids_is_empty_for_unique_behavior_ids(ids: list[str])
     assert _duplicate_behavior_ids(behaviors) == ()
 
 
+@given(ids=st.lists(_ID, min_size=1, max_size=12, unique=True), duplicate_index=st.integers())
+def test_duplicate_behavior_ids_depends_only_on_behavior_id(
+    ids: list[str],
+    duplicate_index: int,
+) -> None:
+    duplicate = ids[duplicate_index % len(ids)]
+    behaviors = tuple(
+        Behavior(behavior_id, f"task-{index}", f"title-{index}")
+        for index, behavior_id in enumerate(ids)
+    ) + (Behavior(duplicate, "different-task", "different-title"),)
+
+    assert _duplicate_behavior_ids(behaviors) == (duplicate,)
+
+
 @given(
     scenario_rows=st.lists(
         st.tuples(_ID, _TITLE, st.integers(min_value=1, max_value=1_000)),

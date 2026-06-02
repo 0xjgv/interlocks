@@ -243,6 +243,17 @@ def test_ci_evidence_skipped_normalizes_string_labels(labels: list[str]) -> None
     assert _ci_evidence_skipped({"skipped": ",".join(labels)}) == ()
 
 
+@given(
+    labels=st.lists(st.text(min_size=1, max_size=20), max_size=12),
+    junk=st.lists(st.one_of(st.none(), st.booleans(), st.integers()), max_size=12),
+)
+def test_ci_evidence_skipped_filters_non_string_labels(
+    labels: list[str],
+    junk: list[object],
+) -> None:
+    assert _ci_evidence_skipped({"skipped": [*labels, *junk]}) == tuple(sorted(set(labels)))
+
+
 @given(input_newer=st.booleans())
 def test_ci_evidence_staleness_tracks_quality_inputs(input_newer: bool) -> None:
     with TemporaryDirectory() as raw_root:

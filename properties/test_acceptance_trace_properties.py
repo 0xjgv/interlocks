@@ -159,3 +159,18 @@ def test_runner_module_ignores_executable_and_tail_args(
     tail: list[str],
 ) -> None:
     assert _runner_module([executable, "-m", module, *tail]) == module
+
+
+@given(
+    executable=st.text(max_size=20),
+    switch=st.text(max_size=20).filter(lambda value: value != "-m"),
+    module=_MODULES,
+    tail=st.lists(st.text(max_size=20), max_size=5),
+)
+def test_runner_module_rejects_non_module_switches(
+    executable: str,
+    switch: str,
+    module: str,
+    tail: list[str],
+) -> None:
+    assert _runner_module([executable, switch, module, *tail]) is None

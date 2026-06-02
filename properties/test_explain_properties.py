@@ -45,6 +45,15 @@ def test_explain_payload_for_single_command_uses_resolved_doc(
     assert "when_to_use" in payload
 
 
+@given(first=_KNOWN_REQUEST, rest=st.lists(_KNOWN_REQUEST, min_size=1, max_size=5))
+def test_explain_payload_uses_first_positional_command(first: str, rest: list[str]) -> None:
+    resolved = ALIASES.get(first, first)
+
+    payload = explain._explain_payload(want_all=False, positional=[first, *rest])
+
+    assert payload["command"] == resolved
+
+
 @given(want_all=st.booleans())
 def test_explain_payload_without_positionals_uses_index_or_all_mode(want_all: bool) -> None:
     payload = explain._explain_payload(want_all=want_all, positional=[])
@@ -92,6 +101,21 @@ def test_explain_command_payload_switches_between_index_and_full_doc(
 
     assert payload["command" if full else "name"] == task_name
     assert ("when_to_use" in payload) is full
+
+
+@given(task_name=_DOC_NAME)
+def test_explain_command_payload_index_shape_uses_summary_without_full_doc(
+    task_name: str,
+) -> None:
+    payload = explain._explain_command_payload(
+        task_name,
+        COMMAND_DOCS_BY_NAME[task_name],
+        full=False,
+    )
+
+    assert payload["name"] == task_name
+    assert "summary" in payload
+    assert "usage" not in payload
 
 
 @given(name=st.text(max_size=50), full=st.booleans())

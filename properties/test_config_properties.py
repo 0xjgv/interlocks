@@ -178,6 +178,19 @@ def test_interlock_table_returns_project_table_without_copying(table: dict[str, 
     assert _interlock_table(pyproject) is table
 
 
+@given(
+    table=st.dictionaries(
+        st.text(max_size=12),
+        st.one_of(st.none(), st.booleans(), st.integers(), st.text(max_size=20)),
+        max_size=8,
+    )
+)
+def test_interlock_table_ignores_top_level_interlocks_table(
+    table: dict[str, object],
+) -> None:
+    assert _interlock_table({"interlocks": table}) == {}
+
+
 @given(_NON_NUMBERS)
 def test_numeric_coercion_rejects_non_numbers(raw: object) -> None:
     assert coerce_int(raw) is None

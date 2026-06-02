@@ -8,12 +8,12 @@ from tempfile import TemporaryDirectory
 from hypothesis import given
 from hypothesis import strategies as st
 
-from interlocks.runner import reset_results
+from interlocks.runner import record_result, reset_results
 from interlocks.stages.clean import (
     _artifact_label,
     _clean_payload,
-    _iter_recursive_artifacts,
     _is_artifact_dir,
+    _iter_recursive_artifacts,
     _removed_payload_fields,
 )
 
@@ -135,6 +135,20 @@ def test_clean_payload_reports_omitted_removed_count(
     payload = _clean_payload(removed, elapsed)
 
     assert payload["omitted_removed"] == len(removed) - 50
+
+
+@given(elapsed=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False))
+def test_clean_payload_reports_failed_status_from_recorded_gate(elapsed: float) -> None:
+    reset_results()
+    try:
+        record_result("generated", status="fail", elapsed=elapsed, detail=None)
+
+        payload = _clean_payload([], elapsed)
+    finally:
+        reset_results()
+
+    assert payload["passed"] is False
+    assert payload["status"] == "failed"
 
 
 @given(relpath=st.from_regex(r"\.?/?[A-Za-z0-9_.-]{1,20}", fullmatch=True))

@@ -490,6 +490,18 @@ def test_unknown_flag_payload_omits_usage_for_unknown_commands(
         assert "known_flags" not in payload
 
 
+@given(task_name=_UNKNOWN_COMMAND, flag=_FLAG)
+def test_unknown_flag_payload_unknown_command_shape_is_minimal(
+    task_name: str,
+    flag: str,
+) -> None:
+    assert _unknown_flag_payload(task_name, flag) == {
+        "command": task_name,
+        "error": f"unknown flag {flag}",
+        "flag": flag,
+    }
+
+
 @given(command=_COMMAND)
 def test_unknown_command_payload_lists_known_command_domain(command: str) -> None:
     payload = _unknown_command_payload(command)

@@ -48,6 +48,13 @@ def test_profile_dynamic_uses_author_cost(author_cost: int) -> None:
     assert profile("dynamic", author_cost=author_cost) == dynamic(author_cost)
 
 
+@given(name=st.sampled_from(["unblock", "renovation"]))
+def test_profile_known_names_return_static_budget_profiles(name: str) -> None:
+    expected = UNBLOCK if name == "unblock" else RENOVATION
+
+    assert profile(name) is expected
+
+
 @given(
     files_touched=_COUNT,
     changed_lines_total=_COUNT,

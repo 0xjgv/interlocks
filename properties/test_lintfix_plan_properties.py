@@ -84,6 +84,25 @@ def test_format_candidate_for_nonempty_diff_is_auto(file: str, old: str, new: st
     assert candidate.diff_text == diff_text
 
 
+@given(file=_FILE, old=_LINE, new=_LINE)
+def test_format_candidate_for_preserves_format_candidate_defaults(
+    file: str,
+    old: str,
+    new: str,
+) -> None:
+    with patch.object(
+        plan_module.simulate,
+        "simulate_format",
+        return_value=CandidatePatch(f"FORMAT:{file}", (file,), _format_diff(file, old, new), 0),
+    ):
+        candidate = plan_module._format_candidate_for(file, {})
+
+    assert candidate.unsafe is False
+    assert candidate.diagnostic_count == 1
+    assert candidate.mutation_class == "other"
+    assert candidate.kind == "format"
+
+
 @given(rule=_RULE, files=st.lists(_FILE, min_size=1, max_size=5, unique=True).map(tuple))
 def test_candidate_for_unsafe_only_rules_never_simulates(
     rule: str, files: tuple[str, ...]
@@ -242,3 +261,20 @@ def test_serialize_preserves_empty_plan_header(
         "ruff_version": "0.0.0",
         "candidates": [],
     }
+
+
+@given(patch_paths=st.dictionaries(_RULE, _FILE, max_size=5))
+def test_serialize_empty_plan_ignores_patch_path_map(patch_paths: dict[str, str]) -> None:
+    plan = plan_module.Plan(
+        base="base",
+        head="head",
+        budget="unblock",
+        ruff_version="0.0.0",
+        candidates=(),
+        discovery_error=None,
+        author_cost=0,
+    )
+
+    payload = plan_module.serialize(plan, patch_paths=patch_paths)
+
+    assert payload["candidates"] == []

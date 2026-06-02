@@ -357,6 +357,16 @@ def test_promotion_decision_only_promotes_from_escrow_mode(
     assert _promotion_decision(stats, exact=exact, on_frontier=True) is None
 
 
+@given(exact=st.booleans())
+def test_promotion_decision_accepts_exact_outside_diff_threshold(exact: bool) -> None:
+    stats = _stats(current_mode="escrow", p95_outside=5.0, revert_signal=0)
+
+    decision = _promotion_decision(stats, exact=exact, on_frontier=True)
+
+    assert decision is not None
+    assert decision[0] == ("auto" if exact else "escrow")
+
+
 @given(
     on_frontier=st.booleans(),
     p95=st.floats(min_value=0, max_value=10),

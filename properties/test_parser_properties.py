@@ -226,6 +226,32 @@ def test_tracer_ignores_matching_public_symbol_without_current_scenario(
     assert reached == {}
 
 
+@given(
+    module=_MODULE,
+    function=_PY_IDENTIFIER,
+    line=st.integers(min_value=1, max_value=1_000),
+    event=st.text().filter(lambda value: value != "call"),
+)
+def test_tracer_ignores_non_call_events_for_current_scenario(
+    module: str,
+    function: str,
+    line: int,
+    event: str,
+) -> None:
+    reached: dict[tuple[Path, int], set[str]] = {}
+    scenario = (Path("generated.feature"), line)
+    symbol = f"{module}:{function}"
+    token = _CURRENT_SCENARIO.set(scenario)
+    try:
+        trace = _tracer((symbol,), reached)
+        returned = trace(_frame(module, function), event, None)
+    finally:
+        _CURRENT_SCENARIO.reset(token)
+
+    assert returned is trace
+    assert reached == {}
+
+
 @given(module=_MODULE, function=_PY_IDENTIFIER)
 def test_subprocess_tracer_records_matching_public_symbol(module: str, function: str) -> None:
     reached: set[str] = set()
