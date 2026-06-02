@@ -81,6 +81,13 @@ def test_row_options_uses_defaults_without_supported_option_keys(
     assert ui._row_options(options) == (None, "ok", False)
 
 
+@given(force=st.one_of(st.none(), st.text(max_size=20), st.integers()))
+def test_row_options_accepts_only_true_singleton_for_force(force: object) -> None:
+    normalized = ui._row_options({"force": force})
+
+    assert normalized[2] is (force is True)
+
+
 @given(
     is_json=st.booleans(),
     verbose=st.booleans(),
@@ -109,6 +116,12 @@ def test_suppress_row_keeps_forced_non_json_rows_visible(state: ui.State) -> Non
         patch.object(ui, "is_verbose", return_value=False),
     ):
         assert ui._suppress_row(force=True, state=state) is False
+
+
+@given(force=st.booleans(), state=st.sampled_from(("ok", "warn", "fail")))
+def test_suppress_row_always_hides_json_rows(force: bool, state: ui.State) -> None:
+    with patch.object(ui, "is_json", return_value=True):
+        assert ui._suppress_row(force=force, state=state) is True
 
 
 @given(

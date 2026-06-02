@@ -197,6 +197,22 @@ def test_flag_suspicious_preserves_input_order_for_flagged_rows(
     ]
 
 
+@given(names=st.lists(_IDENT, max_size=12, unique=True))
+def test_flag_suspicious_flags_all_long_tests_without_asserts(names: list[str]) -> None:
+    inspections = [
+        TestInspection(
+            file=f"tests/{name}.py",
+            name=name,
+            loc=SUSPICIOUS_MIN_LOC + 1,
+            assert_count=0,
+            trivial_asserts=0,
+        )
+        for name in names
+    ]
+
+    assert stats._flag_suspicious(inspections) == inspections
+
+
 @given(context_name=_IDENT)
 def test_is_pytest_assert_with_matches_supported_pytest_context_managers(
     context_name: str,
@@ -793,6 +809,19 @@ def test_mutation_action_message_accepts_missing_summary(
 
 
 @given(floor=_PERCENT_FLOAT, max_runtime=st.integers(min_value=0, max_value=10_000))
+def test_mutation_action_message_for_partial_summary_requests_more_runtime(
+    floor: float,
+    max_runtime: int,
+) -> None:
+    mutation = MutationSummary(killed=1, survived=0, timeout=0, score=100.0, completed=False)
+
+    message = stats._mutation_action_message(mutation, floor, max_runtime)
+
+    assert message.startswith("Last mutation run timed out; rerun `")
+    assert "with more runtime" in message
+
+
+@given(floor=_PERCENT_FLOAT, max_runtime=st.integers(min_value=0, max_value=10_000))
 def test_mutation_retry_command_includes_runtime_only_when_positive(
     floor: float,
     max_runtime: int,
@@ -869,6 +898,12 @@ def test_trust_refresh_command_uses_stable_flag_order(
         expected += " --no-trend"
 
     assert stats._trust_refresh_command(json_mode=json_mode, no_trend=no_trend) == expected
+
+
+def test_trust_refresh_command_without_optional_flags_is_base_command() -> None:
+    assert stats._trust_refresh_command(json_mode=False, no_trend=False) == (
+        "interlocks trust --refresh"
+    )
 
 
 @given(floor=st.floats(min_value=0, max_value=100, allow_nan=False, allow_infinity=False))

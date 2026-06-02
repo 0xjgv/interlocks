@@ -119,6 +119,19 @@ def test_resolve_inputs_explicit_values_override_cli_values(
         sys.argv = old_argv
 
 
+@given(argv_base=_ARG, argv_budget=_ARG)
+def test_resolve_inputs_empty_explicit_values_fall_back_to_cli(
+    argv_base: str,
+    argv_budget: str,
+) -> None:
+    old_argv = sys.argv
+    sys.argv = ["interlocks", "fix-plan", f"--base={argv_base}", f"--budget={argv_budget}"]
+    try:
+        assert _resolve_inputs("", "") == (argv_base, argv_budget)
+    finally:
+        sys.argv = old_argv
+
+
 @given(modes=st.lists(_MODES, max_size=30))
 def test_fix_plan_payload_counts_generated_classifications(modes: list[Mode]) -> None:
     plan = _plan(modes)

@@ -315,6 +315,11 @@ def test_estimated_full_runtime_is_none_before_first_checked_mutant(elapsed: flo
     assert mutation._estimated_full_runtime(elapsed, 0, 1) is None
 
 
+@given(elapsed=st.floats(max_value=0.0, allow_nan=False, allow_infinity=False))
+def test_estimated_full_runtime_preserves_negative_elapsed_estimates(elapsed: float) -> None:
+    assert mutation._estimated_full_runtime(elapsed, 1, 2) == elapsed * 2
+
+
 @given(
     checked=st.integers(min_value=0, max_value=100_000),
     total=st.one_of(st.none(), st.integers(min_value=-10, max_value=100_000)),
@@ -434,6 +439,10 @@ def test_mutation_target_fields_omit_truncation_at_display_limit(globs: list[str
     assert fields["targets"] == globs
     assert fields["target_count"] == len(globs)
     assert "truncated_targets" not in fields
+
+
+def test_mutation_target_fields_treat_none_as_empty_targets() -> None:
+    assert mutation._mutation_target_fields(None) == {"targets": [], "target_count": 0}
 
 
 @given(
@@ -637,6 +646,14 @@ def test_mutation_failed_treats_incomplete_enforced_run_as_failure(
     assert mutation._mutation_failed(summary, floor, completed=False) is True
 
 
+@given(score=_PERCENT)
+def test_mutation_failed_does_not_fail_incomplete_advisory_runs(score: float) -> None:
+    summary = MutationSummary(killed=1, survived=1, timeout=0, score=score)
+
+    assert mutation._mutation_failed(summary, None, completed=False) is False
+    assert mutation._mutation_status(summary, None, completed=False) == "partial"
+
+
 @given(floor=st.one_of(st.none(), _PERCENT), completed=st.booleans())
 def test_mutation_no_results_failed_requires_enforced_incomplete_run(
     floor: float | None, completed: bool
@@ -713,6 +730,22 @@ def test_mutation_skip_payload_includes_optional_coverage_only_when_present(
         assert payload["min_coverage"] == min_coverage
     if coverage_pct is not None:
         assert payload["coverage_pct"] == round(coverage_pct, 3)
+
+
+@given(reason=st.text(max_size=40), elapsed=_PERCENT, next_action=st.text(max_size=80))
+def test_mutation_skip_payload_omits_optional_coverage_by_default(
+    reason: str,
+    elapsed: float,
+    next_action: str,
+) -> None:
+    payload = mutation._mutation_skip_payload(
+        reason=reason,
+        elapsed=elapsed,
+        next_action=next_action,
+    )
+
+    assert "min_coverage" not in payload
+    assert "coverage_pct" not in payload
 
 
 @given(

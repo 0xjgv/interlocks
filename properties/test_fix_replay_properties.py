@@ -242,3 +242,8 @@ def test_pareto_frontier_ignores_non_rows_and_falsy_markers(rows: list[object]) 
     assert frontier == sorted(
         str(row["rule"]) for row in rows if isinstance(row, dict) and row.get("on_pareto_frontier")
     )
+
+
+@given(marker=st.one_of(st.integers(min_value=1), st.text(min_size=1, max_size=20)))
+def test_pareto_frontier_accepts_truthy_frontier_markers(marker: object) -> None:
+    assert _pareto_frontier([{"rule": None, "on_pareto_frontier": marker}]) == ["None"]

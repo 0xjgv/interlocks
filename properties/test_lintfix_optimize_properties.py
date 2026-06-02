@@ -650,6 +650,15 @@ def test_resolve_stats_path_defaults_to_replay_json_without_flags() -> None:
         sys.argv = old_argv
 
 
+def test_resolve_stats_path_ignores_empty_explicit_stats_flag() -> None:
+    old_argv = sys.argv
+    sys.argv = ["interlocks", "fix-optimize", "--stats="]
+    try:
+        assert fix_optimize_mod._resolve_stats_path() == ".lintfix/replay.json"
+    finally:
+        sys.argv = old_argv
+
+
 @given(
     rows=st.lists(
         st.tuples(
@@ -866,6 +875,30 @@ def test_fix_optimize_serialize_preserves_empty_selection_shape(author_cost: int
     assert payload["author_cost"] == author_cost
     assert payload["total_value"] == 0
     assert payload["total_cost"] == asdict(selection.total_cost)
+
+
+@given(author_cost=st.integers(min_value=-100, max_value=500))
+def test_fix_optimize_serialize_resolves_dynamic_active_budget(author_cost: int) -> None:
+    selection = Selection(
+        budget_name="dynamic",
+        selected=(),
+        rejected=(),
+        total_value=0,
+        total_cost=CostVector(0, 0, 0, 0),
+    )
+    plan = plan_module.Plan(
+        base="HEAD",
+        head="abc123",
+        budget="dynamic",
+        ruff_version="0.x",
+        candidates=(),
+        discovery_error=None,
+        author_cost=author_cost,
+    )
+
+    payload = fix_optimize_mod._serialize(plan, selection, {}, {})
+
+    assert payload["active_budget"] == asdict(fix_optimize_mod.budgets.dynamic(author_cost))
 
 
 @given(

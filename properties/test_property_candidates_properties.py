@@ -903,6 +903,10 @@ def test_strategy_line_preserves_strategy_insertion_order(
         )
 
 
+def test_strategy_line_returns_none_for_empty_strategy_map() -> None:
+    assert _strategy_line({}) is None
+
+
 @given(
     pairs=st.lists(st.tuples(_IDENT, _STRATEGY_TEXT), max_size=6, unique_by=lambda item: item[0]),
     include_path_strategy=st.booleans(),
@@ -921,6 +925,16 @@ def test_add_strategy_signals_scores_typed_inputs_and_filesystem_caution_separat
     assert signals.score == ((3 if strategies else 0) - (2 if include_path_strategy else 0))
     assert ("typed generated inputs" in signals.reasons) is bool(strategies)
     assert ("filesystem fixture required" in signals.cautions) is include_path_strategy
+
+
+def test_add_strategy_signals_leaves_empty_signal_state_unchanged() -> None:
+    signals = _CandidateSignals()
+
+    _add_strategy_signals(signals, {})
+
+    assert signals.score == 0
+    assert signals.reasons == []
+    assert signals.cautions == []
 
 
 @given(names=st.lists(_IDENT, min_size=1, max_size=10, unique=True))
@@ -1150,6 +1164,31 @@ def test_reference_for_module_parts_returns_none_without_matching_module(
         )
 
         assert _reference_for_module_parts(cfg, parts) is None
+
+
+@given(name=_IDENT, member=_IDENT)
+def test_reference_for_module_parts_uses_longest_existing_module_prefix(
+    name: str,
+    member: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        package = root / "pkg"
+        package.mkdir()
+        (package / "__init__.py").write_text("", encoding="utf-8")
+        (package / "generated.py").write_text("", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "pkg",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        assert _reference_for_module_parts(cfg, ("pkg", "generated", name, member)) == (
+            "pkg/generated.py",
+            f"{name}.{member}",
+        )
 
 
 @given(alias=_IDENT)
