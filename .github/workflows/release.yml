@@ -35,11 +35,6 @@ jobs:
           UV_OFFLINE: "1"
         run: uv run interlocks ci
 
-      - name: Run interlocks nightly
-        env:
-          UV_OFFLINE: "1"
-        run: uv run interlocks nightly
-
       - name: Wheel install smoke test
         if: hashFiles('tests/test_wheel_install.py') != ''
         run: uv run pytest -m slow tests/test_wheel_install.py

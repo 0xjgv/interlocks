@@ -180,6 +180,10 @@ uv pip install --python /tmp/interlocks-mutmut-smoke/bin/python interlocks-mutmu
 
 ## Publish `interlocks`
 
+`release.yml` runs `interlocks ci` plus wheel smoke tests before publishing. Full
+`interlocks nightly` mutation coverage stays in `nightly.yml` so tag publishing
+does not wait on the long-running full mutation suite.
+
 ### TestPyPI
 
 ```bash
@@ -254,7 +258,8 @@ gh release view "v${version}"
 
 ## Rerun failed release job
 
-Use only after the failure is understood. Example: transient mutation timeout/flaky tag run while the same commit is green on `main`.
+Use only after the failure is understood. Example: transient tag run failure while
+the same commit is green on `main`.
 
 ```bash
 gh run view <run-id> --log-failed
