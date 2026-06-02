@@ -139,6 +139,34 @@ def test_fix_rule_artifact_paths_only_describe_written_artifacts(
 
 
 @given(
+    payload=st.dictionaries(st.text(min_size=1, max_size=12), st.integers(), max_size=6),
+    mode=_MODES,
+    rule=_RULES,
+    returncode=st.integers(min_value=-5, max_value=12),
+)
+def test_fix_rule_artifact_paths_preserve_existing_payload_fields(
+    payload: dict[str, int],
+    mode: str,
+    rule: str,
+    returncode: int,
+) -> None:
+    original = dict(payload)
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+
+        fix_rule._add_fix_rule_artifact_paths(
+            payload,  # type: ignore[arg-type]
+            _FakeCfg(root),  # type: ignore[arg-type]
+            _classification(rule, cast("Mode", mode), ()),
+            returncode,
+        )
+
+    for key, value in original.items():
+        assert payload[key] == value
+    assert set(payload) <= {*original, "patch_path", "failed_patch"}
+
+
+@given(
     mode=_MODES,
     apply=st.booleans(),
     rule=_RULES,

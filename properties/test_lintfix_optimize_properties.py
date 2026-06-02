@@ -634,6 +634,25 @@ def test_selected_candidates_project_selection_through_plan_by_rule(
 
 
 @given(
+    rows=st.lists(
+        st.tuples(
+            _RULE,
+            _KIND,
+            st.lists(_FILE, min_size=1, max_size=3, unique=True).map(tuple),
+        ),
+        max_size=8,
+        unique_by=lambda row: row[0],
+    )
+)
+def test_selected_candidates_empty_selection_returns_empty_tuple(
+    rows: list[tuple[str, str, tuple[str, ...]]],
+) -> None:
+    plan_by_rule = {rule: _planned(rule, kind=kind, files=files) for rule, kind, files in rows}
+
+    assert fix_optimize_mod._selected_candidates(plan_by_rule, _selection(selected=())) == ()
+
+
+@given(
     rule=_RULE,
     kind=_KIND,
     files=st.lists(_FILE, min_size=1, max_size=4, unique=True).map(tuple),
@@ -680,6 +699,36 @@ def test_serialize_candidate_uses_candidate_and_optional_plan_snapshot(
         "reason": reason,
         "diagnostic_count": diagnostic_count if has_plan else 0,
     }
+
+
+@given(
+    rule=_RULE,
+    kind=_KIND,
+    files=st.lists(_FILE, min_size=1, max_size=4, unique=True).map(tuple),
+    value=st.integers(min_value=0, max_value=1_000),
+    reason=st.one_of(st.none(), st.text(max_size=30)),
+)
+def test_serialize_candidate_ignores_nonmatching_plan_and_patch_keys(
+    rule: str,
+    kind: str,
+    files: tuple[str, ...],
+    value: int,
+    reason: str | None,
+) -> None:
+    candidate = _candidate(rule, kind=kind, files=files, value=value)
+    other_rule = f"{rule}_OTHER"
+
+    payload = fix_optimize_mod._serialize_candidate(
+        candidate,
+        {other_rule: f".lintfix/{other_rule}.patch"},
+        {other_rule: _planned(other_rule, kind=kind, files=files, diagnostic_count=99)},
+        reason=reason,
+    )
+
+    assert payload["rule"] == rule
+    assert payload["patch_path"] is None
+    assert payload["diagnostic_count"] == 0
+    assert payload["reason"] == reason
 
 
 @given(
@@ -855,6 +904,16 @@ def test_fix_optimize_stderr_excerpt_strips_and_caps(stderr: str, limit: int) ->
         assert excerpt == cleaned
     else:
         assert excerpt == cleaned[: limit - 1] + "\u2026"
+
+
+@given(
+    stderr=st.text(),
+    limit=st.integers(min_value=1, max_value=80),
+)
+def test_fix_optimize_stderr_excerpt_is_idempotent(stderr: str, limit: int) -> None:
+    excerpt = fix_optimize_mod._stderr_excerpt(stderr, limit=limit)
+
+    assert fix_optimize_mod._stderr_excerpt(excerpt, limit=limit) == excerpt
 
 
 @given(

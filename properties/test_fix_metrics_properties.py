@@ -49,6 +49,13 @@ def test_mean_matches_rounded_arithmetic_average(samples: list[int]) -> None:
     assert _mean(samples) == expected
 
 
+@given(samples=st.lists(st.integers(min_value=-1_000, max_value=1_000), min_size=1, max_size=50))
+def test_mean_stays_within_sample_bounds(samples: list[int]) -> None:
+    average = _mean(samples)
+
+    assert min(samples) <= average <= max(samples)
+
+
 @given(raw=_JSON)
 def test_int_or_zero_accepts_only_integer_like_values(raw: object) -> None:
     parsed = _int_or_zero(raw)
@@ -66,6 +73,14 @@ def test_int_or_zero_accepts_only_integer_like_values(raw: object) -> None:
             assert parsed == 0
     else:
         assert parsed == 0
+
+
+@given(raw=_JSON)
+def test_int_or_zero_always_returns_plain_int(raw: object) -> None:
+    parsed = _int_or_zero(raw)
+
+    assert isinstance(parsed, int)
+    assert not isinstance(parsed, bool)
 
 
 @given(payload=st.dictionaries(st.text(max_size=10), _JSON, max_size=8))

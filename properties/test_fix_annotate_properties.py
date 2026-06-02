@@ -242,3 +242,23 @@ def test_collect_annotation_counts_counts_generated_plan_classes(
     counts = _collect_annotation_counts(payload, source="plan", emit_json=True)
 
     assert counts == {"notice": auto, "warning": advisory, "skip": skipped}
+
+
+@given(candidates=st.lists(annotation_candidates(), max_size=12))
+def test_collect_annotation_counts_matches_generated_annotations(
+    candidates: list[dict[str, object]],
+) -> None:
+    counts = _collect_annotation_counts(
+        {"candidates": candidates},
+        source="plan",
+        emit_json=True,
+    )
+    annotations = [
+        annotation for candidate in candidates for annotation in _annotations_for(candidate)
+    ]
+
+    assert counts == {
+        "notice": sum(1 for annotation in annotations if annotation.severity == "notice"),
+        "warning": sum(1 for annotation in annotations if annotation.severity == "warning"),
+        "skip": sum(1 for candidate in candidates if candidate.get("classification") == "skip"),
+    }

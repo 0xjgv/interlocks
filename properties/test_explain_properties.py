@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -9,6 +10,9 @@ from interlocks.command_docs import ALIASES, COMMAND_DOCS_BY_NAME
 from interlocks.tasks import explain
 
 _KNOWN_REQUEST = st.sampled_from(tuple(COMMAND_DOCS_BY_NAME) + tuple(ALIASES))
+_UNKNOWN_REQUEST = st.text(min_size=1, max_size=50).filter(
+    lambda request: request not in COMMAND_DOCS_BY_NAME and request not in ALIASES
+)
 _DOC_NAME = st.sampled_from(tuple(sorted(COMMAND_DOCS_BY_NAME)))
 
 
@@ -17,6 +21,14 @@ def test_resolve_doc_returns_registered_command_or_alias_target(requested: str) 
     resolved = ALIASES.get(requested, requested)
 
     assert explain._resolve_doc(requested) is COMMAND_DOCS_BY_NAME[resolved]
+
+
+@given(requested=_UNKNOWN_REQUEST)
+def test_resolve_doc_rejects_unknown_commands(requested: str) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        explain._resolve_doc(requested)
+
+    assert exc_info.value.code == 1
 
 
 @given(requested=_KNOWN_REQUEST, want_all=st.booleans())

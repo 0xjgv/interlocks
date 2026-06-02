@@ -54,6 +54,42 @@ def test_progressive_lint_payload_fields_are_stable(
 
 
 @given(
+    count=st.one_of(st.none(), st.integers(min_value=0, max_value=1_000_000)),
+    cap=st.one_of(st.none(), st.integers(min_value=0, max_value=1_000_000)),
+    status=st.sampled_from(["ok", "failed", "skipped"]),
+    passed=st.booleans(),
+)
+def test_progressive_lint_payload_omits_empty_optional_fields(
+    count: int | None,
+    cap: int | None,
+    status: str,
+    passed: bool,
+) -> None:
+    summary = _ProgressiveLintSummary(
+        count=count,
+        cap=cap,
+        status=status,
+        passed=passed,
+        reason=None,
+        examples=(),
+        omitted=0,
+    )
+
+    payload = _progressive_lint_payload(summary)
+
+    assert "reason" not in payload
+    assert "examples" not in payload
+    assert "omitted" not in payload
+    if passed:
+        assert "next_actions" not in payload
+    else:
+        assert payload["next_actions"] == [
+            "Reduce lint violations to the progressive baseline or advance the baseline "
+            "intentionally."
+        ]
+
+
+@given(
     returncode=st.integers(),
     stdout=st.text(),
     cap=st.one_of(st.none(), st.integers(min_value=0, max_value=100)),

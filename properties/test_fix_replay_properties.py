@@ -66,6 +66,23 @@ def test_group_rule_stats_places_each_rule_in_its_bucket(
 
 
 @given(
+    rows=st.lists(
+        st.tuples(_RULE, _MODE, _RECOMMENDED),
+        max_size=20,
+    )
+)
+def test_group_rule_stats_sorts_each_bucket_by_replay_priority(
+    rows: list[tuple[str, str, str]],
+) -> None:
+    rule_stats = tuple(_stats(rule, current, recommended) for rule, current, recommended in rows)
+
+    groups = _group_rule_stats(rule_stats)
+
+    for bucket in groups.values():
+        assert bucket == sorted(bucket, key=_rule_sort_key)
+
+
+@given(
     base=_RULE,
     budget=_RULE,
     requested=st.integers(min_value=0, max_value=50),
@@ -170,6 +187,28 @@ def test_fix_replay_payload_reports_rule_count_and_frontier(
     assert result["replay_path"] == ".lintfix/replay.json"
     assert result["rules_count"] == len(rules)
     assert result["pareto_frontier"] == _pareto_frontier(rules)
+
+
+@given(
+    rules=st.one_of(
+        st.none(),
+        st.text(max_size=40),
+        st.dictionaries(st.text(max_size=10), st.text(max_size=10), max_size=5),
+        st.lists(st.one_of(st.none(), st.text(max_size=20)), max_size=20),
+    ),
+    replay_path=st.text(min_size=1, max_size=50),
+)
+def test_fix_replay_payload_treats_only_list_rules_as_rows(
+    rules: object,
+    replay_path: str,
+) -> None:
+    result = _fix_replay_payload({"rules": rules}, replay_path)
+
+    assert result["command"] == "fix-replay"
+    assert result["passed"] is True
+    assert result["status"] == "replayed"
+    assert result["replay_path"] == replay_path
+    assert result["rules_count"] == (len(rules) if isinstance(rules, list) else 0)
 
 
 @given(

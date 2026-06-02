@@ -83,11 +83,32 @@ def test_changed_to_globs_maps_only_scoped_python_files(
     assert all(glob.endswith(".*") for glob in globs)
 
 
+@given(changed=_PATHS, src_dir=_DIR, test_dir=_DIR)
+def test_changed_to_globs_outputs_mutmut_module_globs(
+    changed: set[str], src_dir: str, test_dir: str
+) -> None:
+    globs = mutation._changed_to_globs(changed, src_dir, test_dir)
+    test_prefix = _prefix(test_dir).replace("/", ".")
+
+    assert all("/" not in glob for glob in globs)
+    assert all(glob.endswith(".*") for glob in globs)
+    if test_prefix:
+        assert all(not glob.startswith(test_prefix) for glob in globs)
+
+
 @given(directory=_DIR)
 def test_dir_prefix_adds_slash_only_for_non_root_dirs(directory: str) -> None:
     expected = "" if directory in ("", ".") else f"{directory}/"
 
     assert mutation._dir_prefix(directory) == expected
+
+
+@given(directory=_DIR)
+def test_dir_prefix_output_is_empty_or_single_slash_terminated(directory: str) -> None:
+    prefix = mutation._dir_prefix(directory)
+
+    assert prefix == "" or prefix.endswith("/")
+    assert not prefix.endswith("//")
 
 
 @given(ref=st.text(max_size=40), src_dir=_DIR, test_dir=_DIR)
@@ -166,6 +187,19 @@ def test_is_spinner_line_matches_left_stripped_braille_prefix(line: str) -> None
     assert mutation._is_spinner_line(line) is expected
 
 
+@given(
+    spinner=st.sampled_from(tuple(mutation._BRAILLE_SPINNER)),
+    padding=st.text(alphabet=" \t", max_size=8),
+    label=st.text(max_size=40),
+)
+def test_is_spinner_line_accepts_left_padded_braille_prefix(
+    spinner: str,
+    padding: str,
+    label: str,
+) -> None:
+    assert mutation._is_spinner_line(f"{padding}{spinner}{label}") is True
+
+
 @given(line=st.text(max_size=80))
 def test_is_progress_line_matches_mutmut_progress_tokens(line: str) -> None:
     stripped = line.strip()
@@ -191,6 +225,12 @@ def test_is_keep_line_matches_done_or_rate_lines(line: str) -> None:
     assert mutation._is_keep_line(line) is expected
 
 
+@given(detail=st.text(max_size=40))
+def test_is_keep_line_accepts_done_prefix_and_rate_token(detail: str) -> None:
+    assert mutation._is_keep_line(f"  DONE {detail}") is True
+    assert mutation._is_keep_line(f"{detail} mutations/second {detail}") is True
+
+
 @given(
     done=st.integers(min_value=0, max_value=100_000),
     total=st.integers(min_value=1, max_value=100_000),
@@ -211,6 +251,11 @@ def test_mutation_progress_from_line_extracts_fraction(done: int, total: int) ->
     progress = mutation._mutation_progress_from_line(line)
 
     assert progress == mutation._MutationProgress(done, total)
+
+
+@given(line=st.text(max_size=80).filter(lambda value: "/" not in value))
+def test_mutation_progress_from_line_ignores_lines_without_fraction(line: str) -> None:
+    assert mutation._mutation_progress_from_line(line) is None
 
 
 @given(label=st.from_regex(r"[A-Za-z][A-Za-z ]{0,39}", fullmatch=True))
@@ -321,6 +366,20 @@ def test_survivor_truncation_field_reports_omitted_count(
         assert fields == {"truncated_survivors": truncated}
     else:
         assert fields == {}
+
+
+@given(
+    survivor_count=st.integers(min_value=0, max_value=100),
+    visible_count=st.integers(min_value=0, max_value=100),
+)
+def test_survivor_truncation_field_only_reports_positive_omissions(
+    survivor_count: int, visible_count: int
+) -> None:
+    fields = mutation._survivor_truncation_field(survivor_count, visible_count)
+
+    assert set(fields) <= {"truncated_survivors"}
+    if fields:
+        assert fields["truncated_survivors"] > 0
 
 
 @given(globs=st.one_of(st.none(), _TARGET_GLOBS))
@@ -522,6 +581,21 @@ def test_mutation_no_results_failed_requires_enforced_incomplete_run(
     failed = mutation._mutation_no_results_failed(run_config, completed=completed)
 
     assert failed is (floor is not None and not completed)
+
+
+@given(completed=st.booleans())
+def test_mutation_no_results_failed_never_fails_without_min_score(completed: bool) -> None:
+    run_config = mutation._MutationRun(
+        min_coverage=0.0,
+        coverage_pct=100.0,
+        timeout=1,
+        min_score=None,
+        changed_only=False,
+        globs=None,
+        changed=None,
+    )
+
+    assert mutation._mutation_no_results_failed(run_config, completed=completed) is False
 
 
 @given(reason=st.text(max_size=40), elapsed=_PERCENT, next_action=st.text(max_size=80))

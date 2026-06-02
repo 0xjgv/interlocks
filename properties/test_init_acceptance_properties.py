@@ -113,6 +113,33 @@ def test_init_acceptance_domain_payload_reports_domain_files(paths: list[str]) -
     assert payload["next_actions"] == ["Run `interlocks acceptance`."]
 
 
+@given(
+    paths=st.lists(
+        st.from_regex(r"[A-Za-z0-9_-]+\.feature", fullmatch=True),
+        max_size=8,
+        unique=True,
+    )
+)
+def test_init_acceptance_domain_payload_reports_project_relative_feature_paths(
+    paths: list[str],
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        domain_files = [root / "tests" / "features" / path for path in paths]
+
+        payload = _init_acceptance_domain_payload(cfg, domain_files)
+
+    assert payload["domain_acceptance_features"] == [f"tests/features/{path}" for path in paths]
+    assert all(not Path(path).is_absolute() for path in payload["domain_acceptance_features"])
+
+
 @given(scaffold_content=st.booleans())
 def test_is_scaffold_feature_matches_only_unchanged_example(scaffold_content: bool) -> None:
     with TemporaryDirectory() as raw_root:
