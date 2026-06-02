@@ -195,9 +195,10 @@ Advanced gates:
   required.
 - `crap --max=N [--changed-only]`: CRAP complexity x coverage gate. Blocking
   depends on `enforce_crap`.
-- `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only]`:
+- `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only] [--since=REF]`:
   mutmut. Advisory unless `enforce_mutation = true` or `--min-score=` is
-  passed.
+  passed. `--since=REF` overrides `mutation_since_ref` for changed-only local
+  runs.
 - `trust [--refresh] [--no-trend]`: actionable trust report combining coverage,
   CRAP, mutation, suspicious-test AST inspection, recent git diff, and next
   actions. `--refresh` runs coverage first with `--min=0 --properties`.

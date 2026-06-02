@@ -705,7 +705,7 @@ def _write_mutation_no_results_evidence(
 
 
 def _resolve_changed_globs(
-    cfg: InterlockConfig, *, changed_only: bool
+    cfg: InterlockConfig, *, changed_only: bool, since_ref: str | None = None
 ) -> tuple[list[str] | None, set[str] | None]:
     """Translate ``--changed-only`` into module globs + the underlying changed set.
 
@@ -717,7 +717,7 @@ def _resolve_changed_globs(
     """
     if not changed_only:
         return None, None
-    changed = changed_py_files_vs(cfg.mutation_since_ref)
+    changed = changed_py_files_vs(since_ref or cfg.mutation_since_ref)
     globs = _changed_to_globs(changed, cfg.src_dir_arg, cfg.test_dir_arg)
     return globs, changed
 
@@ -745,10 +745,15 @@ def _prepare_mutation_run(
     timeout = int(arg_value("--max-runtime=", str(cfg.mutation_max_runtime)))
     min_score = _resolve_min_score(cfg, default=min_score_default)
     changed_flag = changed_only if changed_only is not None else "--changed-only" in sys.argv
-    globs, changed = _resolve_changed_globs(cfg, changed_only=changed_flag)
+    since_ref = arg_value("--since=", cfg.mutation_since_ref)
+    globs, changed = _resolve_changed_globs(
+        cfg,
+        changed_only=changed_flag,
+        since_ref=since_ref,
+    )
     if globs == []:
         _skip_mutation_no_changed_src(
-            cfg,
+            since_ref,
             start=start,
             json_mode=json_mode,
             min_cov=min_cov,
@@ -756,7 +761,7 @@ def _prepare_mutation_run(
         )
         return None
     if globs and ui.is_verbose() and not json_mode:
-        print(f"  mutating {len(globs)} module(s) changed vs {cfg.mutation_since_ref}")
+        print(f"  mutating {len(globs)} module(s) changed vs {since_ref}")
     return _MutationRun(
         min_coverage=min_cov,
         coverage_pct=pct,
@@ -796,14 +801,14 @@ def _skip_mutation_low_coverage(
 
 
 def _skip_mutation_no_changed_src(
-    cfg: InterlockConfig,
+    since_ref: str,
     *,
     start: float,
     json_mode: bool,
     min_cov: float,
     coverage_pct: float,
 ) -> None:
-    reason = f"no changed src files vs {cfg.mutation_since_ref}"
+    reason = f"no changed src files vs {since_ref}"
     if json_mode:
         _emit_mutation_skip_json(
             reason=reason,
@@ -993,10 +998,11 @@ def cmd_mutation(
     """Mutation score via mutmut (reads ``[tool.mutmut]``).
 
     CLI flags ``--min-coverage=`` / ``--max-runtime=`` / ``--min-score=`` win;
-    otherwise thresholds come from ``cfg.mutation_min_coverage`` /
-    ``cfg.mutation_max_runtime`` / ``cfg.mutation_min_score`` (defaults
-    70.0 / 600 / 80.0, overridable via ``[tool.interlocks]``). Advisory by default;
-    enforced runs exit 1 when the score is low or the run times out before completion.
+    ``--since=`` overrides the ``--changed-only`` base ref. Otherwise thresholds
+    come from ``cfg.mutation_min_coverage`` / ``cfg.mutation_max_runtime`` /
+    ``cfg.mutation_min_score`` (defaults 70.0 / 600 / 80.0, overridable via
+    ``[tool.interlocks]``). Advisory by default; enforced runs exit 1 when the
+    score is low or the run times out before completion.
 
     Stages call programmatically: ``changed_only`` overrides ``--changed-only`` argv
     sniffing; ``min_score_default`` supplies a fallback threshold when no

@@ -751,7 +751,8 @@ def _missing_mutation_action_message(report: TrustReport) -> str:
     if report.mutation_evidence_no_results:
         return (
             "Last mutation run timed out before any mutants were checked; "
-            f"rerun `{command}` with more runtime, or use `--changed-only` for a bounded pass."
+            f"rerun `{command}` with more runtime, or use "
+            "`interlocks mutation --changed-only --since=HEAD` for a bounded local pass."
         )
     if report.mutation_evidence_stale:
         return f"Cached mutation evidence is stale after a newer mutmut run; rerun `{command}`."

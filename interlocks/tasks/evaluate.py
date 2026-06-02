@@ -473,7 +473,10 @@ def _mutation_rerun_action(cfg: InterlockConfig, *, no_results: bool) -> str:
         f"--max-runtime={cfg.mutation_max_runtime}"
     )
     if no_results:
-        return f"Rerun `{command}` with more runtime, or use `--changed-only` for a bounded pass."
+        return (
+            f"Rerun `{command}` with more runtime, or use "
+            "`interlocks mutation --changed-only --since=HEAD` for a bounded local pass."
+        )
     return f"Rerun `{command}`."
 
 

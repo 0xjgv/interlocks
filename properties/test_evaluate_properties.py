@@ -441,6 +441,7 @@ def test_mutation_rerun_action_only_suggests_changed_only_for_no_results(
     assert f"interlocks mutation --min-score={min_score:.0f}" in action
     assert f"--max-runtime={max_runtime}" in action
     assert ("--changed-only" in action) is no_results
+    assert ("--since=HEAD" in action) is no_results
 
 
 @given(completed=st.one_of(st.none(), st.booleans(), st.integers(), st.text(max_size=20)))

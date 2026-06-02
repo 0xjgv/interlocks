@@ -1371,7 +1371,7 @@ def test_trust_next_actions_explain_no_result_mutation_evidence() -> None:
     message = actions["mutation"]["message"]
     assert isinstance(message, str)
     assert "before any mutants were checked" in message
-    assert "--changed-only" in message
+    assert "interlocks mutation --changed-only --since=HEAD" in message
     assert actions["mutation"]["targets"] == []
 
 

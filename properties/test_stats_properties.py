@@ -746,6 +746,7 @@ def test_trust_next_actions_prioritize_no_result_mutation_evidence(
     assert f"interlocks mutation --min-score={floor:.0f}" in message
     assert (f"--max-runtime={max_runtime}" in message) is (max_runtime > 0)
     assert "--changed-only" in message
+    assert "--since=HEAD" in message
     assert "stale" not in message
     assert actions["mutation"]["targets"] == []
 

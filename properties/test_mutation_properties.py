@@ -127,6 +127,37 @@ def test_resolve_changed_globs_incremental_uses_configured_ref_and_scope(
     assert seen == [ref]
 
 
+@given(
+    changed=_PATHS,
+    ref=st.text(max_size=40),
+    since_ref=st.text(min_size=1, max_size=40),
+    src_dir=_DIR,
+    test_dir=_DIR,
+)
+def test_resolve_changed_globs_incremental_prefers_since_override(
+    changed: set[str], ref: str, since_ref: str, src_dir: str, test_dir: str
+) -> None:
+    cfg = _Cfg(ref, src_dir, test_dir)
+    seen: list[str] = []
+
+    def fake_changed_py_files_vs(base: str) -> set[str]:
+        seen.append(base)
+        return changed
+
+    with patch.object(mutation, "changed_py_files_vs", fake_changed_py_files_vs):
+        resolved = mutation._resolve_changed_globs(
+            cast("InterlockConfig", cfg),
+            changed_only=True,
+            since_ref=since_ref,
+        )
+        assert resolved == (
+            _expected_globs(changed, src_dir, test_dir),
+            changed,
+        )
+
+    assert seen == [since_ref]
+
+
 @given(line=st.text(max_size=80))
 def test_is_spinner_line_matches_left_stripped_braille_prefix(line: str) -> None:
     stripped = line.lstrip()

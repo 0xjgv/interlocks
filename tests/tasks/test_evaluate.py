@@ -486,7 +486,8 @@ def test_mutation_item_surfaces_no_result_cached_evidence(
     assert "latest evidence had no checked mutants" in item.detail
     assert item.next_action == (
         "Rerun `interlocks mutation --min-score=85 --max-runtime=900` "
-        "with more runtime, or use `--changed-only` for a bounded pass."
+        "with more runtime, or use `interlocks mutation --changed-only --since=HEAD` "
+        "for a bounded local pass."
     )
     assert item.closure is not None
     assert item.closure.command == "interlocks nightly"

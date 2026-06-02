@@ -537,7 +537,13 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
             FlagSpec(
                 "--max-runtime=", "value", "cfg.mutation_max_runtime", "per-run timeout in seconds"
             ),
-            FlagSpec("--changed-only", "boolean", "off", "limit to files changed vs main"),
+            FlagSpec(
+                "--changed-only",
+                "boolean",
+                "off",
+                "limit to files changed vs mutation_since_ref",
+            ),
+            FlagSpec("--since=", "value", "cfg.mutation_since_ref", "base ref for changed-only"),
             FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
         ),
     ),

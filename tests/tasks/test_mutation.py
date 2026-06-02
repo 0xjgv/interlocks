@@ -884,6 +884,37 @@ def test_cmd_mutation_passes_globs_to_mutmut(
     assert "mutation.log" in out
 
 
+def test_cmd_mutation_changed_only_since_overrides_config_ref(
+    tmp_project: Path,
+    primed_coverage_xml: Callable[[str], Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="1.0"></coverage>')
+    monkeypatch.chdir(tmp_project)
+    seen_refs: list[str] = []
+
+    def _changed_py_files_vs(ref: str) -> set[str]:
+        seen_refs.append(ref)
+        return {"mypkg/mod.py"}
+
+    monkeypatch.setattr(mutation_mod, "changed_py_files_vs", _changed_py_files_vs)
+    monkeypatch.setattr(
+        mutation_mod,
+        "_run_mutmut",
+        lambda _argv, _timeout: (True, tmp_project / ".interlocks" / "mutation.log"),
+    )
+    monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "mutation", "--min-coverage=0", "--since=HEAD~1"],
+    )
+
+    cmd_mutation(changed_only=True)
+
+    assert seen_refs == ["HEAD~1"]
+
+
 def test_cmd_mutation_invokes_popen_with_run_then_globs(
     tmp_project: Path,
     primed_coverage_xml: Callable[[str], Path],
