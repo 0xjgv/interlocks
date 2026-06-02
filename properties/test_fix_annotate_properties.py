@@ -173,6 +173,15 @@ def test_iter_candidates_ignores_malformed_plan_payloads(
         list(_annotations_for(candidate))
 
 
+@given(
+    candidates=st.lists(st.dictionaries(st.text(max_size=20), _JSONISH, max_size=8), max_size=8)
+)
+def test_iter_candidates_preserves_plan_candidate_dicts(
+    candidates: list[dict[str, object]],
+) -> None:
+    assert list(_iter_candidates({"candidates": candidates}, "plan")) == candidates
+
+
 @given(payload=st.dictionaries(st.text(max_size=20), _JSONISH, max_size=10))
 def test_iter_candidates_ignores_malformed_optimize_payloads(
     payload: dict[str, object],

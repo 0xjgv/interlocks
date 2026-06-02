@@ -39,3 +39,12 @@ def test_task_format_uses_format_spec_name(files: list[str] | None) -> None:
     assert seen == [("format", files)]
     assert result.description == "format"
     assert result.label == "format"
+
+
+def test_task_format_accepts_whole_project_format_request() -> None:
+    sentinel = Task("format", ("ruff", "format"))
+
+    with patch.object(format_task, "make_ruff_task", return_value=sentinel) as make_ruff_task:
+        assert format_task.task_format(None) is sentinel
+
+    make_ruff_task.assert_called_once_with("format", None)

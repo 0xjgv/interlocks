@@ -917,6 +917,18 @@ def test_fix_optimize_apply_payload_preserves_failed_selection_context(
     assert payload["failed_patch"] == ".lintfix/failed.patch"
 
 
+def test_fix_optimize_apply_payload_omits_failure_fields_on_success() -> None:
+    selection = _selection(selected=(_candidate("I001"),))
+
+    payload = fix_optimize_mod._apply_payload(selection, True, 0)
+
+    assert payload == {
+        "requested": True,
+        "status": "applied",
+        "selected_rules": ["I001"],
+    }
+
+
 @given(
     stderr=st.text(),
     limit=st.integers(min_value=1, max_value=80),

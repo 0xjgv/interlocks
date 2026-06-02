@@ -154,6 +154,13 @@ def test_attribution_status_failure_overrides_result_shape(
     assert behavior_attribution_task._attribution_status(result, passed=False) == "failed"
 
 
+@given(failure=st.text(min_size=1, max_size=40))
+def test_attribution_status_treats_evidence_failure_as_warning(failure: str) -> None:
+    result = AttributionResult(evidence_failure=failure)
+
+    assert behavior_attribution_task._attribution_status(result, passed=True) == "warn"
+
+
 @given(status=st.text(max_size=30), floor_failure=st.booleans())
 def test_attribution_next_actions_are_empty_only_for_clean_ok(
     status: str, floor_failure: bool

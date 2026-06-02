@@ -1008,6 +1008,10 @@ def test_pr_speed_evidence_action_returns_ci_owned_warning(
     assert item.closure.command == "interlocks ci"
 
 
+def test_pr_speed_evidence_action_returns_none_for_clean_current_evidence() -> None:
+    assert _pr_speed_evidence_action_for(None, passed=True, skipped=()) is None
+
+
 @given(
     tool_value=st.one_of(_JSON_SCALAR, st.dictionaries(st.text(max_size=10), _JSON_SCALAR)),
     tool_is_table=st.booleans(),

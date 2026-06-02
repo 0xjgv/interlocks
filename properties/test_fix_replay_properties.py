@@ -160,6 +160,18 @@ def test_serialize_preserves_each_replay_point_shape(
     ]
 
 
+def test_serialize_preserves_empty_replay_shape() -> None:
+    payload = _serialize(ReplayResult("main", "unblock", 0, ()), ())
+
+    assert payload["base_branch"] == "main"
+    assert payload["budget"] == "unblock"
+    assert payload["n_requested"] == 0
+    assert payload["n_replayed"] == 0
+    assert payload["n_with_error"] == 0
+    assert payload["commits"] == []
+    assert payload["rules"] == []
+
+
 @given(
     payload=st.fixed_dictionaries({
         "base_branch": _RULE,

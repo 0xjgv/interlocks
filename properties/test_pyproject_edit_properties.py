@@ -71,6 +71,15 @@ def test_array_scan_double_quote_escape_consumes_next_character(ch: str) -> None
     assert scan.escaped is False
 
 
+def test_array_scan_closes_matching_double_quote_when_not_escaped() -> None:
+    scan = _ArrayValueScan(quote='"', escaped=False)
+
+    scan._consume_quoted('"')
+
+    assert scan.quote is None
+    assert scan.escaped is False
+
+
 @given(st.text(alphabet="# []abc", min_size=1, max_size=40))
 def test_array_scan_treats_hash_comment_as_rest_of_line(comment: str) -> None:
     assert _value_is_multiline(f"[ # {comment} ]") is True

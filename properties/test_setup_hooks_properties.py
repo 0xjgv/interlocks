@@ -67,3 +67,11 @@ def test_setup_hooks_payload_rejects_mismatched_detector_results(
 
     with pytest.raises(ValueError):
         _setup_hooks_payload(_status_list(before_len), _status_list(after_len))
+
+
+def test_setup_hooks_payload_accepts_empty_detector_results() -> None:
+    payload = _setup_hooks_payload([], [])
+
+    assert payload["passed"] is True
+    assert payload["status"] == "installed"
+    assert payload["hooks"] == []

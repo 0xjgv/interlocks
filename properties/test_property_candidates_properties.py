@@ -1072,6 +1072,24 @@ def test_record_instance_aliases_ignores_non_constructor_values(
     assert aliases.instances == {}
 
 
+@given(target=_IDENT)
+def test_record_instance_aliases_records_constructor_calls(target: str) -> None:
+    cfg = InterlockConfig(
+        project_root=Path(),
+        src_dir=Path(),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+    )
+    aliases = _ReferenceAliases({}, {"Parser": ("pkg/generated.py", "Parser")}, {})
+    assignment = ast.parse(f"{target} = Parser()").body[0]
+    assert isinstance(assignment, ast.Assign)
+
+    _record_instance_aliases(cfg, aliases, assignment.targets, assignment.value)
+
+    assert aliases.instances == {target: ("pkg/generated.py", "Parser")}
+
+
 @given(alias=_IDENT)
 def test_record_import_aliases_ignores_unknown_modules(alias: str) -> None:
     cfg = InterlockConfig(

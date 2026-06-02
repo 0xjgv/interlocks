@@ -104,6 +104,15 @@ def test_current_label_formats_pytest_args_as_list(args: list[str]) -> None:
         assert _json_value(cfg, "pytest_args") == args
 
 
+@given(relpath=_REL_PATH)
+def test_json_value_serializes_paths_as_strings(relpath: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = replace(_cfg(root), ci_evidence_path=root / relpath)
+
+        assert _json_value(cfg, "ci_evidence_path") == str(root / relpath)
+
+
 @given(key=_TOOL_NAME, source=st.text(min_size=1, max_size=30))
 def test_source_label_uses_value_sources_or_unknown(key: str, source: str) -> None:
     with TemporaryDirectory() as raw_root:
@@ -313,3 +322,18 @@ def test_tool_specific_note_lists_each_basedpyright_policy_owner(
     assert note is not None
     for option in (f"[tool.{spec.section}]", *spec.sidecars):
         assert option in note
+
+
+def test_tool_specific_note_is_empty_for_native_basedpyright_config() -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        spec = TOOL_CONFIG_SPECS["basedpyright"]
+        source = ToolConfigSource(
+            tool="basedpyright",
+            source="project: pyproject.toml",
+            path=root / "pyproject.toml",
+            bundled_path=root / spec.filename,
+            flag=spec.flag,
+        )
+
+        assert _tool_specific_note(source, bundled_only=False) is None
