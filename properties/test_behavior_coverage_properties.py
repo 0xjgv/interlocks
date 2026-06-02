@@ -158,6 +158,13 @@ def test_duplicate_behavior_ids_are_sorted_ids_with_multiple_entries(ids: list[s
     )
 
 
+@given(ids=st.lists(_ID, max_size=20, unique=True))
+def test_duplicate_behavior_ids_is_empty_for_unique_behavior_ids(ids: list[str]) -> None:
+    behaviors = tuple(Behavior(behavior_id, "task", behavior_id) for behavior_id in ids)
+
+    assert _duplicate_behavior_ids(behaviors) == ()
+
+
 @given(
     scenario_rows=st.lists(
         st.tuples(_ID, _TITLE, st.integers(min_value=1, max_value=1_000)),

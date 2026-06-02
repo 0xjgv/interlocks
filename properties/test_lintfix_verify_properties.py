@@ -26,3 +26,8 @@ def test_candidate_files_returns_unique_union(
 
     assert set(files) == expected
     assert len(files) == len(expected)
+
+
+@given(rule=_RULE)
+def test_candidate_files_ignores_candidates_without_files(rule: str) -> None:
+    assert _candidate_files((("lint", rule, ()), ("format", rule, ()))) == ()

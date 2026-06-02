@@ -361,6 +361,25 @@ def test_stage_json_uses_plain_json_shapes(
     assert ("evidence_path" in payload) is (evidence_path is not None)
 
 
+@given(command=st.text(max_size=30), passed=st.booleans(), elapsed=st.floats(allow_nan=False))
+def test_stage_json_handles_empty_gate_accumulators(
+    command: str,
+    passed: bool,
+    elapsed: float,
+) -> None:
+    reset_results()
+
+    payload = stage_json(command, passed=passed, elapsed=elapsed)
+
+    assert payload == {
+        "command": command,
+        "passed": passed,
+        "elapsed_seconds": round(elapsed, 3),
+        "gates": [],
+        "skipped": [],
+    }
+
+
 @given(command=st.text(min_size=1, max_size=30), error=st.text(min_size=1, max_size=120))
 def test_preflight_error_payload_keeps_json_error_contract(command: str, error: str) -> None:
     payload = _preflight_error_payload(command, error)
@@ -446,6 +465,20 @@ def test_display_head_collapses_python_module_invocations(module: str, tail: lis
 
     assert _is_python_module_invocation(Path(sys.executable).name, cmd)
     assert _display_head_and_rest(cmd) == (f"python -m {module}", tail)
+
+
+@given(
+    head=st.text(
+        alphabet=string.ascii_letters + string.digits + "_.-",
+        min_size=1,
+        max_size=20,
+    ).filter(lambda value: value not in {"python", "python3", Path(sys.executable).name}),
+    tail=st.lists(_DISPLAY_TOKEN, max_size=8),
+)
+def test_display_head_uses_basename_for_non_python_commands(head: str, tail: list[str]) -> None:
+    cmd = [f"/tmp/tools/{head}", *tail]
+
+    assert _display_head_and_rest(cmd) == (head, tail)
 
 
 @given(

@@ -282,6 +282,29 @@ def test_measure_body_line_updates_changed_counts_and_old_line(
 
 
 @given(
+    prefix=st.characters(blacklist_characters="+- "),
+    body=st.text(max_size=40),
+    path=_PATHS,
+    line=st.integers(min_value=1, max_value=100),
+)
+def test_measure_body_line_ignores_non_diff_prefixes(
+    prefix: str,
+    body: str,
+    path: str,
+    line: int,
+) -> None:
+    state = _MeasureState(files=[path], current_path=path, old_line=line)
+    hunks = {path: FileHunks(path, (Hunk(line, line),))}
+
+    _measure_body_line(state, f"{prefix}{body}", hunks)
+
+    assert state.total == 0
+    assert state.inside == 0
+    assert state.outside == 0
+    assert state.old_line == line
+
+
+@given(
     candidate=metrics(),
     base=st.integers(min_value=-100, max_value=100),
     delta=st.integers(min_value=0, max_value=100),

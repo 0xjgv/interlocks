@@ -353,6 +353,20 @@ def test_build_selection_partitions_candidates_by_best_plan(
     assert selection.total_cost == best.cost
 
 
+@given(items=candidates())
+def test_build_selection_with_empty_plan_rejects_every_candidate(
+    items: tuple[Candidate, ...],
+) -> None:
+    budget = _budget_for_all(items)
+
+    selection = _build_selection(items, budget, _Plan())
+
+    assert selection.selected == ()
+    assert [entry.candidate for entry in selection.rejected] == list(items)
+    assert selection.total_value == 0
+    assert selection.total_cost == CostVector(0, 0, 0, 0)
+
+
 @given(dimension=st.sampled_from(["outside", "changed", "files", "risk", "none"]))
 def test_budget_overflow_reports_first_exceeded_dimension(dimension: str) -> None:
     budget = Budget("tiny", max_files=1, max_changed_lines=1, max_outside_diff_lines=1, max_risk=1)

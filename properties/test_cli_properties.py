@@ -395,6 +395,21 @@ def test_unknown_flag_payload_includes_command_usage_and_declared_flags(flag: st
     assert "--json" in known_flags
 
 
+@given(task_name=_COMMAND, flag=_FLAG)
+def test_unknown_flag_payload_omits_usage_for_unknown_commands(
+    task_name: str,
+    flag: str,
+) -> None:
+    payload = _unknown_flag_payload(task_name, flag)
+
+    assert payload["command"] == task_name
+    assert payload["error"] == f"unknown flag {flag}"
+    assert payload["flag"] == flag
+    if task_name not in cli_mod.COMMAND_DOCS_BY_NAME:
+        assert "usage" not in payload
+        assert "known_flags" not in payload
+
+
 @given(command=_COMMAND)
 def test_unknown_command_payload_lists_known_command_domain(command: str) -> None:
     payload = _unknown_command_payload(command)

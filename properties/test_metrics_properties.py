@@ -97,6 +97,10 @@ def test_mutation_evidence_completed_accepts_only_booleans(completed: object) ->
     assert _mutation_evidence_completed(evidence) is expected
 
 
+def test_mutation_evidence_completed_returns_none_without_evidence() -> None:
+    assert _mutation_evidence_completed(None) is None
+
+
 @given(value=_JSON_SCALARS)
 def test_mutation_evidence_no_results_accepts_only_true_marker(value: object) -> None:
     assert mutation_evidence_no_results({"no_results": value}) is (value is True)
@@ -371,6 +375,36 @@ def test_parse_coverage_ignores_malformed_line_rows(
         ET.ElementTree(root).write(path, encoding="utf-8")
 
         assert parse_coverage(path) == {"pkg/mod.py": expected}
+
+
+@given(filename=st.sampled_from(["mod.py", "pkg/mod.py"]))
+def test_parse_coverage_prefixes_source_relative_filenames_once(filename: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        old_cwd = Path.cwd()
+        root_path = Path(raw_root)
+        package = root_path / "pkg"
+        package.mkdir()
+        root = ET.Element("coverage")
+        sources = ET.SubElement(root, "sources")
+        source = ET.SubElement(sources, "source")
+        source.text = str(package)
+        packages = ET.SubElement(root, "packages")
+        classes = ET.SubElement(packages, "classes")
+        class_node = ET.SubElement(classes, "class")
+        class_node.set("filename", filename)
+        lines_node = ET.SubElement(class_node, "lines")
+        line = ET.SubElement(lines_node, "line")
+        line.set("number", "7")
+        line.set("hits", "1")
+        path = root_path / "coverage.xml"
+        ET.ElementTree(root).write(path, encoding="utf-8")
+        os.chdir(root_path)
+        try:
+            parsed = parse_coverage(path)
+        finally:
+            os.chdir(old_cwd)
+
+    assert parsed == {"pkg/mod.py": {7: 1}}
 
 
 @given(rate=_LINE_RATE_ATTR)

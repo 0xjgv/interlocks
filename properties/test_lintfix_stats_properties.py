@@ -301,6 +301,21 @@ def test_promotion_decision_requires_frontier_low_churn_and_escrow_mode(
         assert decision is None
 
 
+@given(current_mode=st.sampled_from(["auto", "advisory", "skip"]), exact=st.booleans())
+def test_promotion_decision_only_promotes_from_escrow_mode(
+    current_mode: str,
+    exact: bool,
+) -> None:
+    stats = _stats(
+        rule="F401" if exact else "X999",
+        current_mode=current_mode,
+        p95_outside=0.0,
+        revert_signal=0,
+    )
+
+    assert _promotion_decision(stats, exact=exact, on_frontier=True) is None
+
+
 @given(
     on_frontier=st.booleans(),
     p95=st.floats(min_value=0, max_value=10),

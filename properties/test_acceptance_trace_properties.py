@@ -124,3 +124,16 @@ def test_runner_module_extracts_only_python_module_commands(cmd: list[str]) -> N
     expected = cmd[2] if len(cmd) >= 3 and cmd[1] == "-m" else None
 
     assert _runner_module(cmd) == expected
+
+
+@given(
+    executable=st.text(max_size=20),
+    module=_MODULES,
+    tail=st.lists(st.text(max_size=20), max_size=5),
+)
+def test_runner_module_ignores_executable_and_tail_args(
+    executable: str,
+    module: str,
+    tail: list[str],
+) -> None:
+    assert _runner_module([executable, "-m", module, *tail]) == module

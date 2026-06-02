@@ -213,3 +213,32 @@ def test_serialize_preserves_candidate_shape_and_metrics(
     assert serialized["diagnostic_count"] == diagnostic_count
     assert serialized["unsafe"] is unsafe
     assert serialized["patch_path"] == ".lintfix/escrow/generated.patch"
+
+
+@given(base=_RULE, head=_RULE, budget=_RULE, author_cost=st.integers(min_value=0, max_value=500))
+def test_serialize_preserves_empty_plan_header(
+    base: str,
+    head: str,
+    budget: str,
+    author_cost: int,
+) -> None:
+    plan = plan_module.Plan(
+        base=base,
+        head=head,
+        budget=budget,
+        ruff_version="0.0.0",
+        candidates=(),
+        discovery_error=None,
+        author_cost=author_cost,
+    )
+
+    payload = plan_module.serialize(plan)
+
+    assert payload == {
+        "base": base,
+        "head": head,
+        "mode": budget,
+        "author_cost": author_cost,
+        "ruff_version": "0.0.0",
+        "candidates": [],
+    }
