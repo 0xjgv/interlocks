@@ -229,7 +229,7 @@ class _PropertyCandidatesState:
             return (
                 "Extract or add typed, side-effect-light domain functions before "
                 "property-test hardening.",
-                "Run `interlocks init-properties` when domain invariants are ready.",
+                "Run `interlocks init --properties` when domain invariants are ready.",
             )
         return ()
 

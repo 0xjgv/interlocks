@@ -541,7 +541,7 @@ def _refresh_trust_coverage() -> None:
                 "next_actions": [
                     {
                         "kind": "coverage",
-                        "message": "Run `interlocks coverage --properties=ci` for details.",
+                        "message": "Run `interlocks gate coverage --properties=ci` for details.",
                     }
                 ],
             })
@@ -551,7 +551,7 @@ def _refresh_trust_coverage() -> None:
 def _trust_coverage_xml(cfg: InterlockConfig, start: float, *, no_trend: bool) -> Path | None:
     cov_cache = Path(".coverage")
     if not cov_cache.exists():
-        _trust_unavailable("no coverage data — run `interlocks coverage` first", start)
+        _trust_unavailable("no coverage data — run `interlocks gate coverage` first", start)
         return None
     if coverage_cache_is_stale(cov_cache, cfg):
         command = _trust_refresh_command(json_mode=ui.is_json(), no_trend=no_trend)
@@ -559,7 +559,9 @@ def _trust_coverage_xml(cfg: InterlockConfig, start: float, *, no_trend: bool) -
         return None
     cov_file = generate_coverage_xml()
     if not cov_file.exists():
-        _trust_unavailable("coverage.xml not generated — run `interlocks coverage` first", start)
+        _trust_unavailable(
+            "coverage.xml not generated — run `interlocks gate coverage` first", start
+        )
         return None
     return cov_file
 
@@ -752,7 +754,7 @@ def _missing_mutation_action_message(report: TrustReport) -> str:
         return (
             "Last mutation run timed out before any mutants were checked; "
             f"rerun `{command}` with more runtime, or use "
-            "`interlocks mutation --changed-only --since=HEAD` for a bounded local pass."
+            "`interlocks gate mutation --changed-only --since=HEAD` for a bounded local pass."
         )
     if report.mutation_evidence_stale:
         return f"Cached mutation evidence is stale after a newer mutmut run; rerun `{command}`."
@@ -760,7 +762,7 @@ def _missing_mutation_action_message(report: TrustReport) -> str:
 
 
 def _mutation_retry_command(mutation_min_score: float, mutation_max_runtime: int) -> str:
-    command = f"interlocks mutation --min-score={mutation_min_score:.0f}"
+    command = f"interlocks gate mutation --min-score={mutation_min_score:.0f}"
     if mutation_max_runtime > 0:
         command += f" --max-runtime={mutation_max_runtime}"
     return command

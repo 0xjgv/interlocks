@@ -56,9 +56,9 @@ _RUNNER = st.sampled_from(["pytest", "unittest"])
 _FLAG = st.from_regex(r"--[a-z][a-z0-9-]{0,20}", fullmatch=True)
 _COMMAND = st.from_regex(r"[a-z][a-z0-9-]{0,20}", fullmatch=True)
 _KNOWN_COMMAND = st.sampled_from([
-    ("check", "check"),
-    ("unblock", "fix-optimize"),
-    ("attribution", "behavior-attribution"),
+    (["check"], "check"),
+    (["fix", "unblock"], "fix optimize"),
+    (["gate", "coverage"], "gate coverage"),
 ])
 _UNKNOWN_COMMAND = _COMMAND.filter(
     lambda value: value not in TASKS and value not in cli_mod.ALIASES
@@ -395,12 +395,12 @@ def test_help_command_payload_reuses_command_doc_index_payload(task_name: str) -
     trailing_args=st.lists(st.text(max_size=10), max_size=3),
 )
 def test_resolve_task_name_uses_first_positional_and_aliases(
-    command_pair: tuple[str, str],
+    command_pair: tuple[list[str], str],
     leading_flags: list[str],
     trailing_args: list[str],
 ) -> None:
     requested, expected = command_pair
-    raw_args = [*leading_flags, requested, *trailing_args]
+    raw_args = [*leading_flags, *requested, *trailing_args]
 
     assert _resolve_task_name(raw_args) == expected
 

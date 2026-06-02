@@ -1,7 +1,7 @@
 """Shared budgeted-mutation glue used by ``check``, ``pre-commit``, and ``post-edit``.
 
 Stages default to the ``dynamic`` budget (small, predictable mutations);
-``interlocks fix-optimize`` invoked from the CLI keeps its own ``unblock``
+``interlocks fix optimize`` invoked from the CLI keeps its own ``unblock``
 default. ``--renovate`` and ``--mutation-budget=<name>`` override.
 
 ``fix`` and ``format`` are one budgeted lint/format mutation: skipping either

@@ -83,7 +83,7 @@ def test_resolve_inputs_prefers_explicit_then_cli_then_defaults(
     argv_base: str | None,
     argv_budget: str | None,
 ) -> None:
-    argv = ["interlocks", "fix-plan"]
+    argv = ["interlocks", "fix plan"]
     if argv_base is not None:
         argv.append(f"--base={argv_base}")
     if argv_budget is not None:
@@ -109,7 +109,7 @@ def test_resolve_inputs_explicit_values_override_cli_values(
     argv_budget: str,
 ) -> None:
     old_argv = sys.argv
-    sys.argv = ["interlocks", "fix-plan", f"--base={argv_base}", f"--budget={argv_budget}"]
+    sys.argv = ["interlocks", "fix plan", f"--base={argv_base}", f"--budget={argv_budget}"]
     try:
         assert _resolve_inputs(explicit_base, explicit_budget) == (
             explicit_base,
@@ -125,7 +125,7 @@ def test_resolve_inputs_empty_explicit_values_fall_back_to_cli(
     argv_budget: str,
 ) -> None:
     old_argv = sys.argv
-    sys.argv = ["interlocks", "fix-plan", f"--base={argv_base}", f"--budget={argv_budget}"]
+    sys.argv = ["interlocks", "fix plan", f"--base={argv_base}", f"--budget={argv_budget}"]
     try:
         assert _resolve_inputs("", "") == (argv_base, argv_budget)
     finally:
@@ -137,7 +137,7 @@ def test_fix_plan_payload_counts_generated_classifications(modes: list[Mode]) ->
     plan = _plan(modes)
     payload = _fix_plan_payload(plan, "HEAD", "unblock", ".lintfix/plan.json")
 
-    assert payload["command"] == "fix-plan"
+    assert payload["command"] == "fix plan"
     assert payload["passed"] is True
     assert payload["candidate_count"] == len(modes)
     assert payload["by_classification"] == _classification_counts(plan)

@@ -171,7 +171,7 @@ def test_attribution_next_actions_are_empty_only_for_clean_ok(
 
     assert (actions == []) is (status == "ok" and not floor_failure)
     if actions:
-        assert "interlocks behavior-attribution" in actions[0]
+        assert "interlocks gate behavior-attribution" in actions[0]
 
 
 @given(status=st.text(max_size=30))
@@ -187,7 +187,8 @@ def test_attribution_next_actions_for_non_ok_status_name_attribution_task(status
     actions = behavior_attribution_task._attribution_next_actions(status, floor_failure=False)
 
     assert actions == [
-        "Update behavior markers or scenario code, then rerun `interlocks behavior-attribution`."
+        "Update behavior markers or scenario code, then rerun "
+        "`interlocks gate behavior-attribution`."
     ]
 
 

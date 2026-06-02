@@ -792,7 +792,7 @@ def test_mutation_action_message_distinguishes_partial_runs(
     message = stats._mutation_action_message(mutation, floor, max_runtime)
 
     assert ("timed out" in message) is (completed is False)
-    assert f"interlocks mutation --min-score={floor:.0f}" in message
+    assert f"interlocks gate mutation --min-score={floor:.0f}" in message
     assert (f"--max-runtime={max_runtime}" in message) is (max_runtime > 0)
 
 
@@ -804,7 +804,7 @@ def test_mutation_action_message_accepts_missing_summary(
     message = stats._mutation_action_message(None, floor, max_runtime)
 
     assert "timed out" not in message
-    assert f"interlocks mutation --min-score={floor:.0f}" in message
+    assert f"interlocks gate mutation --min-score={floor:.0f}" in message
     assert (f"--max-runtime={max_runtime}" in message) is (max_runtime > 0)
 
 
@@ -828,14 +828,14 @@ def test_mutation_retry_command_includes_runtime_only_when_positive(
 ) -> None:
     command = stats._mutation_retry_command(floor, max_runtime)
 
-    assert command.startswith(f"interlocks mutation --min-score={floor:.0f}")
+    assert command.startswith(f"interlocks gate mutation --min-score={floor:.0f}")
     assert (f"--max-runtime={max_runtime}" in command) is (max_runtime > 0)
 
 
 @given(floor=_PERCENT_FLOAT)
 def test_mutation_retry_command_without_runtime_is_exact(floor: float) -> None:
     assert stats._mutation_retry_command(floor, 0) == (
-        f"interlocks mutation --min-score={floor:.0f}"
+        f"interlocks gate mutation --min-score={floor:.0f}"
     )
 
 
@@ -867,7 +867,7 @@ def test_trust_next_actions_prioritize_no_result_mutation_evidence(
 
     message = actions["mutation"]["message"]
     assert isinstance(message, str)
-    assert f"interlocks mutation --min-score={floor:.0f}" in message
+    assert f"interlocks gate mutation --min-score={floor:.0f}" in message
     assert (f"--max-runtime={max_runtime}" in message) is (max_runtime > 0)
     assert "--changed-only" in message
     assert "--since=HEAD" in message

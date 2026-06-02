@@ -51,7 +51,8 @@ def cmd_test() -> None:
                 _test_skip_payload(
                     reason=project_env_skip_message("test"),
                     next_action=(
-                        "Create or sync the project environment, then rerun `interlocks test`."
+                        "Create or sync the project environment, then rerun "
+                        "`interlocks gate test`."
                     ),
                 )
             )

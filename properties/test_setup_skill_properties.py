@@ -41,7 +41,7 @@ def test_setup_skill_payload_marks_stale_when_detector_fails(
 
         payload = _setup_skill_payload(root, result)
 
-    assert payload["command"] == "setup-skill"
+    assert payload["command"] == "setup"
     assert payload["passed"] is True
     assert payload["status"] == "missing/stale"
     assert payload["installed"] is False

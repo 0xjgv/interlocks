@@ -391,7 +391,7 @@ CONFIG_KEYS: tuple[ConfigKeyDoc, ...] = (
     ConfigKeyDoc(
         "dependency_freshness_command",
         "str",
-        "interlocks deps-freshness",
+        "interlocks gate deps-freshness",
         "Focused command that checks outdated dependencies when run explicitly",
         "Dependencies",
     ),
@@ -609,7 +609,7 @@ class InterlockConfig:
     run_properties_in_check: bool = False
     require_acceptance: bool = False
     evaluate_dependency_freshness: bool = False
-    dependency_freshness_command: str = "interlocks deps-freshness"
+    dependency_freshness_command: str = "interlocks gate deps-freshness"
     dependency_freshness_stage: str = "interlocks nightly"
     audit_severity_threshold: AuditSeverityThreshold | None = None
     arch_template: ArchTemplate = "default"
@@ -727,7 +727,7 @@ def _runner_argv(cfg: InterlockConfig) -> list[str]:
 
 
 def build_test_command(cfg: InterlockConfig) -> list[str]:
-    """Build the full `interlocks test` command from ``cfg``."""
+    """Build the full `interlocks gate test` command from ``cfg``."""
     return [*invoker_prefix(cfg), *_runner_argv(cfg)]
 
 

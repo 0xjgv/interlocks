@@ -31,7 +31,7 @@ def cmd_post_edit() -> None:
     except SystemExit as exc:
         if exc.code not in (0, None):
             record_result(
-                "fix-optimize",
+                "fix optimize",
                 status="warn",
                 elapsed=None,
                 detail=f"budgeted mutation exited {exc.code}",
@@ -40,7 +40,7 @@ def cmd_post_edit() -> None:
                 print(f"post-edit: budgeted mutation skipped advisory ({exc.code})")
     else:
         if not (skip_policy.enabled("fix") or skip_policy.enabled("format")):
-            record_result("fix-optimize", status="ok", elapsed=None, detail=None)
+            record_result("fix optimize", status="ok", elapsed=None, detail=None)
     finally:
         elapsed = time.monotonic() - start
         ui.stage_footer(elapsed)

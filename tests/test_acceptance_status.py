@@ -178,19 +178,19 @@ def test_count_scenarios_ignores_comments_and_feature_header(tmp_path: Path) -> 
 
 def test_remediation_for_missing_features_dir_mentions_init() -> None:
     msg = remediation_message(AcceptanceStatus.MISSING_FEATURES_DIR, None)
-    assert "interlocks init-acceptance" in msg
+    assert "interlocks init --acceptance" in msg
 
 
 def test_remediation_for_missing_feature_files_mentions_dir_and_init(tmp_path: Path) -> None:
     target = tmp_path / "tests" / "features"
     msg = remediation_message(AcceptanceStatus.MISSING_FEATURE_FILES, target)
-    assert "init-acceptance" in msg
+    assert "init --acceptance" in msg
     assert str(target) in msg
 
 
 def test_remediation_for_missing_feature_files_uses_default_when_no_dir() -> None:
     msg = remediation_message(AcceptanceStatus.MISSING_FEATURE_FILES, None)
-    assert "init-acceptance" in msg
+    assert "init --acceptance" in msg
     assert "tests/features" in msg
 
 

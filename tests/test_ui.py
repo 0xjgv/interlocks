@@ -59,7 +59,7 @@ def test_failure_row_prints_in_minimal_mode(
 ) -> None:
     monkeypatch.setattr(ui, "is_verbose", lambda: False)
 
-    ui.row("lint", "ruff check interlocks tests with a long command", "failed", state="fail")
+    ui.row("lint", "ruff check interlocks gate tests with a long command", "failed", state="fail")
 
     out = capsys.readouterr().out
     assert "[lint]" in out

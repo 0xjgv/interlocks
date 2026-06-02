@@ -2,9 +2,9 @@
 
 Usage::
 
-    interlocks fix-rule --rule=I001            # plan only (no mutation)
-    interlocks fix-rule --rule=I001 --apply    # apply iff auto + budget pass + verify pass
-    interlocks fix-rule --rule=F401            # writes .lintfix/escrow/F401.patch
+    interlocks fix rule --rule=I001            # plan only (no mutation)
+    interlocks fix rule --rule=I001 --apply    # apply iff auto + budget pass + verify pass
+    interlocks fix rule --rule=F401            # writes .lintfix/escrow/F401.patch
 
 Defaults are non-mutating. ``F401`` and other escrow-mode rules never mutate
 the tree even with ``--apply`` — they always materialize a patch for review.
@@ -52,7 +52,7 @@ def _resolve_args(
         apply=apply if apply is not None else (arg_flag_value("--apply", "1") is not None),
         base=base if base is not None else arg_value("--base=", "origin/main"),
         budget_name=budget if budget is not None else arg_value("--budget=", "unblock"),
-        verify_cmd=verify_cmd if verify_cmd is not None else verify_cmd_from_argv("fix-rule"),
+        verify_cmd=verify_cmd if verify_cmd is not None else verify_cmd_from_argv("fix rule"),
     )
 
 
@@ -74,7 +74,7 @@ def cmd_fix_rule(
             ui.print_json(_fix_rule_base_payload(args))
             return
         ui.row(
-            "fix-rule",
+            "fix rule",
             args.rule,
             "skipped",
             detail=f"unknown base ref {args.base!r}",
@@ -87,7 +87,7 @@ def cmd_fix_rule(
         if ui.is_json():
             ui.print_json(_fix_rule_no_files_payload(args))
             return
-        ui.row("fix-rule", args.rule, "no changed .py files vs base", state="ok")
+        ui.row("fix rule", args.rule, "no changed .py files vs base", state="ok")
         return
 
     candidate = simulate.simulate_rule(args.rule, files)
@@ -96,7 +96,7 @@ def cmd_fix_rule(
             ui.print_json(_fix_rule_ruff_failure_payload(args, candidate))
             sys.exit(candidate.returncode)
         ui.row(
-            "fix-rule",
+            "fix rule",
             args.rule,
             "ruff failed",
             detail=f"rc={candidate.returncode}",
@@ -138,27 +138,27 @@ def _dispatch_classification(
     """
     rule = args.rule
     if classification.mode == "skip":
-        ui.row("fix-rule", rule, "skip", detail=classification.reason or "", state="warn")
+        ui.row("fix rule", rule, "skip", detail=classification.reason or "", state="warn")
         return 0
 
     if classification.mode in _ESCROW_MODES:
         target = escrow.write_patch(cfg.project_root, rule, candidate.diff)
-        ui.row("fix-rule", rule, classification.mode, detail=cfg.relpath(target), state="ok")
+        ui.row("fix rule", rule, classification.mode, detail=cfg.relpath(target), state="ok")
         return 0
 
     if not args.apply:
-        ui.row("fix-rule", rule, "auto-eligible", detail="re-run with --apply", state="ok")
+        ui.row("fix rule", rule, "auto-eligible", detail="re-run with --apply", state="ok")
         return 0
 
     files_to_apply = classification.metrics.files_touched or files
     result = verify.apply_with_verify(rule=rule, files=files_to_apply, verify_cmd=args.verify_cmd)
     if result.applied:
-        ui.row("fix-rule", rule, "applied + verified", state="ok")
+        ui.row("fix rule", rule, "applied + verified", state="ok")
         return 0
 
     escrow.write_failed_patch(cfg.project_root, candidate.diff)
     ui.row(
-        "fix-rule",
+        "fix rule",
         rule,
         "verify failed; tree restored",
         detail=".lintfix/failed.patch",
@@ -171,7 +171,7 @@ def _print_plan(c: classify.Classification, diff_text: str, base: str, budget_na
     if ui.is_json():
         return
     m = c.metrics
-    ui.section(f"fix-rule plan ({base}, budget={budget_name})")
+    ui.section(f"fix rule plan ({base}, budget={budget_name})")
     rows: list[tuple[str, str]] = [
         ("rule", c.rule),
         ("mode", c.mode),
@@ -191,7 +191,7 @@ def _print_plan(c: classify.Classification, diff_text: str, base: str, budget_na
 
 def _fix_rule_base_payload(args: _FixRuleArgs) -> dict[str, object]:
     return {
-        "command": "fix-rule",
+        "command": "fix rule",
         "passed": True,
         "status": "unknown-base",
         "rule": args.rule,
@@ -204,7 +204,7 @@ def _fix_rule_base_payload(args: _FixRuleArgs) -> dict[str, object]:
 
 def _fix_rule_no_files_payload(args: _FixRuleArgs) -> dict[str, object]:
     return {
-        "command": "fix-rule",
+        "command": "fix rule",
         "passed": True,
         "status": "no-changed-files",
         "rule": args.rule,
@@ -219,7 +219,7 @@ def _fix_rule_ruff_failure_payload(
     candidate: simulate.CandidatePatch,
 ) -> dict[str, object]:
     return {
-        "command": "fix-rule",
+        "command": "fix rule",
         "passed": False,
         "status": "ruff-failed",
         "rule": args.rule,
@@ -238,7 +238,7 @@ def _fix_rule_payload(
     returncode: int,
 ) -> dict[str, object]:
     payload: dict[str, object] = {
-        "command": "fix-rule",
+        "command": "fix rule",
         "passed": returncode == 0,
         "status": _fix_rule_status(classification, args, returncode),
         "rule": args.rule,
@@ -288,13 +288,13 @@ def _required_rule() -> str:
     if len(value) == 0:
         if ui.is_json():
             ui.print_json({
-                "command": "fix-rule",
+                "command": "fix rule",
                 "passed": False,
                 "status": "missing-rule",
                 "error": "missing required --rule=<value>",
-                "usage": "usage: interlocks fix-rule --rule=<value> [--apply] [--json]",
+                "usage": "usage: interlocks fix rule --rule=<value> [--apply] [--json]",
             })
             sys.exit(2)
-        print("interlocks fix-rule: missing required --rule=<value>", file=sys.stderr)
+        print("interlocks fix rule: missing required --rule=<value>", file=sys.stderr)
         sys.exit(2)
     return value

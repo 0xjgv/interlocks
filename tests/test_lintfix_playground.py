@@ -78,7 +78,7 @@ def test_generated_playground_exercises_fix_optimize(tmp_path: Path) -> None:
     playground = module.create_playground(_target(tmp_path), repo_root=tmp_path)
 
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-optimize", "--base=HEAD"],
+        [sys.executable, "-m", "interlocks.cli", "fix", "optimize", "--base=HEAD"],
         cwd=playground,
         env=_env_with_repo_pythonpath(),
         capture_output=True,

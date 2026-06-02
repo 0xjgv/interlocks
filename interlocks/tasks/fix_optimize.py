@@ -2,12 +2,12 @@
 
 Usage::
 
-    interlocks fix-optimize                       # plan + optimize, no mutation
-    interlocks unblock                            # alias — the engineer-facing verb
-    interlocks fix-optimize --budget=renovation
-    interlocks fix-optimize --apply               # apply selected, verify, restore on fail
-    interlocks fix-optimize --annotate --metrics  # also emit CI annotations + metrics.json
-    interlocks fix-optimize --no-stats            # skip auto-discovered replay.json
+    interlocks fix optimize                       # plan + optimize, no mutation
+    interlocks fix unblock                            # alias — the engineer-facing verb
+    interlocks fix optimize --budget=renovation
+    interlocks fix optimize --apply               # apply selected, verify, restore on fail
+    interlocks fix optimize --annotate --metrics  # also emit CI annotations + metrics.json
+    interlocks fix optimize --no-stats            # skip auto-discovered replay.json
 
 Discovers fixable rules on the changed file set, classifies each candidate,
 then runs the multi-dimensional Pareto-pruned optimizer in
@@ -109,7 +109,7 @@ def _exit_if_discovery_failed(
         ui.print_json(_fix_optimize_error_payload(opts, plan.discovery_error))
         sys.exit(plan.discovery_error.returncode)
     ui.row(
-        "fix-optimize",
+        "fix optimize",
         "discover",
         "ruff failed",
         detail=f"rc={plan.discovery_error.returncode}",
@@ -192,10 +192,8 @@ def _emit_json_payload(
 def _standalone_json_requested() -> bool:
     if not ui.is_json():
         return False
-    for arg in sys.argv[1:]:
-        if not arg.startswith("-"):
-            return arg in {"fix-optimize", "unblock"}
-    return False
+    positionals = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
+    return positionals[:2] in (["fix", "optimize"], ["fix", "unblock"])
 
 
 def _resolve_options(
@@ -214,7 +212,7 @@ def _resolve_options(
         budget_name=budget if budget is not None else cli_budget,
         apply=apply if apply is not None else (arg_flag_value("--apply", "1") is not None),
         stats_path=stats_path if stats_path is not None else _resolve_stats_path(),
-        verify_cmd=verify_cmd if verify_cmd is not None else verify_cmd_from_argv("fix-optimize"),
+        verify_cmd=verify_cmd if verify_cmd is not None else verify_cmd_from_argv("fix optimize"),
         annotate=arg_flag_value("--annotate", "1") is not None,
         metrics=arg_flag_value("--metrics", "1") is not None,
     )
@@ -244,9 +242,9 @@ def _annotate(project_root: Path, *, emit_json: bool) -> fix_annotate.Annotation
             emit_json=emit_json,
         )
     except SystemExit as exc:
-        ui.row("fix-optimize", "annotate", f"skipped (exit {exc.code})", state="warn")
+        ui.row("fix optimize", "annotate", f"skipped (exit {exc.code})", state="warn")
     except Exception as exc:
-        ui.row("fix-optimize", "annotate", str(exc), state="warn")
+        ui.row("fix optimize", "annotate", str(exc), state="warn")
     return None
 
 
@@ -261,7 +259,7 @@ def _fix_optimize_payload(
     plan = artifacts.plan
     selection = artifacts.selection
     payload: dict[str, object] = {
-        "command": "fix-optimize",
+        "command": "fix optimize",
         "passed": apply_exit_code in (None, 0),
         "status": _fix_optimize_status(opts, selection, apply_exit_code),
         "plan_path": ".lintfix/plan.json",
@@ -343,7 +341,7 @@ def _fix_optimize_error_payload(
     error: plan_module.DiscoveryError,
 ) -> dict[str, object]:
     return {
-        "command": "fix-optimize",
+        "command": "fix optimize",
         "passed": False,
         "status": "discovery-failed",
         "base": opts.base,
@@ -372,7 +370,7 @@ def _apply_selection(
     verify_cmd: tuple[str, ...],
 ) -> None:
     if not selection.selected:
-        ui.row("fix-optimize", "(nothing to apply)", "ok", state="ok")
+        ui.row("fix optimize", "(nothing to apply)", "ok", state="ok")
         return
     candidates = _selected_candidates(plan_by_rule, selection)
     result = _apply_candidates(candidates, verify_cmd)
@@ -417,7 +415,7 @@ def _apply_candidates(
 
 def _report_applied(result: verify.BatchVerifyResult) -> None:
     rules = ", ".join(result.applied_rules)
-    ui.row("fix-optimize", rules or "(none)", "applied + verified", state="ok")
+    ui.row("fix optimize", rules or "(none)", "applied + verified", state="ok")
 
 
 def _write_failed_patch_if_any(
@@ -436,7 +434,7 @@ def _write_failed_patch_if_any(
 
 def _fail_apply(result: verify.BatchVerifyResult) -> None:
     detail = f"rule={result.failed_rule}" if result.failed_rule else "verify failed; tree restored"
-    ui.row("fix-optimize", "apply", detail, state="fail")
+    ui.row("fix optimize", "apply", detail, state="fail")
     sys.exit(result.returncode or 1)
 
 
@@ -502,12 +500,12 @@ def _print_summary(
     if ui.is_json():
         return
     stats_pairs = [("stats", stats_source)] if stats_source is not None else []
-    ui.section(f"fix-optimize ({opts.base}, budget={opts.budget_name})")
+    ui.section(f"fix optimize ({opts.base}, budget={opts.budget_name})")
     if not plan.candidates:
-        ui.row("fix-optimize", "(no candidates)", "ok", state="ok")
+        ui.row("fix optimize", "(no candidates)", "ok", state="ok")
         return
 
-    ui.gate_row("fix-optimize", f"plan written → {out_rel}", "ok", state="ok")
+    ui.gate_row("fix optimize", f"plan written → {out_rel}", "ok", state="ok")
     # `ui.kv_block` is ungated, so the rich SELECTED / NOT SELECTED / plan
     # blocks below need an explicit verbose guard or they leak into default-mode
     # stdout alongside the one-line gate row.
@@ -521,7 +519,7 @@ def _print_summary(
             indent="  ",
         )
     else:
-        ui.row("fix-optimize", "selected", "(none)", state="ok")
+        ui.row("fix optimize", "selected", "(none)", state="ok")
 
     if selection.rejected:
         ui.section("NOT SELECTED")

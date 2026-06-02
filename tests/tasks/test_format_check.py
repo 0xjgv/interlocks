@@ -65,7 +65,7 @@ def test_format_check_json_clean_exits_zero(
     src = tmp_project / "sample.py"
     src.write_text(CLEAN, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "format-check", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "format-check", "--json"])
     clear_cache()
 
     cmd_format_check()
@@ -101,7 +101,7 @@ def test_format_check_json_unformatted_exits_nonzero(
 
     (tmp_project / "sample.py").write_text(UNFORMATTED, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "format-check", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "format-check", "--json"])
     clear_cache()
 
     with pytest.raises(SystemExit) as excinfo:
@@ -132,7 +132,7 @@ def test_format_check_cli_entrypoint_is_registered(tmp_project: Path) -> None:
     (tmp_project / "sample.py").write_text(CLEAN, encoding="utf-8")
 
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "format-check"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "format-check"],
         cwd=tmp_project,
         capture_output=True,
         text=True,

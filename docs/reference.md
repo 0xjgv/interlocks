@@ -94,7 +94,7 @@ require_acceptance = false        # true -> fail stages when no Gherkin scenario
 
 # Evaluation policy / cached evidence
 evaluate_dependency_freshness = false
-dependency_freshness_command = "interlocks deps-freshness"
+dependency_freshness_command = "interlocks gate deps-freshness"
 dependency_freshness_stage = "interlocks nightly"
 audit_severity_threshold = "high"  # "low" | "medium" | "high" | "critical"
 pr_ci_runtime_budget_seconds = 0
@@ -126,10 +126,10 @@ interlocks config show import-linter
 | Stage | When | What runs |
 |-------|------|-----------|
 | `interlocks check` | Local edit loop | fix -> format -> parallel(typecheck, test, acceptance/properties when opted in) -> deps advisory -> cached CRAP advisory or refresh hint -> suppressions |
-| `interlocks pre-commit` | Git pre-commit hook | fix/format staged Python files, re-stage, typecheck, tests when source changed |
+| `interlocks hook pre-commit` | Git pre-commit hook | fix/format staged Python files, re-stage, typecheck, tests when source changed |
 | `interlocks ci` | Pull requests and protected branches | format-check, lint, complexity, audit, deps, typecheck, coverage including properties, arch, acceptance -> CRAP -> optional mutation per `mutation_ci_mode`; writes `.interlocks/ci.json` timing evidence |
 | `interlocks nightly` | Scheduled jobs | coverage including properties -> audit with warn-skips on transient pip-audit failures -> mutation, always blocking on `mutation_min_score` |
-| `interlocks post-edit` | Editor/agent hook interface | advisory ruff fix + format on changed Python files |
+| `interlocks hook post-edit` | Editor/agent hook interface | advisory ruff fix + format on changed Python files |
 | `interlocks setup` | Local onboarding | installs/checks hooks, agent docs, and Claude skill; `--ci=github` installs/checks GitHub CI wiring |
 | `interlocks clean` | Local cleanup | removes caches, build artifacts, coverage output, mutation state, and `__pycache__/` |
 
@@ -150,20 +150,20 @@ misses.
 Correctness:
 
 - `fix` / `format`: Ruff lint-fix and format, mutating files.
-- `fix-optimize` / `unblock [--apply]`: discover fixable Ruff rules on the
+- `fix optimize` / `fix unblock [--apply]`: discover fixable Ruff rules on the
   changed file set, pick the highest-value subset under budget, and write
   `.lintfix/plan.json` plus `.lintfix/optimize.json`. `--metrics` writes
   `.lintfix/metrics.json`; `--annotate` emits GitHub Actions annotations.
-- `fix-rule --rule=<CODE> [--apply]`: rule-scoped support fix. Auto-mode rules
+- `fix rule --rule=<CODE> [--apply]`: rule-scoped support fix. Auto-mode rules
   can mutate after budget and verifier pass; escrow-mode rules write
   `.lintfix/escrow/<rule>.patch`.
-- `lint` / `format-check`: read-only equivalents for CI.
-- `typecheck`: basedpyright.
-- `test`: pytest or unittest, auto-detected.
-- `acceptance`: Gherkin via pytest-bdd or behave. With
+- `gate lint` / `gate format-check`: read-only equivalents for CI.
+- `gate typecheck`: basedpyright.
+- `gate test`: pytest or unittest, auto-detected.
+- `gate acceptance`: Gherkin via pytest-bdd or behave. With
   `require_acceptance = true`, registered public behavior IDs must be covered by
   runnable scenarios.
-- `properties --profile=check|ci|nightly|default`: pytest + Hypothesis property
+- `gate properties --profile=check|ci|nightly|default`: pytest + Hypothesis property
   tests under `properties_dir`. The runner-owned `check` profile is intentionally
   small for post-edit feedback; `ci` and `nightly` run deeper generated-input
   sweeps. Root-level `properties/` is the default so normal `pytest tests` runs
@@ -178,24 +178,24 @@ Correctness:
 
 Hygiene:
 
-- `audit`: pip-audit CVE scan. `audit_severity_threshold` makes high-severity
+- `gate audit`: pip-audit CVE scan. `audit_severity_threshold` makes high-severity
   policy explicit in `evaluate`.
-- `deps`: deptry unused, missing, and transitive import checks.
-- `deps-freshness`: explicit package-index check for outdated dependencies; not
+- `gate deps`: deptry unused, missing, and transitive import checks.
+- `gate deps-freshness`: explicit package-index check for outdated dependencies; not
   part of default PR CI.
-- `arch`: import-linter contracts; default contract forbids source importing
+- `gate arch`: import-linter contracts; default contract forbids source importing
   tests.
 
 Advanced gates:
 
-- `coverage --min=N [--properties[=profile]]`: coverage.py with fail-under.
+- `gate coverage --min=N [--properties[=profile]]`: coverage.py with fail-under.
   `--min=N` overrides `coverage_min`; `--properties` appends property tests
   before reporting, defaulting to the `ci` Hypothesis profile. uv-managed
   projects get Coverage.py injected via `uv run --with`; no project dep
   required.
-- `crap --max=N [--changed-only]`: CRAP complexity x coverage gate. Blocking
+- `gate crap --max=N [--changed-only]`: CRAP complexity x coverage gate. Blocking
   depends on `enforce_crap`.
-- `mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only] [--since=REF]`:
+- `gate mutation --max-runtime=N [--min-coverage=N] [--min-score=N] [--changed-only] [--since=REF]`:
   mutmut. Advisory unless `enforce_mutation = true` or `--min-score=` is
   passed. `--since=REF` overrides `mutation_since_ref` for changed-only local
   runs.
@@ -213,10 +213,10 @@ Scaffolding:
 - `init`: writes a greenfield `pyproject.toml`, `tests/__init__.py`, and
   `tests/test_smoke.py`; preserves existing test scaffold files and refuses to
   overwrite an existing `pyproject.toml`.
-- `init-acceptance`: writes a working pytest-bdd example under
+- `init --acceptance`: writes a working pytest-bdd example under
   `tests/features/` and `tests/step_defs/`; preserves existing files and creates
   missing scaffold files.
-- `init-properties`: writes `<properties_dir>/test_example_properties.py`
+- `init --properties`: writes `<properties_dir>/test_example_properties.py`
   (`properties/` by default) when no domain property tests exist; preserves
   existing files and no-ops once domain properties are present.
 
@@ -236,8 +236,8 @@ Utility:
 ## Acceptance Tests
 
 Drop `.feature` files under `tests/features/` and step definitions under
-`tests/step_defs/`; `interlocks acceptance` runs them via pytest-bdd and shares
-coverage with `test`. Or run `interlocks init-acceptance` for a working
+`tests/step_defs/`; `interlocks gate acceptance` runs them via pytest-bdd and shares
+coverage with `gate test`. Or run `interlocks init --acceptance` for a working
 example.
 
 Behavior coverage uses explicit IDs for observable public behavior. For
@@ -262,7 +262,7 @@ exist. Remediation names the behavior ID and suggests adding `# req: <id>` or
 `@req-<id>`.
 
 Advisory trace evidence is separate from behavior markers. Run
-`interlocks acceptance --trace` to request runtime public-symbol evidence; trace
+`interlocks gate acceptance --trace` to request runtime public-symbol evidence; trace
 failures, missing evidence, or newly untraced symbols are diagnostic-only in
 this release and do not change `acceptance`, `ci`, or `check` exit codes.
 
@@ -286,23 +286,23 @@ bundled default.
 
 | File | Consumed by | Detected via | Injected flag |
 |------|-------------|--------------|---------------|
-| `ruff.toml` | `fix`, `format`, `lint`, `format-check` | `[tool.ruff]`, `ruff.toml`, `.ruff.toml` | `--config` |
-| `pyrightconfig.json` | `typecheck` | `[tool.basedpyright]`, `pyrightconfig.{json,toml}` | `--project` |
-| `coveragerc` | `coverage` | `[tool.coverage.*]`, `.coveragerc` | `--rcfile=` |
-| `importlinter_template.ini` | `arch` | `[tool.importlinter]`, `.importlinter`, `setup.cfg` | formatted tempfile plus `--config` |
-| `bdd_example.feature` | `init-acceptance` | none | direct copy |
-| `bdd_test_example.py` | `init-acceptance` | none | direct copy |
-| `bdd_conftest.py` | `init-acceptance` | none | direct copy |
-| `properties_test_example.py` | `init-properties` | none | direct copy |
-| `agents_block.md` | `setup`, `agents` | existing `interlocks` doc reference | appended/created |
-| `skill/SKILL.md` | `setup`, `setup-skill` | byte match at `.claude/skills/interlocks/SKILL.md` | direct copy |
+| `ruff.toml` | `fix`, `gate format`, `gate lint`, `gate format-check` | `[tool.ruff]`, `ruff.toml`, `.ruff.toml` | `--config` |
+| `pyrightconfig.json` | `gate typecheck` | `[tool.basedpyright]`, `pyrightconfig.{json,toml}` | `--project` |
+| `coveragerc` | `gate coverage` | `[tool.coverage.*]`, `.coveragerc` | `--rcfile=` |
+| `importlinter_template.ini` | `gate arch` | `[tool.importlinter]`, `.importlinter`, `setup.cfg` | formatted tempfile plus `--config` |
+| `bdd_example.feature` | `init --acceptance` | none | direct copy |
+| `bdd_test_example.py` | `init --acceptance` | none | direct copy |
+| `bdd_conftest.py` | `init --acceptance` | none | direct copy |
+| `properties_test_example.py` | `init --properties` | none | direct copy |
+| `agents_block.md` | `setup`, `setup --agents` | existing `interlocks` doc reference | appended/created |
+| `skill/SKILL.md` | `setup`, `setup --skill` | byte match at `.claude/skills/interlocks/SKILL.md` | direct copy |
 | `scaffold_pyproject.toml` | `init` | none | read plus `{project_name}` substitution |
 | `scaffold_test_example.py` | `init` | none | direct copy |
 
 The bundled `pyrightconfig.json` uses standard mode, suppresses selected noisy
 diagnostics for first adoption, and sets `reportDeprecated = "error"`.
 
-`interlocks deps` and `interlocks mutation` ship no bundled fallback: deptry
+`interlocks gate deps` and `interlocks gate mutation` ship no bundled fallback: deptry
 applies its built-ins, and mutmut reads the project's `pyproject.toml`.
 
 ## FAQ
@@ -316,7 +316,7 @@ defaults, not hidden project policy. Inspect them with
 `interlocks config show coverage`, or `interlocks config show import-linter`.
 
 For basedpyright, the bundled config is intentionally an adoption baseline. In
-bare projects, `il typecheck` passes `--project <bundled pyrightconfig.json>`,
+bare projects, `il gate typecheck` passes `--project <bundled pyrightconfig.json>`,
 so it may report fewer diagnostics than raw `basedpyright` with no config. Add
 `[tool.basedpyright]`, `pyrightconfig.json`, or `pyrightconfig.toml` when you
 want project-owned basedpyright policy. The bundled baseline treats deprecated

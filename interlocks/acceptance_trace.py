@@ -91,7 +91,7 @@ def load_trace_evidence(project_root: Path) -> AcceptanceTraceEvidence | None:
 def format_trace_evidence(evidence: AcceptanceTraceEvidence | None) -> str:
     if evidence is None:
         return (
-            "acceptance trace evidence unavailable — run `interlocks acceptance --trace` "
+            "acceptance trace evidence unavailable — run `interlocks gate acceptance --trace` "
             "for advisory runtime detail"
         )
     lines = ["acceptance trace evidence (advisory; not blocking)"]

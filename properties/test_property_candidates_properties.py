@@ -771,11 +771,11 @@ def test_empty_candidate_state_reports_greenfield_next_actions() -> None:
 
     assert payload["next_actions"] == [
         "Extract or add typed, side-effect-light domain functions before property-test hardening.",
-        "Run `interlocks init-properties` when domain invariants are ready.",
+        "Run `interlocks init --properties` when domain invariants are ready.",
     ]
     assert "no source functions in all source" in lines[0]
     assert "extract or add typed" in lines[1]
-    assert "init-properties" in lines[2]
+    assert "init" in lines[2]
 
 
 @given(

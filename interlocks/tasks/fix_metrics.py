@@ -173,13 +173,13 @@ def _print_summary(payload: dict[str, Any], rel_path: str) -> None:
     if ui.is_json():
         return
     ui.gate_row(
-        "fix-metrics",
+        "fix metrics",
         rel_path,
         "ok",
         detail=_sources_detail(payload),
         state="ok",
     )
-    ui.section("fix-metrics")
+    ui.section("fix metrics")
     pairs: list[tuple[str, str]] = [("output", rel_path)]
     plan = payload.get("plan")
     if plan:
@@ -225,7 +225,7 @@ def _sources_detail(payload: dict[str, Any]) -> str:
 def _fix_metrics_payload(project_root: Path, out_path: Path) -> dict[str, object]:
     metrics = _read_json(out_path) or {}
     return {
-        "command": "fix-metrics",
+        "command": "fix metrics",
         "passed": True,
         "metrics_path": relpath(project_root, out_path),
         "sources": metrics.get("sources", {}),

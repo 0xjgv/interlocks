@@ -45,7 +45,7 @@ def tmp_project(tmp_path: Path) -> Path:
 def test_lint_cli(tmp_project: Path, source: str, expected_rc: int) -> None:
     (tmp_project / "sample.py").write_text(source, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "lint"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "lint"],
         cwd=tmp_project,
         capture_output=True,
         text=True,
@@ -80,7 +80,7 @@ def test_lint_json_clean_in_process(
 
     (tmp_project / "sample.py").write_text(CLEAN, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "lint", "--json"])
     clear_cache()
 
     cmd_lint()
@@ -113,7 +113,7 @@ def test_lint_json_violating_in_process(
 
     (tmp_project / "sample.py").write_text(VIOLATING, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "lint", "--json"])
     clear_cache()
 
     with pytest.raises(SystemExit) as exc:
@@ -230,7 +230,7 @@ def test_progressive_lint_json_reports_count_with_no_cap(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "lint", "--json"])
     monkeypatch.setattr(lint_mod, "capture", _stub_capture(_THREE_VIOLATIONS))
 
     lint_mod.cmd_lint_progressive()
@@ -268,7 +268,7 @@ def test_progressive_lint_json_fails_over_cap(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _write_lint_baseline(2)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "lint", "--json"])
     monkeypatch.setattr(lint_mod, "capture", _stub_capture(_THREE_VIOLATIONS))
 
     with pytest.raises(SystemExit) as exc:
@@ -297,7 +297,7 @@ def test_progressive_lint_json_skips_when_ruff_crashes(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "lint", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "lint", "--json"])
     monkeypatch.setattr(lint_mod, "capture", _stub_capture("", returncode=2))
 
     lint_mod.cmd_lint_progressive()

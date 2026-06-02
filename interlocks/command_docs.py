@@ -9,7 +9,7 @@ is derived from this registry and the CLI's compact handler map.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -51,8 +51,7 @@ class CommandDoc:
 # Lives here, not in ``cli.py``, so ``tasks/explain.py`` can resolve aliases
 # without importing ``cli`` (which would create an import cycle).
 ALIASES: dict[str, str] = {
-    "attribution": "behavior-attribution",
-    "unblock": "fix-optimize",
+    "fix unblock": "fix optimize",
 }
 
 
@@ -926,60 +925,183 @@ COMMAND_DOCS: tuple[CommandDoc, ...] = (
 )
 
 
+_LEGACY_COMMAND_DOCS = COMMAND_DOCS
+_LEGACY_DOCS_BY_NAME: dict[str, CommandDoc] = {doc.name: doc for doc in _LEGACY_COMMAND_DOCS}
+
+
+def _doc(name: str) -> CommandDoc:
+    return _LEGACY_DOCS_BY_NAME[name]
+
+
+def _route_doc(
+    source_name: str,
+    route_name: str,
+    *,
+    usage: str | None = None,
+    summary: str | None = None,
+    when_to_use: str | None = None,
+    mutates_note: str | None = None,
+) -> CommandDoc:
+    source = _doc(source_name)
+    return replace(
+        source,
+        name=route_name,
+        summary=summary or source.summary,
+        when_to_use=when_to_use or source.when_to_use,
+        usage=usage or route_name,
+        mutates_note=source.mutates_note if mutates_note is None else mutates_note,
+    )
+
+
+_GATE_DOCS: tuple[CommandDoc, ...] = (
+    _route_doc("format", "gate format"),
+    _route_doc("format-check", "gate format-check"),
+    _route_doc("lint", "gate lint"),
+    _route_doc("typecheck", "gate typecheck"),
+    _route_doc("test", "gate test"),
+    _route_doc("coverage", "gate coverage"),
+    _route_doc(
+        "properties",
+        "gate properties",
+        when_to_use=(
+            "Run generated-input property tests; use `init --properties` to scaffold "
+            "them, `--profile=check` for local edits, and `--profile=ci|nightly` "
+            "for deeper sweeps. Skips cleanly when no property tests are present."
+        ),
+    ),
+    _route_doc("audit", "gate audit"),
+    _route_doc("deps", "gate deps"),
+    _route_doc("deps-freshness", "gate deps-freshness"),
+    _route_doc("arch", "gate arch"),
+    _route_doc("acceptance", "gate acceptance"),
+    _route_doc("behavior-attribution", "gate behavior-attribution"),
+    _route_doc("complexity", "gate complexity"),
+    _route_doc("crap", "gate crap"),
+    _route_doc("mutation", "gate mutation"),
+)
+
+_FIX_DOCS: tuple[CommandDoc, ...] = (
+    replace(
+        _doc("fix"),
+        usage="fix [rule|plan|replay|optimize|annotate|metrics]",
+        when_to_use=(
+            "Run bare `fix` after edits to auto-fix lint violations, or use a "
+            "fix subcommand to plan, replay, optimize, annotate, or apply a "
+            "specific lint-fix flow."
+        ),
+    ),
+    _route_doc(
+        "fix-rule",
+        "fix rule",
+        usage="fix rule --rule=<value> [--apply] [--json]",
+        summary="Rule-scoped lint fix plan/apply",
+    ),
+    _route_doc("fix-plan", "fix plan", usage="fix plan [--base=REF] [--budget=NAME]"),
+    _route_doc(
+        "fix-replay",
+        "fix replay",
+        usage="fix replay [--base=REF] [--n=N]",
+        summary="Replay fix plan across recent commits; writes .lintfix/replay.json",
+    ),
+    _route_doc(
+        "fix-optimize",
+        "fix optimize",
+        usage="fix optimize [--apply] [--budget=NAME] [--json]",
+    ),
+    _route_doc("fix-annotate", "fix annotate", usage="fix annotate [--source=NAME]"),
+    _route_doc("fix-metrics", "fix metrics", usage="fix metrics [--json]"),
+)
+
+_HOOK_DOCS: tuple[CommandDoc, ...] = (
+    CommandDoc(
+        "hook",
+        "Run an installed hook entrypoint",
+        "Internal integration surface for installed git and editor hooks.",
+        mutates=True,
+        outputs=(),
+        exit_codes=((0, "hook passed or was advisory"), (1, "hook failed"), _NO_PYPROJECT),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        usage="hook <pre-commit|post-edit>",
+        mutates_note="depends on selected hook",
+    ),
+    _route_doc("pre-commit", "hook pre-commit"),
+    _route_doc("post-edit", "hook post-edit"),
+)
+
+_TOP_LEVEL_DOCS: tuple[CommandDoc, ...] = (
+    _doc("doctor"),
+    replace(
+        _doc("setup"),
+        flags=(
+            FlagSpec("--check", "boolean", "off", "verify integrations read-only"),
+            FlagSpec("--ci=", "value", "", "install a CI workflow (github)"),
+            FlagSpec("--hooks", "boolean", "off", "install only local hooks"),
+            FlagSpec("--agents", "boolean", "off", "install only agent docs"),
+            FlagSpec("--skill", "boolean", "off", "install only the bundled Claude skill"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+        ),
+        usage="setup [--check] [--ci=github] [--hooks|--agents|--skill] [--json]",
+        when_to_use=(
+            "Run once per repository to install or verify local integrations. "
+            "Use --hooks, --agents, or --skill for a focused setup action."
+        ),
+    ),
+    replace(
+        _doc("init"),
+        flags=(
+            FlagSpec("--acceptance", "boolean", "off", "scaffold acceptance tests"),
+            FlagSpec("--properties", "boolean", "off", "scaffold property tests"),
+            FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),
+        ),
+        usage="init [--acceptance|--properties] [--json]",
+        when_to_use=(
+            "Bootstrap a greenfield project, or pass --acceptance / --properties "
+            "to add focused test scaffolding to an existing project."
+        ),
+    ),
+    _doc("check"),
+    _doc("ci"),
+    _doc("nightly"),
+    CommandDoc(
+        "gate",
+        "Run one direct quality gate",
+        "Debug a failed workflow gate without running the full local or CI loop.",
+        mutates=True,
+        outputs=(),
+        exit_codes=((0, "selected gate passed"), (1, "selected gate failed"), _NO_PYPROJECT),
+        flags=(FlagSpec("--json", "boolean", "off", "emit machine-readable JSON"),),
+        usage=(
+            "gate <format|format-check|lint|typecheck|test|coverage|properties|audit|deps|"
+            "arch|acceptance|mutation>"
+        ),
+        mutates_note="depends on selected gate; `gate format` mutates, most gates are read-only",
+    ),
+    _FIX_DOCS[0],
+    _HOOK_DOCS[0],
+    _doc("config"),
+    _doc("presets"),
+    _doc("baseline"),
+    _doc("trust"),
+    _doc("evaluate"),
+    _doc("property-candidates"),
+    _doc("explain"),
+    _doc("clean"),
+    _doc("warm"),
+    _doc("version"),
+    _doc("help"),
+)
+
+COMMAND_DOCS = (*_TOP_LEVEL_DOCS, *_GATE_DOCS, *_FIX_DOCS[1:], *_HOOK_DOCS[1:])
+
 COMMAND_DOCS_BY_NAME: dict[str, CommandDoc] = {doc.name: doc for doc in COMMAND_DOCS}
 
 COMMAND_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "Tasks",
-        (
-            "fix",
-            "fix-rule",
-            "fix-plan",
-            "fix-replay",
-            "fix-optimize",
-            "fix-annotate",
-            "fix-metrics",
-            "format",
-            "format-check",
-            "lint",
-            "typecheck",
-            "test",
-            "audit",
-            "deps",
-            "deps-freshness",
-            "arch",
-            "acceptance",
-            "behavior-attribution",
-            "init-acceptance",
-            "properties",
-            "init-properties",
-            "coverage",
-            "complexity",
-            "crap",
-            "mutation",
-        ),
-    ),
-    (
-        "Stages",
-        ("check", "pre-commit", "ci", "nightly", "post-edit", "setup-hooks", "clean"),
-    ),
-    ("Reports", ("trust", "evaluate", "property-candidates", "explain")),
-    (
-        "Utility",
-        (
-            "config",
-            "doctor",
-            "setup",
-            "init",
-            "agents",
-            "setup-skill",
-            "presets",
-            "baseline",
-            "version",
-            "warm",
-        ),
-    ),
-    ("Other", ("help",)),
+    ("Workflows", ("doctor", "setup", "init", "check", "ci", "nightly")),
+    ("Direct Gates", ("gate", *(doc.name for doc in _GATE_DOCS))),
+    ("Fixes", tuple(doc.name for doc in _FIX_DOCS)),
+    ("Hooks", tuple(doc.name for doc in _HOOK_DOCS)),
+    ("Reports", ("trust", "evaluate", "property-candidates", "baseline", "explain")),
+    ("Project", ("config", "presets", "clean", "warm", "version", "help")),
 )
 
 

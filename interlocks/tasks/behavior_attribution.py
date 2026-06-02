@@ -124,7 +124,7 @@ def cmd_behavior_attribution_cached_advisory() -> None:
     """Fast advisory mirror used by `interlocks check`."""
     cfg = load_config()
     if not evidence_is_fresh(cfg, evidence_path(cfg)):
-        _skip("no fresh evidence — run `interlocks behavior-attribution`")
+        _skip("no fresh evidence — run `interlocks gate behavior-attribution`")
         return
     result = _validate_current_project(cfg)
     if result is None:
@@ -179,7 +179,7 @@ def _run_acceptance_refresh_json(acceptance: Task) -> dict[str, object] | None:
     if passed:
         reset_results()
         return None
-    payload = stage_json("behavior-attribution", passed=False, elapsed=elapsed)
+    payload = stage_json("gate behavior-attribution", passed=False, elapsed=elapsed)
     payload["status"] = "failed"
     payload["error"] = "acceptance evidence refresh failed"
     return payload
@@ -217,7 +217,7 @@ def _handle_complete_result(
 
 def _attribution_skip_payload(reason: str) -> dict[str, object]:
     return {
-        "command": "behavior-attribution",
+        "command": "gate behavior-attribution",
         "passed": True,
         "status": "skipped",
         "reason": reason,
@@ -227,11 +227,11 @@ def _attribution_skip_payload(reason: str) -> dict[str, object]:
 
 def _attribution_refresh_failure_payload(message: str) -> dict[str, object]:
     return {
-        "command": "behavior-attribution",
+        "command": "gate behavior-attribution",
         "passed": False,
         "status": "failed",
         "error": message,
-        "next_actions": ["Run `interlocks init-acceptance` or fix acceptance coverage."],
+        "next_actions": ["Run `interlocks init --acceptance` or fix acceptance coverage."],
     }
 
 
@@ -241,7 +241,7 @@ def _attribution_payload(cfg: InterlockConfig, result: AttributionResult) -> dic
     passed = not (floor_failure or incomplete_failure)
     status = _attribution_status(result, passed=passed)
     payload: dict[str, object] = {
-        "command": "behavior-attribution",
+        "command": "gate behavior-attribution",
         "passed": passed,
         "status": status,
         "coverage": _attribution_coverage_payload(result),
@@ -287,12 +287,13 @@ def _attribution_next_actions(status: str, *, floor_failure: bool) -> list[str]:
     if floor_failure:
         return [
             "Add scenario coverage for claimed behaviors, then rerun "
-            "`interlocks behavior-attribution`."
+            "`interlocks gate behavior-attribution`."
         ]
     if status == "ok":
         return []
     return [
-        "Update behavior markers or scenario code, then rerun `interlocks behavior-attribution`."
+        "Update behavior markers or scenario code, then rerun "
+        "`interlocks gate behavior-attribution`."
     ]
 
 

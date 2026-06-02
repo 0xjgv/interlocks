@@ -38,10 +38,10 @@ def _commands(target: Path, *, repo_root: Path) -> tuple[str, ...]:
     prefix = f"PYTHONPATH={repo_root}"
     return (
         f"cd {target}",
-        f"{prefix} {sys.executable} -m interlocks.cli fix-plan --base=HEAD",
-        f"{prefix} {sys.executable} -m interlocks.cli fix-optimize --base=HEAD",
+        f"{prefix} {sys.executable} -m interlocks.cli fix plan --base=HEAD",
+        f"{prefix} {sys.executable} -m interlocks.cli fix optimize --base=HEAD",
         (
-            f"{prefix} {sys.executable} -m interlocks.cli fix-optimize --base=HEAD "
+            f"{prefix} {sys.executable} -m interlocks.cli fix optimize --base=HEAD "
             f'--apply --verify-cmd="{sys.executable} -c pass"'
         ),
     )

@@ -88,12 +88,16 @@ def test_changed_to_globs_outputs_mutmut_module_globs(
     changed: set[str], src_dir: str, test_dir: str
 ) -> None:
     globs = mutation._changed_to_globs(changed, src_dir, test_dir)
-    test_prefix = _prefix(test_dir).replace("/", ".")
+    test_prefix = _prefix(test_dir)
+    excluded_test_globs = {
+        f"{path[:-3].replace('/', '.')}.*"
+        for path in changed
+        if test_prefix and path.endswith(".py") and path.startswith(test_prefix)
+    }
 
     assert all("/" not in glob for glob in globs)
     assert all(glob.endswith(".*") for glob in globs)
-    if test_prefix:
-        assert all(not glob.startswith(test_prefix) for glob in globs)
+    assert set(globs).isdisjoint(excluded_test_globs)
 
 
 @given(directory=_DIR)
@@ -559,7 +563,7 @@ def test_resolve_min_score_obeys_cli_default_enforcement_precedence(
     enforce: bool,
     configured: float,
 ) -> None:
-    argv = ["interlocks", "mutation"]
+    argv = ["interlocks", "gate", "mutation"]
     if cli_score is not None:
         argv.append(f"--min-score={cli_score}")
     cfg = _Cfg(
@@ -589,7 +593,7 @@ def test_resolve_min_score_returns_none_when_no_floor_source(configured: float) 
         mutation_min_score=configured,
     )
 
-    with patch.object(sys, "argv", ["interlocks", "mutation"]):
+    with patch.object(sys, "argv", ["interlocks", "gate", "mutation"]):
         assert mutation._resolve_min_score(cast("InterlockConfig", cfg)) is None
 
 
@@ -603,7 +607,7 @@ def test_resolve_min_score_ignores_empty_cli_value(default: float | None) -> Non
         mutation_min_score=75.0,
     )
 
-    with patch.object(sys, "argv", ["interlocks", "mutation", "--min-score="]):
+    with patch.object(sys, "argv", ["interlocks", "gate", "mutation", "--min-score="]):
         assert (
             mutation._resolve_min_score(cast("InterlockConfig", cfg), default=default) == default
         )

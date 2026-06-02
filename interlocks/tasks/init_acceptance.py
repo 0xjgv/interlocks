@@ -37,7 +37,7 @@ _INIT_ACCEPTANCE_NEXT_ACTIONS = (
     _INIT_ACCEPTANCE_DEP_ACTION,
     "Create or sync the project environment if `interlocks doctor` reports one missing.",
     "Replace the example scenario with project behavior.",
-    "Run `interlocks acceptance`.",
+    "Run `interlocks gate acceptance`.",
 )
 _INIT_ACCEPTANCE_TEMPLATES = (
     ("features/example.feature", "bdd_example.feature"),
@@ -58,7 +58,7 @@ def cmd_init_acceptance() -> None:
             return
         target = cfg.features_dir or (cfg.test_dir / "features")
         print(f"kept {cfg.relpath(target)}/")
-        print("next: run `interlocks acceptance`")
+        print("next: run `interlocks gate acceptance`")
         return
 
     files: list[ScaffoldFile] = []
@@ -106,7 +106,7 @@ def _init_acceptance_success_payload(
     cfg: InterlockConfig, files: list[ScaffoldFile]
 ) -> dict[str, object]:
     return {
-        "command": "init-acceptance",
+        "command": "init",
         "passed": True,
         "status": scaffold_status(files),
         "created": created_paths(files),
@@ -128,12 +128,12 @@ def _init_acceptance_domain_payload(
     cfg: InterlockConfig, domain_files: list[Path]
 ) -> dict[str, object]:
     return {
-        "command": "init-acceptance",
+        "command": "init",
         "passed": True,
         "status": "domain-acceptance-present",
         "created": [],
         "files": [],
         "domain_acceptance_feature_count": len(domain_files),
         "domain_acceptance_features": [cfg.relpath(path) for path in domain_files],
-        "next_actions": ["Run `interlocks acceptance`."],
+        "next_actions": ["Run `interlocks gate acceptance`."],
     }

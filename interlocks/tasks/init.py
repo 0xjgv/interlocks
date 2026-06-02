@@ -26,7 +26,7 @@ _INIT_OUTPUTS = ("pyproject.toml", "tests/__init__.py", "tests/test_smoke.py")
 _INIT_NEXT_ACTIONS = (
     "Run `git init`, then `interlocks setup` to install local integrations.",
     "Run `interlocks presets set progressive` for ratcheting defaults.",
-    "Run `interlocks init-properties` to scaffold property tests.",
+    "Run `interlocks init --properties` to scaffold property tests.",
 )
 
 
@@ -36,6 +36,17 @@ def task_init() -> Task | None:
 
 
 def cmd_init() -> None:
+    mode = _init_mode()
+    if mode == "acceptance":
+        from interlocks.tasks.init_acceptance import cmd_init_acceptance  # noqa: PLC0415
+
+        cmd_init_acceptance()
+        return
+    if mode == "properties":
+        from interlocks.tasks.properties import cmd_init_properties  # noqa: PLC0415
+
+        cmd_init_properties()
+        return
     section("Init project")
     cwd = Path.cwd()
     targets = _init_targets(cwd)
@@ -83,6 +94,19 @@ def cmd_init() -> None:
 
 def _print_init_next_steps() -> None:
     ui.print_next_actions(_INIT_NEXT_ACTIONS)
+
+
+def _init_mode() -> str:
+    args = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose", "--json"}]
+    wants_acceptance = "--acceptance" in args
+    wants_properties = "--properties" in args
+    if wants_acceptance and wants_properties:
+        fail_skip("init: choose only one of --acceptance or --properties")
+    if wants_acceptance:
+        return "acceptance"
+    if wants_properties:
+        return "properties"
+    return "project"
 
 
 def _init_targets(cwd: Path) -> dict[str, Path]:

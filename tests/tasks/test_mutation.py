@@ -104,7 +104,7 @@ def test_mutation_skips_when_coverage_missing(
     """No .coverage → cmd_mutation should warn_skip, never SystemExit."""
     monkeypatch.chdir(tmp_project)
     # Defaults (min-coverage=70) apply; no coverage.xml exists → skip path.
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
 
     cmd_mutation()  # no SystemExit expected
 
@@ -231,14 +231,14 @@ def test_mutation_no_results_helpers_distinguish_progress_states(tmp_path: Path)
     )
 
     assert mutation_mod._mutation_no_results_next_action(log_path, context=no_progress) == (
-        f"Inspect `{log_path}` and rerun `interlocks mutation`."
+        f"Inspect `{log_path}` and rerun `interlocks gate mutation`."
     )
     assert mutation_mod._mutation_no_results_next_action(log_path, context=completed_started) == (
-        f"Inspect `{log_path}` and rerun `interlocks mutation`."
+        f"Inspect `{log_path}` and rerun `interlocks gate mutation`."
     )
     assert mutation_mod._mutation_no_results_next_action(log_path, context=started) == (
         f"Inspect `{log_path}` for the last progress line and rerun "
-        "`interlocks mutation` with a higher `--max-runtime=`."
+        "`interlocks gate mutation` with a higher `--max-runtime=`."
     )
 
     assert mutation_mod._mutation_no_results_error(no_progress) == (
@@ -277,7 +277,7 @@ def test_mutation_runs_and_prints_score(
     monkeypatch.syspath_prepend(str(tmp_project))
     _run_coverage(tmp_project)
     monkeypatch.setattr(
-        sys, "argv", ["interlocks", "mutation", "--max-runtime=30", "--min-coverage=0"]
+        sys, "argv", ["interlocks", "gate", "mutation", "--max-runtime=30", "--min-coverage=0"]
     )
 
     cmd_mutation()  # advisory — must never SystemExit
@@ -313,7 +313,7 @@ def test_mutation_json_skips_when_coverage_missing(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--json"])
 
     cmd_mutation()
 
@@ -324,7 +324,9 @@ def test_mutation_json_skips_when_coverage_missing(
     assert payload["passed"] is True
     assert payload["status"] == "skipped"
     assert payload["reason"] == "no coverage data"
-    assert payload["next_action"] == "Run `interlocks coverage` before `interlocks mutation`."
+    assert payload["next_action"] == (
+        "Run `interlocks gate coverage` before `interlocks gate mutation`."
+    )
 
 
 def test_skip_mutation_no_coverage_json_passes_min_coverage(
@@ -352,7 +354,7 @@ def test_mutation_json_skips_when_coverage_below_min(
 ) -> None:
     primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="0.5"></coverage>')
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--json"])
 
     cmd_mutation()
 
@@ -375,7 +377,7 @@ def test_mutation_json_skips_when_no_changed_src(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--json", "--changed-only", "--min-coverage=0"],
+        ["interlocks", "gate", "mutation", "--json", "--changed-only", "--min-coverage=0"],
     )
 
     cmd_mutation()
@@ -401,7 +403,11 @@ def test_mutation_json_skips_when_mutmut_results_missing(
         lambda _argv, _timeout: (True, tmp_project / ".interlocks/mutation.log"),
     )
     monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--json", "--min-coverage=0"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "gate", "mutation", "--json", "--min-coverage=0"],
+    )
 
     cmd_mutation(changed_only=False)
 
@@ -439,7 +445,7 @@ def test_mutation_json_exits_when_enforced_timeout_has_no_results(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
+        ["interlocks", "gate", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
     )
 
     with pytest.raises(SystemExit) as excinfo:
@@ -480,7 +486,7 @@ def test_mutation_json_explains_partial_progress_without_summary(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
+        ["interlocks", "gate", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
     )
 
     with pytest.raises(SystemExit) as excinfo:
@@ -532,7 +538,7 @@ def test_mutation_json_reports_success_and_writes_evidence(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--json", "--changed-only", "--min-coverage=0"],
+        ["interlocks", "gate", "mutation", "--json", "--changed-only", "--min-coverage=0"],
     )
 
     cmd_mutation()
@@ -574,7 +580,7 @@ def test_mutation_json_exits_on_enforced_low_score(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=80"],
+        ["interlocks", "gate", "mutation", "--json", "--min-coverage=0", "--min-score=80"],
     )
 
     with pytest.raises(SystemExit) as excinfo:
@@ -609,7 +615,7 @@ def test_mutation_json_exits_on_enforced_partial_run(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
+        ["interlocks", "gate", "mutation", "--json", "--min-coverage=0", "--min-score=60"],
     )
 
     with pytest.raises(SystemExit) as excinfo:
@@ -642,7 +648,7 @@ def test_mutation_min_coverage_comes_from_config(
         _PYPROJECT + "\n[tool.interlocks]\nmutation_min_coverage = 95\n", encoding="utf-8"
     )
     primed_coverage_xml('<?xml version="1.0" ?><coverage line-rate="0.5"></coverage>')
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
 
     cmd_mutation()  # advisory — must never SystemExit
     captured = capsys.readouterr()
@@ -668,25 +674,25 @@ def _cfg(*, enforce: bool = False, min_score: float = 80.0) -> InterlockConfig:
 
 def test_resolve_min_score_cli_flag_wins_over_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """`--min-score=42.5` beats caller-supplied default."""
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-score=42.5"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--min-score=42.5"])
     assert _resolve_min_score(_cfg(), default=99.0) == 42.5
 
 
 def test_resolve_min_score_default_wins_over_enforce(monkeypatch: pytest.MonkeyPatch) -> None:
     """No CLI flag → caller-supplied default beats cfg.mutation_min_score."""
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
     assert _resolve_min_score(_cfg(enforce=True, min_score=80.0), default=55.0) == 55.0
 
 
 def test_resolve_min_score_enforce_when_no_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """No CLI flag, no default → cfg.mutation_min_score when enforcing."""
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
     assert _resolve_min_score(_cfg(enforce=True, min_score=70.0)) == 70.0
 
 
 def test_resolve_min_score_returns_none_when_advisory(monkeypatch: pytest.MonkeyPatch) -> None:
     """No CLI flag, no default, advisory → None (no gate)."""
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
     assert _resolve_min_score(_cfg(enforce=False)) is None
 
 
@@ -833,7 +839,7 @@ def test_cmd_mutation_skips_when_no_changed_src(
         pytest.fail("_run_mutmut should not run when no src files changed")
 
     monkeypatch.setattr(mutation_mod, "_run_mutmut", _no_run)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=True)
 
@@ -866,7 +872,7 @@ def test_cmd_mutation_passes_globs_to_mutmut(
     monkeypatch.setattr(
         mutation_mod, "read_mutation_summary", lambda **_kwargs: None
     )  # short-circuit before parsing
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=True)
 
@@ -907,7 +913,7 @@ def test_cmd_mutation_changed_only_since_overrides_config_ref(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "mutation", "--min-coverage=0", "--since=HEAD~1"],
+        ["interlocks", "gate", "mutation", "--min-coverage=0", "--since=HEAD~1"],
     )
 
     cmd_mutation(changed_only=True)
@@ -953,7 +959,7 @@ def test_cmd_mutation_invokes_popen_with_run_then_globs(
 
     monkeypatch.setattr(mutation_mod.subprocess, "Popen", _fake_popen)
     monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=True)
 
@@ -982,7 +988,7 @@ def test_cmd_mutation_full_run_uses_run_subcommand(
 
     monkeypatch.setattr(mutation_mod, "_run_mutmut", _spy_run)
     monkeypatch.setattr(mutation_mod, "read_mutation_summary", lambda **_kwargs: None)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=False)
 
@@ -1010,7 +1016,7 @@ def test_cmd_mutation_writes_interlocks_evidence(
             killed=3, survived=1, timeout=0, score=75.0, survivors=["mypkg.mod.x__mutmut_1"]
         ),
     )
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--min-coverage=0"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--min-coverage=0"])
 
     cmd_mutation(changed_only=True)
 
@@ -1178,7 +1184,7 @@ def test_pulse_emits_periodically_to_tty(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(mutation_mod, "VERBOSE", False)
     monkeypatch.setattr("interlocks.runner.VERBOSE", False)
     monkeypatch.setattr(mutation_mod, "_PULSE_SECONDS", 0.02)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
 
     buf = io.StringIO()
     buf.isatty = lambda: True  # type: ignore[method-assign]
@@ -1206,7 +1212,7 @@ def test_pulse_silent_when_non_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(mutation_mod, "VERBOSE", False)
     monkeypatch.setattr("interlocks.runner.VERBOSE", False)
     monkeypatch.setattr(mutation_mod, "_PULSE_SECONDS", 0.02)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation"])
 
     buf = io.StringIO()
     buf.isatty = lambda: False  # type: ignore[method-assign]
@@ -1244,7 +1250,7 @@ def test_pulse_silent_when_verbose(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(mutation_mod, "VERBOSE", True)
     monkeypatch.setattr("interlocks.runner.VERBOSE", True)
     monkeypatch.setattr(mutation_mod, "_PULSE_SECONDS", 0.02)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--verbose"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--verbose"])
 
     buf = io.StringIO()
     buf.isatty = lambda: True  # type: ignore[method-assign]

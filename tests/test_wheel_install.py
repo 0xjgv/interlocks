@@ -58,7 +58,7 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
         assert bin_path.stat().st_mode & 0o111, f"entry point not executable at {bin_path}"
 
     help_out = run([interlocks_bin, "help", "--advanced"]).stdout
-    for expected in ("check", "ci", "pre-commit", "nightly"):
+    for expected in ("check", "ci", "hook pre-commit", "nightly"):
         tag = f"[{expected}]"
         assert tag in help_out, f"help --advanced missing {tag!r}"
 
@@ -79,11 +79,11 @@ def test_wheel_installs_cli_entrypoints_and_hooks(tmp_path: Path) -> None:
     )
     (setup_project / ".git").mkdir()
 
-    run([il_bin, "setup-hooks"], cwd=setup_project)
+    run([il_bin, "setup", "--hooks"], cwd=setup_project)
 
     pre_commit = (setup_project / ".git" / "hooks" / "pre-commit").read_text(encoding="utf-8")
     settings = (setup_project / ".claude" / "settings.json").read_text(encoding="utf-8")
-    assert "-m interlocks.cli pre-commit" in pre_commit
-    assert "-m interlocks.cli post-edit" in settings
+    assert "-m interlocks.cli hook pre-commit" in pre_commit
+    assert "-m interlocks.cli hook post-edit" in settings
     assert "-m interlock.cli" not in pre_commit
     assert "-m interlock.cli" not in settings

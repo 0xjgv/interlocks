@@ -209,7 +209,7 @@ def test_missing_feature_files_scores_acceptance_lower_and_emits_next_action(
     item = _item(load_config(), "acceptance")
 
     assert item.score == 0
-    assert item.next_action == "Run `interlocks init-acceptance` to scaffold feature files."
+    assert item.next_action == "Run `interlocks init --acceptance` to scaffold feature files."
 
 
 def test_feature_file_with_no_scenarios_scores_acceptance_one(
@@ -292,7 +292,7 @@ def test_missing_property_tests_lowers_properties_score(
 
     assert item.score == 0
     assert item.detail == "no property tests detected"
-    assert "init-properties" in (item.next_action or "")
+    assert "init --properties" in (item.next_action or "")
 
 
 def test_scaffold_only_property_tests_do_not_score_as_domain_properties(
@@ -465,7 +465,9 @@ def test_mutation_item_surfaces_partial_cached_evidence(
     assert item.score == 2
     assert item.status == "warn"
     assert "latest evidence partial" in item.detail
-    assert item.next_action == ("Rerun `interlocks mutation --min-score=85 --max-runtime=900`.")
+    assert item.next_action == (
+        "Rerun `interlocks gate mutation --min-score=85 --max-runtime=900`."
+    )
     assert item.closure is not None
     assert item.closure.command == "interlocks nightly"
 
@@ -485,8 +487,8 @@ def test_mutation_item_surfaces_no_result_cached_evidence(
     assert item.status == "warn"
     assert "latest evidence had no checked mutants" in item.detail
     assert item.next_action == (
-        "Rerun `interlocks mutation --min-score=85 --max-runtime=900` "
-        "with more runtime, or use `interlocks mutation --changed-only --since=HEAD` "
+        "Rerun `interlocks gate mutation --min-score=85 --max-runtime=900` "
+        "with more runtime, or use `interlocks gate mutation --changed-only --since=HEAD` "
         "for a bounded local pass."
     )
     assert item.closure is not None
@@ -624,7 +626,7 @@ def test_audit_not_exposed_scores_security_zero(
     item = _item(load_config(), "security")
 
     assert item.score == 0
-    assert item.next_action == "Expose `interlocks audit` and task_audit()."
+    assert item.next_action == "Expose `interlocks gate audit` and task_audit()."
 
 
 def test_deps_absent_from_ci_lowers_security_score(
@@ -723,7 +725,7 @@ def test_dependency_freshness_absent_policy_scores_separately(
 
     assert item.score == 0
     assert item.next_action is not None
-    assert "interlocks deps-freshness" in item.next_action
+    assert "interlocks gate deps-freshness" in item.next_action
     assert _item(load_config(), "security").score == 3
 
 
@@ -780,7 +782,7 @@ def test_audit_severity_without_audit_scores_zero(
     item = _item(load_config(), "audit-severity")
 
     assert item.score == 0
-    assert item.next_action == "Expose `interlocks audit` before configuring severity policy."
+    assert item.next_action == "Expose `interlocks gate audit` before configuring severity policy."
 
 
 def test_pr_speed_missing_budget_scores_zero(
@@ -904,7 +906,7 @@ def test_closure_guidance_covers_task_stage_and_standalone_paths(
     assert acceptance.closure is not None
     assert acceptance.closure.command == "interlocks evaluate"
     assert acceptance.closure.kind == "task"
-    assert "interlocks acceptance only runs scenarios" in acceptance.closure.rationale
+    assert "interlocks gate acceptance only runs scenarios" in acceptance.closure.rationale
     assert coverage.closure is not None
     assert coverage.closure.command == "interlocks ci"
     assert coverage.closure.kind == "stage"
@@ -912,7 +914,7 @@ def test_closure_guidance_covers_task_stage_and_standalone_paths(
     assert mutation.closure.command == "interlocks nightly"
     assert mutation.closure.kind == "stage"
     assert freshness.closure is not None
-    assert freshness.closure.command == "interlocks deps-freshness"
+    assert freshness.closure.command == "interlocks gate deps-freshness"
     assert freshness.closure.kind == "task"
 
 
@@ -1074,10 +1076,10 @@ def test_evaluate_json_is_parseable(
         }
     actions = {check["name"]: check for check in payload["checks"]}
     assert actions["acceptance"]["next_action"] == (
-        "Run `interlocks init-acceptance` to scaffold feature files."
+        "Run `interlocks init --acceptance` to scaffold feature files."
     )
     assert actions["acceptance"]["closure"] == {
-        "command": "interlocks init-acceptance",
+        "command": "interlocks init --acceptance",
         "kind": "task",
         "rationale": "scaffolds acceptance feature files",
     }

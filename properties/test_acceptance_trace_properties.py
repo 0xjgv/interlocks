@@ -123,7 +123,7 @@ def test_missing_trace_evidence_message_is_single_line_action() -> None:
 
     assert "\n" not in message
     assert message.startswith("acceptance trace evidence unavailable")
-    assert "`interlocks acceptance --trace`" in message
+    assert "`interlocks gate acceptance --trace`" in message
 
 
 @given(

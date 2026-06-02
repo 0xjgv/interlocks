@@ -34,7 +34,7 @@ def test_setup_hooks_payload_summarizes_detector_state(
     payload = _setup_hooks_payload(_statuses(before), _statuses(after))
 
     installed = all(after)
-    assert payload["command"] == "setup-hooks"
+    assert payload["command"] == "setup"
     assert payload["passed"] is installed
     assert payload["status"] == ("installed" if installed else "missing/stale")
     assert payload["installed"] is installed

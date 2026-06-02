@@ -8,8 +8,8 @@ when_to_use: >
   Use after editing Python, before opening a PR, when a quality gate fails,
   or when bootstrapping quality gates in a new Python repo. Trigger signals:
   `[tool.interlocks]` in pyproject.toml; a `Stop` hook running
-  `interlocks post-edit` in `.claude/settings.json`; a git pre-commit hook
-  invoking `interlocks pre-commit`; `interlocks check` referenced in
+  `interlocks hook post-edit` in `.claude/settings.json`; a git pre-commit hook
+  invoking `interlocks hook pre-commit`; `interlocks check` referenced in
   AGENTS.md / CLAUDE.md; or a workflow invoking the `interlocks` action.
 paths:
   - "**/*.py"
@@ -51,10 +51,10 @@ Use `il setup` for local onboarding: hooks, agent docs, bundled Claude skill. Us
 Branch on intent:
 
 - **Authoring code** → `uvx --from interlocks il check` after edits. Fast: fix + format + typecheck + test, plus acceptance/properties when opted in.
-- **Pre-commit** → automated via hook. If missing, run `uvx --from interlocks il pre-commit`.
+- **Pre-commit** → automated via hook. If missing, run `uvx --from interlocks il hook pre-commit`.
 - **Pre-PR / verifying CI parity** → `uvx --from interlocks il ci`. Adds coverage including properties, CRAP, audit, deps, arch.
-- **PR blocked by many lint rules** → `il unblock` (preview, writes `.lintfix/`) then `il unblock --apply`. Discovers + budget-optimizes the full fixable set in one run; `il fix` remains the single-pass safe-fix shortcut.
-- **Investigating one failure** → run the single gate: `il lint`, `il typecheck`, `il coverage`, etc.
+- **PR blocked by many lint rules** → `il fix unblock` (preview, writes `.lintfix/`) then `il fix unblock --apply`. Discovers + budget-optimizes the full fixable set in one run; `il fix` remains the single-pass safe-fix shortcut.
+- **Investigating one failure** → run the single gate: `il gate lint`, `il gate typecheck`, `il gate coverage`, etc.
 - **Setting up a fresh repo** → `il init` (greenfield only) → `il setup` → `il check` → `il doctor` if blocked → optional `il setup --ci=github`.
 - **Long-running gates** → `il nightly` (coverage including properties, audit, mutation).
 - **Hermetic / offline CI** → `il warm` once to pre-fetch bundled tool wheels into `~/.cache/uv`, then run gates with `UV_OFFLINE=1`. Cached by `interlocks/defaults/tools.py` pins.
@@ -63,7 +63,7 @@ Branch on intent:
 
 Before changing public behavior, write the spec, then the test, then the code. Never the other way around.
 
-1. **Acceptance first.** Add or extend a Gherkin scenario under `tests/features/` that names the behavior in user terms. If `features/` is missing, run `il init-acceptance` once, then add the scenario.
+1. **Acceptance first.** Add or extend a Gherkin scenario under `tests/features/` that names the behavior in user terms. If `features/` is missing, run `il init --acceptance` once, then add the scenario.
 2. **Unit test next.** Drop down to `tests/` and write the failing unit assertion that pins the smallest piece of the behavior.
 3. **Implement.** Edit `src` until the unit test goes green.
 4. **Tighten loop.** `il check` after each edit (lint + format + typecheck + test, plus opted-in acceptance/properties). Fix red before moving on.
@@ -91,12 +91,12 @@ If `[tool.interlocks] preset = "progressive"`, the project's quality floor lives
 
 Per failing gate:
 
-- `lint` → `il fix` (auto-applies safe fixes), re-run `il lint`.
-- `format` → `il format` (writes), re-run `il format-check` for CI parity.
-- `typecheck` → read basedpyright output, edit, re-run `il typecheck`. Don't widen types blindly.
+- `lint` → `il fix` (auto-applies safe fixes), re-run `il gate lint`.
+- `format` → `il gate format` (writes), re-run `il gate format-check` for CI parity.
+- `typecheck` → read basedpyright output, edit, re-run `il gate typecheck`. Don't widen types blindly.
 - `test` → fix the failing assertion. Don't `pytest.skip` to make it pass.
-- `properties` → inspect the falsifying example, fix the invariant or narrow the generated domain, then re-run `il properties --profile=check`.
-- `coverage` → `il coverage` lists uncovered lines. Add tests. Don't lower the threshold without owner approval.
+- `properties` → inspect the falsifying example, fix the invariant or narrow the generated domain, then re-run `il gate properties --profile=check`.
+- `coverage` → `il gate coverage` lists uncovered lines. Add tests. Don't lower the threshold without owner approval.
 - `crap` → reduce complexity or raise coverage on the listed function. Threshold lives in `[tool.interlocks] crap_max`.
 - `audit` → upgrade the flagged dep. If no fix available, document in `pyproject.toml` and re-run.
 - `deps` → remove unused or add missing entries to `pyproject.toml`.

@@ -284,5 +284,6 @@ def _attribution_inputs(cfg: InterlockConfig) -> tuple[Path, ...]:
         step_defs = cfg.features_dir.parent / "step_defs"
         if step_defs.is_dir():
             inputs.extend(sorted(iter_py_files(step_defs)))
+    inputs.append(Path(__file__).with_name("behavior_coverage.py"))
     inputs.append(cfg.project_root / "pyproject.toml")
     return tuple(inputs)

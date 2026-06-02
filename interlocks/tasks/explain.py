@@ -3,6 +3,7 @@
 Read-only. With no argument, prints a grouped one-row-per-command index. With
 `--all`, walks the full command catalog and prints a prose block per
 command. With one command name (aliases resolved), prints just that block.
+Nested commands such as `gate coverage` are accepted as two positional tokens.
 Backed by the :data:`COMMAND_DOCS` registry in :mod:`interlocks.command_docs`;
 rendering lives here, data lives there.
 """
@@ -37,7 +38,7 @@ def cmd_explain() -> None:
     if not positional:
         _explain_all() if want_all else _explain_index()
         return
-    doc = _resolve_doc(positional[0])
+    doc = _resolve_doc(" ".join(positional))
     for line in render_command_doc(doc):
         print(line)
 
@@ -49,7 +50,7 @@ def _parse_explain_args() -> tuple[bool, list[str]]:
     if bad:
         fail_skip(f"explain: unexpected option: {bad[0]}")
     positional = [arg for arg in args if not arg.startswith("-")]
-    if len(positional) > 1:
+    if len(positional) > 2:
         fail_skip("explain: accepts at most one command name")
     return "--all" in flags, positional
 
@@ -76,7 +77,7 @@ def _command_docs_by_group() -> Iterator[tuple[str, str, CommandDoc | None]]:
 
 def _explain_payload(*, want_all: bool, positional: list[str]) -> dict[str, object]:
     if positional:
-        return command_doc_payload(_resolve_doc(positional[0]))
+        return command_doc_payload(_resolve_doc(" ".join(positional)))
     return {
         "command": "explain",
         "mode": "all" if want_all else "index",

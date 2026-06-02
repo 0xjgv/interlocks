@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 
+from interlocks import behavior_coverage
 from interlocks.behavior_attribution import (
     AttributionEvidence,
     ScenarioReach,
@@ -208,5 +209,6 @@ def test_attribution_inputs_include_features_step_defs_and_lowercase_pyproject(
         feature,
         step_a,
         step_b,
+        Path(behavior_coverage.__file__),
         tmp_path / "pyproject.toml",
     )

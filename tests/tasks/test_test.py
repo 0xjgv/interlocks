@@ -48,7 +48,7 @@ def tmp_project(tmp_path: Path) -> Path:
 def test_test_cli(tmp_project: Path, source: str, expected_rc: int) -> None:
     (tmp_project / "tests" / "test_sample.py").write_text(source, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "test"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "test"],
         cwd=tmp_project,
         capture_output=True,
         text=True,
@@ -92,7 +92,7 @@ def test_test_json_passing_in_process(
 
     (tmp_project / "tests" / "test_sample.py").write_text(PASSING, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "test", "--json"])
 
     cmd_test()
 
@@ -114,7 +114,7 @@ def test_test_json_failing_in_process(
 
     (tmp_project / "tests" / "test_sample.py").write_text(FAILING, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "test", "--json"])
 
     with pytest.raises(SystemExit) as exc:
         cmd_test()
@@ -171,7 +171,7 @@ def test_cmd_test_json_skips_without_test_dir(
     from interlocks.tasks.test import cmd_test
 
     monkeypatch.chdir(tmp_project_no_tests)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "test", "--json"])
     clear_cache()
 
     cmd_test()
@@ -229,7 +229,7 @@ def test_cmd_test_json_skips_without_project_env(
     (tmp_path / "pyproject.toml").write_text(PYPROJECT, encoding="utf-8")
     (tmp_path / "tests").mkdir()
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "test", "--json"])
     clear_cache()
 
     cmd_test()
@@ -240,7 +240,7 @@ def test_cmd_test_json_skips_without_project_env(
     assert payload["status"] == "skipped"
     assert "no project environment" in payload["reason"]
     assert payload["next_actions"] == [
-        "Create or sync the project environment, then rerun `interlocks test`."
+        "Create or sync the project environment, then rerun `interlocks gate test`."
     ]
 
 

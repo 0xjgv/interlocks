@@ -5,22 +5,15 @@ Feature: interlocks CLI surface area
   So that I can see at a glance what's wired up
 
   # req: cli-commands
-  Scenario: Default help lists start-here and common gate commands
+  Scenario: Default help lists workflow commands and direct access parents
     Given I run "interlocks help"
     Then the output lists the command "doctor"
     And the output lists the command "check"
     And the output lists the command "ci"
     And the output lists the command "setup"
+    And the output lists the command "nightly"
+    And the output lists the command "gate"
     And the output lists the command "fix"
-    And the output lists the command "format"
-    And the output lists the command "lint"
-    And the output lists the command "typecheck"
-    And the output lists the command "test"
-    And the output lists the command "coverage"
-    And the output lists the command "audit"
-    And the output lists the command "deps"
-    And the output lists the command "arch"
-    And the output lists the command "acceptance"
     And the output lists the command "init"
     And the output lists the command "config"
     And the output lists the command "version"
@@ -31,15 +24,15 @@ Feature: interlocks CLI surface area
   Scenario: default-mode help shows group headers and a one-line Detected summary
     Given I run "interlocks help --default-mode"
     Then the output contains "Start here:"
-    And the output contains "Common gates:"
+    And the output contains "Direct access:"
     And the output contains "Detected:"
     And the output does not contain "── Thresholds"
 
   # req: cli-commands-advanced
-  Scenario: Advanced help lists every command including internal and alias commands
+  Scenario: Advanced help lists every command including nested and alias commands
     Given I run "interlocks help --advanced"
     Then the output lists every registered command
-    And the output contains "alias: attribution"
+    And the output contains "alias: fix unblock"
 
   @smoke
   # req: cli-version
@@ -61,20 +54,20 @@ Feature: interlocks CLI surface area
 
   # req: cli-command-help
   Scenario: command-specific help is non-destructive
-    Given I run "interlocks coverage --help"
-    Then the output contains "Usage: interlocks coverage"
-    And the output contains "[coverage]"
+    Given I run "interlocks gate coverage --help"
+    Then the output contains "Usage: interlocks gate coverage"
+    And the output contains "[gate coverage]"
     And the output does not contain "coverage report --fail-under"
     And the output does not contain "failed"
 
   # req: cli-unknown-flag-rejected
   Scenario: Unknown flag is rejected and names the flag
-    Given I run "interlocks coverage --bogus-flag"
+    Given I run "interlocks gate coverage --bogus-flag"
     Then the output contains "unknown flag --bogus-flag"
 
   # req: cli-task-help-lists-flags
   Scenario: Per-task help lists declared flags with defaults
-    Given I run "interlocks coverage --help"
+    Given I run "interlocks gate coverage --help"
     Then the output contains "--min"
     And the output contains "coverage fail-under percentage"
 
@@ -148,7 +141,7 @@ Feature: interlocks CLI surface area
 
   # req: cli-explain-one
   Scenario: explain a single command prints just that command's prose
-    Given I run "interlocks explain coverage"
+    Given I run "interlocks explain gate coverage"
     Then the output contains "When to use"
     And the output does not contain "[fix]"
 

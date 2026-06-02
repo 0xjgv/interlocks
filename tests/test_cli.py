@@ -54,25 +54,9 @@ from interlocks.tasks.config import _json_value, cmd_config
 from interlocks.tasks.explain import cmd_explain
 
 _DEFAULT_HELP_GROUPS = (
-    ("Start here", ("doctor", "check", "ci", "setup")),
-    (
-        "Common gates",
-        (
-            "fix",
-            "fix-optimize",
-            "format",
-            "lint",
-            "typecheck",
-            "test",
-            "coverage",
-            "properties",
-            "audit",
-            "deps",
-            "arch",
-            "acceptance",
-        ),
-    ),
-    ("Project", ("init", "config", "presets", "version")),
+    ("Start here", ("doctor", "setup", "check", "ci", "nightly")),
+    ("Direct access", ("gate", "fix")),
+    ("Project", ("init", "config", "presets", "explain", "clean", "version")),
 )
 
 
@@ -689,26 +673,26 @@ def test_main_command_help_does_not_dispatch_task(
     def fake() -> None:
         calls.append("ran")
 
-    monkeypatch.setitem(TASKS, "coverage", (fake, "Tests with coverage threshold (--min=N)"))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--help"])
+    monkeypatch.setitem(TASKS, "gate coverage", (fake, "Tests with coverage threshold (--min=N)"))
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--help"])
 
     main()
 
     assert calls == []
     out = capsys.readouterr().out
-    assert "Usage: interlocks coverage" in out
-    assert "[coverage]" in out
+    assert "Usage: interlocks gate coverage" in out
+    assert "[gate coverage]" in out
 
 
 def test_main_command_help_lists_flags(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """`<task> --help` renders a Flags section for a flag-bearing task."""
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--help"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--help"])
     main()
     out = capsys.readouterr().out
-    assert "Usage: interlocks coverage" in out
-    assert "[coverage]" in out
+    assert "Usage: interlocks gate coverage" in out
+    assert "[gate coverage]" in out
     assert "--min" in out
     assert "--properties" in out
     assert "coverage fail-under percentage" in out
@@ -776,7 +760,7 @@ def test_check_help_changed_flag_mentions_property_skip(
 def test_properties_help_lists_all_supported_profiles(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "properties"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "help", "gate", "properties"])
 
     main()
 
@@ -833,23 +817,23 @@ def test_main_dispatches_alias_to_canonical(
     def fake() -> None:
         calls.append("ran")
 
-    monkeypatch.setitem(TASKS, "behavior-attribution", (fake, "Attribution"))
+    monkeypatch.setitem(TASKS, "fix optimize", (fake, "Optimize"))
     monkeypatch.setattr("interlocks.cli.preflight", lambda name: calls.append(f"preflight:{name}"))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "attribution"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "unblock"])
 
     main()
 
-    assert calls == ["preflight:behavior-attribution", "ran"]
+    assert calls == ["preflight:fix optimize", "ran"]
 
 
-def test_cmd_help_lists_behavior_attribution_alias(
+def test_cmd_help_lists_fix_unblock_alias(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     cmd_help(advanced=True)
 
     out = capsys.readouterr().out
-    assert "[behavior-attribution]" in out
-    assert "alias: attribution" in out
+    assert "[fix optimize]" in out
+    assert "alias: fix unblock" in out
 
 
 def test_main_skips_flag_args(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -869,11 +853,11 @@ def test_main_unknown_flag_exits_one(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """An undeclared task flag is rejected with exit 1 and named on stderr."""
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--xyzzy"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--xyzzy"])
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 1
-    assert "interlocks coverage: unknown flag --xyzzy" in capsys.readouterr().err
+    assert "interlocks gate coverage: unknown flag --xyzzy" in capsys.readouterr().err
 
 
 def test_main_unknown_flag_json_error_is_parseable(
@@ -991,10 +975,10 @@ def test_main_declared_flag_passes_validation(
     def fake() -> None:
         calls.append("ran")
 
-    monkeypatch.setitem(TASKS, "coverage", (fake, "Tests with coverage threshold (--min=N)"))
+    monkeypatch.setitem(TASKS, "gate coverage", (fake, "Tests with coverage threshold (--min=N)"))
     monkeypatch.setattr("interlocks.cli.preflight", lambda name: None)
     monkeypatch.setattr("interlocks.cli.validate_cli_skip", lambda: None)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--min=80"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--min=80"])
     main()
     assert calls == ["ran"]
 
@@ -1025,10 +1009,14 @@ def test_main_global_flags_pass_validation(
     def fake() -> None:
         calls.append("ran")
 
-    monkeypatch.setitem(TASKS, "coverage", (fake, "Tests with coverage threshold (--min=N)"))
+    monkeypatch.setitem(TASKS, "gate coverage", (fake, "Tests with coverage threshold (--min=N)"))
     monkeypatch.setattr("interlocks.cli.preflight", lambda name: None)
     monkeypatch.setattr("interlocks.cli.validate_cli_skip", lambda: None)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--verbose", "--skip=test"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "gate", "coverage", "--verbose", "--skip=test"],
+    )
     main()
     assert calls == ["ran"]
 
@@ -1397,23 +1385,24 @@ def test_flag_sets_treat_value_shaped_flags_as_values(
 # A command's flags may be read in a stage helper (e.g. stages/_budgeted.py)
 # in addition to its own module, so each entry is a tuple of import paths.
 _FLAG_SOURCE_MODULES: dict[str, tuple[str, ...]] = {
-    "coverage": ("interlocks.tasks.coverage",),
-    "crap": ("interlocks.tasks.crap",),
-    "mutation": ("interlocks.tasks.mutation",),
-    "properties": ("interlocks.tasks.properties",),
-    "fix-optimize": ("interlocks.tasks.fix_optimize", "interlocks.tasks.fix_cli"),
-    "fix-rule": ("interlocks.tasks.fix_rule", "interlocks.tasks.fix_cli"),
-    "fix-plan": ("interlocks.tasks.fix_plan",),
-    "fix-replay": ("interlocks.tasks.fix_replay",),
-    "fix-annotate": ("interlocks.tasks.fix_annotate",),
+    "gate coverage": ("interlocks.tasks.coverage",),
+    "gate crap": ("interlocks.tasks.crap",),
+    "gate mutation": ("interlocks.tasks.mutation",),
+    "gate properties": ("interlocks.tasks.properties",),
+    "fix optimize": ("interlocks.tasks.fix_optimize", "interlocks.tasks.fix_cli"),
+    "fix rule": ("interlocks.tasks.fix_rule", "interlocks.tasks.fix_cli"),
+    "fix plan": ("interlocks.tasks.fix_plan",),
+    "fix replay": ("interlocks.tasks.fix_replay",),
+    "fix annotate": ("interlocks.tasks.fix_annotate",),
     "baseline": ("interlocks.tasks.baseline_cmd",),
     "trust": ("interlocks.tasks.stats",),
     "property-candidates": ("interlocks.tasks.property_candidates",),
     "setup": ("interlocks.tasks.setup",),
+    "init": ("interlocks.tasks.init",),
     "config": ("interlocks.tasks.config",),
     "check": ("interlocks.stages.check", "interlocks.stages._budgeted"),
-    "pre-commit": ("interlocks.stages._budgeted",),
-    "post-edit": ("interlocks.stages._budgeted",),
+    "hook pre-commit": ("interlocks.stages._budgeted",),
+    "hook post-edit": ("interlocks.stages._budgeted",),
 }
 
 # Flag literals that appear in a module's source for unrelated reasons and
@@ -1498,7 +1487,7 @@ def test_command_doc_flags_default_to_empty() -> None:
 
 def test_command_doc_payload_reports_exact_machine_contract() -> None:
     doc = CommandDoc(
-        "behavior-attribution",
+        "gate behavior-attribution",
         "Show which acceptance behavior each test covers",
         "Use before trusting acceptance coverage automation.",
         mutates=True,
@@ -1508,19 +1497,19 @@ def test_command_doc_payload_reports_exact_machine_contract() -> None:
             FlagSpec("--json", "boolean", "off", "emit JSON"),
             FlagSpec("--changed=", "value", "HEAD", "compare ref"),
         ),
-        usage="behavior-attribution [--json] [--changed=REF]",
+        usage="gate behavior-attribution [--json] [--changed=REF]",
         mutates_note="writes .interlocks/behavior-attribution.json",
     )
 
     assert command_doc_payload(doc) == {
-        "command": "behavior-attribution",
-        "usage": "usage: interlocks behavior-attribution [--json] [--changed=REF]",
+        "command": "gate behavior-attribution",
+        "usage": "usage: interlocks gate behavior-attribution [--json] [--changed=REF]",
         "summary": "Show which acceptance behavior each test covers",
         "when_to_use": "Use before trusting acceptance coverage automation.",
         "mutates": True,
         "mutates_note": "writes .interlocks/behavior-attribution.json",
         "outputs": ["json", "markdown"],
-        "aliases": ["attribution"],
+        "aliases": [],
         "flags": [
             {
                 "name": "--json",
@@ -1585,13 +1574,13 @@ def test_cmd_explain_all_dumps_every_command(
 def test_cmd_explain_single_command(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "gate", "coverage"])
 
     cmd_explain()
 
     out = capsys.readouterr().out
-    assert "  [coverage]  " in out
-    assert "Usage:      interlocks coverage" in out
+    assert "  [gate coverage]  " in out
+    assert "Usage:      interlocks gate coverage" in out
     assert "When to use:" in out
     assert "[fix]" not in out
 
@@ -1634,25 +1623,29 @@ def test_cmd_explain_json_all_includes_full_contracts(
 def test_cmd_explain_json_single_command(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "coverage", "--json"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "explain", "gate", "coverage", "--json"],
+    )
 
     cmd_explain()
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "coverage"
-    assert payload["usage"] == "usage: interlocks coverage"
+    assert payload["command"] == "gate coverage"
+    assert payload["usage"] == "usage: interlocks gate coverage"
     assert any(flag["name"] == "--properties" for flag in payload["flags"])
 
 
 def test_cmd_explain_properties_surfaces_adoption_loop(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "properties"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "gate", "properties"])
 
     cmd_explain()
 
     out = capsys.readouterr().out
-    assert "init-properties" in out
+    assert "init --properties" in out
     assert "--profile=check" in out
     assert "--profile=ci|nightly" in out
 
@@ -1669,16 +1662,16 @@ def test_cmd_explain_check_mentions_changed_scope_property_skip(
     assert "follow-up next actions" in out
 
 
-def test_cmd_explain_init_properties_mentions_adopted_repo_noop(
+def test_cmd_explain_init_mentions_property_scaffold_mode(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "init-properties"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "init"])
 
     cmd_explain()
 
     out = capsys.readouterr().out
-    assert "when no domain property tests exist" in out
-    assert "no-ops once domain properties are present" in out
+    assert "--properties" in out
+    assert "--acceptance" in out
 
 
 def test_cmd_explain_property_candidates_surfaces_agent_triage_loop(
@@ -1748,10 +1741,10 @@ def test_cmd_explain_rejects_unknown_option(
 def test_cmd_explain_resolves_alias(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "attribution"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "explain", "fix", "unblock"])
 
     cmd_explain()
 
     out = capsys.readouterr().out
-    assert "  [behavior-attribution]  " in out
-    assert "(alias: attribution)" in out
+    assert "  [fix optimize]  " in out
+    assert "(alias: fix unblock)" in out

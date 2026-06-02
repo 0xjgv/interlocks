@@ -129,7 +129,7 @@ def test_fix_rule_artifact_paths_only_describe_written_artifacts(
 ) -> None:
     with TemporaryDirectory() as raw_root:
         root = Path(raw_root)
-        payload: dict[str, object] = {"command": "fix-rule"}
+        payload: dict[str, object] = {"command": "fix rule"}
 
         fix_rule._add_fix_rule_artifact_paths(
             payload,

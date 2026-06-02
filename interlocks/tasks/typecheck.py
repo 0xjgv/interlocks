@@ -82,7 +82,7 @@ def cmd_typecheck() -> None:
                     reason=project_env_skip_message("typecheck"),
                     next_action=(
                         "Create or sync the project environment, then rerun "
-                        "`interlocks typecheck`."
+                        "`interlocks gate typecheck`."
                     ),
                 )
             )

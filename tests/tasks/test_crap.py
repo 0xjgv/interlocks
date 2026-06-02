@@ -97,7 +97,7 @@ def test_crap_default_threshold_from_config(
     )
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap"])  # no --max= override
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap"])  # no --max= override
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
@@ -116,7 +116,7 @@ def test_crap_cli_max_overrides_config(
     )
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--max=42.5"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap", "--max=42.5"])
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
@@ -131,7 +131,7 @@ def test_crap_json_passes_on_healthy_project(
 ) -> None:
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap", "--json"])
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
@@ -163,7 +163,7 @@ def test_crap_json_reports_enforced_offenders(
     )
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap", "--json"])
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
@@ -196,7 +196,7 @@ def test_crap_json_keeps_advisory_offenders_non_blocking(
     )
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap", "--json"])
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
@@ -218,7 +218,7 @@ def test_crap_json_missing_coverage_cache_is_parseable(
     tmp_project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap", "--json"])
 
     from interlocks.tasks.crap import cmd_crap
 
@@ -234,7 +234,9 @@ def test_crap_json_missing_coverage_cache_is_parseable(
     assert payload["passed"] is False
     assert payload["status"] == "skipped"
     assert payload["reason"] == "no coverage cache"
-    assert payload["next_action"] == "Run `interlocks coverage` before `interlocks crap`."
+    assert payload["next_action"] == (
+        "Run `interlocks gate coverage` before `interlocks gate crap`."
+    )
 
 
 def test_crap_json_stale_coverage_cache_is_parseable(
@@ -242,7 +244,7 @@ def test_crap_json_stale_coverage_cache_is_parseable(
 ) -> None:
     (tmp_project / ".coverage").write_text("old", encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap", "--json"])
     monkeypatch.setattr("interlocks.tasks.crap.coverage_cache_is_stale", lambda *_args: True)
 
     from interlocks.tasks.crap import cmd_crap
@@ -259,4 +261,6 @@ def test_crap_json_stale_coverage_cache_is_parseable(
     assert payload["passed"] is False
     assert payload["status"] == "skipped"
     assert payload["reason"] == "coverage cache is stale"
-    assert payload["next_action"] == "Run `interlocks coverage` before `interlocks crap`."
+    assert payload["next_action"] == (
+        "Run `interlocks gate coverage` before `interlocks gate crap`."
+    )

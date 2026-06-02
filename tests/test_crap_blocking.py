@@ -78,7 +78,7 @@ def test_crap_exits_when_enforced(
     _write_pyproject(tmp_project, enforce=True)
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap"])
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap
@@ -98,7 +98,7 @@ def test_crap_stays_advisory_when_disabled(
     _write_pyproject(tmp_project, enforce=False)
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "crap"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "crap"])
     _run_coverage(tmp_project)
 
     from interlocks.tasks.crap import cmd_crap

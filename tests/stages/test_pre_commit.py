@@ -1,4 +1,4 @@
-"""Integration tests for `interlocks pre-commit` stage."""
+"""Integration tests for `interlocks hook pre-commit` stage."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def tmp_project(tmp_path: Path) -> Path:
 
 def _run_pre_commit(cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "pre-commit"],
+        [sys.executable, "-m", "interlocks.cli", "hook", "pre-commit"],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -96,7 +96,7 @@ def test_pre_commit_noop_json_in_process(
 ) -> None:
     from interlocks.stages import pre_commit as pre_commit_mod
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "pre-commit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "hook", "pre-commit", "--json"])
     monkeypatch.setattr(pre_commit_mod, "staged_py_files", list)
 
     pre_commit_mod.cmd_pre_commit()
@@ -121,7 +121,7 @@ def test_pre_commit_json_reports_stage_payload(
     from interlocks.stages import pre_commit as pre_commit_mod
 
     calls: list[tuple[str, object]] = []
-    monkeypatch.setattr(sys, "argv", ["interlocks", "pre-commit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "hook", "pre-commit", "--json"])
     monkeypatch.setattr(pre_commit_mod, "load_config", lambda: SimpleNamespace(src_dir_arg="src"))
     monkeypatch.setattr(
         pre_commit_mod,
@@ -238,7 +238,7 @@ def _pre_commit_calls(
     from interlocks.tasks import typecheck as typecheck_mod
 
     calls: list[tuple[str, object]] = []
-    argv = ["interlocks", "pre-commit"]
+    argv = ["interlocks", "hook", "pre-commit"]
     if skip is not None:
         argv.append(f"--skip={skip}")
     monkeypatch.setattr(sys, "argv", argv)

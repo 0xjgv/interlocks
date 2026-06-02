@@ -1,4 +1,4 @@
-"""Tests for ``interlocks fix-optimize``.
+"""Tests for ``interlocks fix optimize``.
 
 Two layers:
 
@@ -77,7 +77,7 @@ def repo(tmp_path: Path) -> Path:
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-optimize", "--base=HEAD", *args],
+        [sys.executable, "-m", "interlocks.cli", "fix", "optimize", "--base=HEAD", *args],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -131,7 +131,7 @@ def test_fix_optimize_json_writes_compact_summary(repo: Path) -> None:
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload["command"] == "fix-optimize"
+    assert payload["command"] == "fix optimize"
     assert payload["passed"] is True
     assert payload["status"] == "planned"
     assert payload["plan_path"] == ".lintfix/plan.json"
@@ -198,7 +198,7 @@ def test_fix_optimize_apply_failure_json_reports_before_exit(repo: Path) -> None
     assert result.returncode != 0
     assert f.read_text(encoding="utf-8") == original
     payload = json.loads(result.stdout)
-    assert payload["command"] == "fix-optimize"
+    assert payload["command"] == "fix optimize"
     assert payload["passed"] is False
     assert payload["status"] == "apply-failed"
     assert payload["apply"]["status"] == "failed"
@@ -313,7 +313,7 @@ def test_fix_optimize_apply_failure_still_annotates(repo: Path) -> None:
 def test_unblock_alias_runs_fix_optimize(repo: Path) -> None:
     (repo / "sample.py").write_text(_DIRTY, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "unblock", "--base=HEAD"],
+        [sys.executable, "-m", "interlocks.cli", "fix", "unblock", "--base=HEAD"],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -473,7 +473,7 @@ def test_load_stats_skips_unparseable_row(tmp_path: Path) -> None:
 
 @pytest.fixture
 def verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--verbose"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--verbose"])
 
 
 def _opts(base: str = "HEAD", budget_name: str = "unblock") -> fix_optimize_mod._Options:
@@ -490,7 +490,7 @@ def _opts(base: str = "HEAD", budget_name: str = "unblock") -> fix_optimize_mod.
 
 def test_standalone_json_requested_requires_json_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(fix_optimize_mod.ui, "is_json", lambda: False)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--json"])
 
     assert fix_optimize_mod._standalone_json_requested() is False
 
@@ -499,7 +499,7 @@ def test_standalone_json_requested_accepts_alias_after_flags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(fix_optimize_mod.ui, "is_json", lambda: True)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "--json", "unblock"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "--json", "fix", "unblock"])
 
     assert fix_optimize_mod._standalone_json_requested() is True
 
@@ -520,7 +520,7 @@ def test_fix_optimize_error_payload_is_exact() -> None:
     )
 
     assert payload == {
-        "command": "fix-optimize",
+        "command": "fix optimize",
         "passed": False,
         "status": "discovery-failed",
         "base": "feature",
@@ -584,7 +584,7 @@ def default_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     # No --verbose: exercises true default-mode output. The autouse
     # `_isolate_test_env` fixture forces `ui.is_verbose` True for in-process
     # tests; minimal-mode tests re-patch it to False themselves.
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize"])
     monkeypatch.setattr(fix_optimize_mod.ui, "is_verbose", lambda: False)
 
 
@@ -605,7 +605,7 @@ def test_print_summary_candidates_emit_gate_row_in_default_mode(
     fix_optimize_mod._print_summary(plan, _selection(), _opts(), ".lintfix/optimize.json")
     out = capsys.readouterr().out
     # Populated plan: exactly one labelled gate row, no orphaned kv_block keys.
-    assert "[fix-optimize]" in out
+    assert "[fix optimize]" in out
     assert "plan written → .lintfix/optimize.json" in out
     assert "author cost" not in out
     assert "total value" not in out
@@ -720,7 +720,7 @@ def test_fail_apply_reports_exact_row_and_defaults_exit_code(
     assert exc.value.code == 1
     assert rows == [
         (
-            ("fix-optimize", "apply", "verify failed; tree restored"),
+            ("fix optimize", "apply", "verify failed; tree restored"),
             {"state": "fail"},
         )
     ]
@@ -747,7 +747,7 @@ def test_fail_apply_reports_failed_rule_detail(monkeypatch: pytest.MonkeyPatch) 
         fix_optimize_mod._fail_apply(result)
 
     assert exc.value.code == 9
-    assert rows == [(("fix-optimize", "apply", "rule=I001"), {"state": "fail"})]
+    assert rows == [(("fix optimize", "apply", "rule=I001"), {"state": "fail"})]
 
 
 def test_apply_selection_format_candidate_uses_candidate_verifier(
@@ -889,7 +889,7 @@ def test_exit_if_discovery_failed_human_branch_reports_row_and_stderr(
     assert exc.value.code == 7
     assert rows == [
         (
-            ("fix-optimize", "discover", "ruff failed"),
+            ("fix optimize", "discover", "ruff failed"),
             {"detail": "rc=7", "state": "fail"},
         )
     ]
@@ -901,7 +901,7 @@ def test_cmd_fix_optimize_discovery_error_json(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--json"])
     monkeypatch.setattr(
         plan_module,
         "build_plan",
@@ -914,7 +914,7 @@ def test_cmd_fix_optimize_discovery_error_json(
 
     assert exc.value.code == 2
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "fix-optimize"
+    assert payload["command"] == "fix optimize"
     assert payload["passed"] is False
     assert payload["status"] == "discovery-failed"
     assert payload["stderr_excerpt"] == "ruff boom"
@@ -956,19 +956,21 @@ def test_cmd_fix_optimize_apply_path_invokes_verifier(
 
 
 def test_resolve_stats_path_defaults_to_replay_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize"])
     assert fix_optimize_mod._resolve_stats_path() == ".lintfix/replay.json"
 
 
 def test_resolve_stats_path_explicit_stats_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--stats=custom/replay.json"])
+    monkeypatch.setattr(
+        sys, "argv", ["interlocks", "fix", "optimize", "--stats=custom/replay.json"]
+    )
     assert fix_optimize_mod._resolve_stats_path() == "custom/replay.json"
 
 
 def test_resolve_stats_path_no_stats_flag_disables_discovery(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--no-stats"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--no-stats"])
     assert fix_optimize_mod._resolve_stats_path() == ""
 
 
@@ -987,7 +989,7 @@ def _patch_plan(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_cmd_fix_optimize_writes_plan_json_alongside_optimize(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize"])
     _patch_plan(monkeypatch)
     fix_optimize_mod.cmd_fix_optimize(
         base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
@@ -999,7 +1001,7 @@ def test_cmd_fix_optimize_writes_plan_json_alongside_optimize(
 def test_cmd_fix_optimize_metrics_flag_writes_populated_metrics(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--metrics"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--metrics"])
     _patch_plan(monkeypatch)
     fix_optimize_mod.cmd_fix_optimize(
         base="HEAD", budget="unblock", apply=False, stats_path="", verify_cmd=("true",)
@@ -1012,7 +1014,7 @@ def test_cmd_fix_optimize_metrics_flag_writes_populated_metrics(
 def test_cmd_fix_optimize_stale_replay_shows_stats_row(
     project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--verbose"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--verbose"])
     _patch_plan(monkeypatch)
     lintfix = project / ".lintfix"
     lintfix.mkdir()
@@ -1030,7 +1032,7 @@ def test_cmd_fix_optimize_stale_replay_shows_stats_row(
 def test_cmd_fix_optimize_annotate_error_does_not_change_exit_code(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--annotate"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--annotate"])
     _patch_plan(monkeypatch)
 
     def _boom(*_a: object, **_kw: object) -> None:
@@ -1047,7 +1049,7 @@ def test_cmd_fix_optimize_annotate_error_does_not_change_exit_code(
 def test_cmd_fix_optimize_annotate_systemexit_is_swallowed(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-optimize", "--annotate"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "optimize", "--annotate"])
     _patch_plan(monkeypatch)
 
     def _exit(*_a: object, **_kw: object) -> None:

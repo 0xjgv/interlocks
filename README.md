@@ -133,7 +133,7 @@ machine-readable JSON object on stdout. Exit codes are unchanged, and
 |---------|------|----------------|
 | `interlocks doctor` | Before adoption or when confused | Static project detection, config, integrations, blockers, next steps |
 | `interlocks check` | After local edits | Fix, format, typecheck, tests, optional acceptance/properties, deps advisory, cached CRAP advisory, suppressions |
-| `interlocks pre-commit` | Git hook | Staged-file fix/format, re-stage, typecheck, tests when source changed |
+| `interlocks hook pre-commit` | Git hook | Staged-file fix/format, re-stage, typecheck, tests when source changed |
 | `interlocks ci` | Pull requests and protected branches | Format-check, lint, complexity, audit, deps, typecheck, coverage including properties, arch, acceptance, CRAP, optional mutation |
 | `interlocks nightly` | Scheduled jobs | Coverage including properties, audit, full mutation, blocking on `mutation_min_score` |
 
@@ -172,20 +172,20 @@ interlocks check --changed=HEAD~1
 `--changed` scopes file-level gates such as fix, format, typecheck, and CRAP to
 the diff against the configured base ref. Graph-wide gates and the test suite
 are skipped with a banner; property tests are skipped too because they are
-property-wide rather than file-level. Run `interlocks test` and
-`interlocks properties --profile=check` separately when you want the full suite.
+property-wide rather than file-level. Run `interlocks gate test` and
+`interlocks gate properties --profile=check` separately when you want the full suite.
 
 Debug a failing gate:
 
 ```bash
-il lint
-il typecheck
-il test
-il coverage --min=80 --properties
-il deps
-il audit
-il arch
-il acceptance
+il gate lint
+il gate typecheck
+il gate test
+il gate coverage --min=80 --properties
+il gate deps
+il gate audit
+il gate arch
+il gate acceptance
 ```
 
 Use adoption presets:
@@ -210,9 +210,9 @@ UV_OFFLINE=1 interlocks ci
 Unblock lint or format debt without broad cleanup:
 
 ```bash
-interlocks unblock
-interlocks unblock --apply
-interlocks fix-rule --rule=I001 --apply
+interlocks fix unblock
+interlocks fix unblock --apply
+interlocks fix rule --rule=I001 --apply
 ```
 
 The budgeted lint/format flow is documented in
@@ -224,7 +224,7 @@ The budgeted lint/format flow is documented in
 |------|---------|
 | Adoption diagnostic | `interlocks doctor` |
 | Local edit loop | `interlocks check` |
-| Git hook command | `interlocks pre-commit` |
+| Git hook command | `interlocks hook pre-commit` |
 | Pull request gate | `interlocks ci` |
 | Scheduled deep gate | `interlocks nightly` |
 | Tool/config inspection | `interlocks config`, `interlocks config show ruff` |

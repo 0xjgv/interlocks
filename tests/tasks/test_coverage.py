@@ -87,7 +87,7 @@ def test_coverage_json_reports_gate_result_when_threshold_met(
     (tmp_project / "tests" / "test_mod.py").write_text(_COVERING_TEST_SRC, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--json"])
 
     from interlocks.tasks.coverage import cmd_coverage
 
@@ -155,7 +155,7 @@ def test_coverage_injects_bundled_rcfile_in_bare_project(
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
     task = task_coverage()
     assert task is not None
     for cmd in (task.cmd, _coverage_run_cmd(task.pre_cmds)):
@@ -171,7 +171,7 @@ def test_coverage_omits_rcfile_when_project_has_tool_coverage(
     from interlocks.tasks.coverage import task_coverage
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
     task = task_coverage()
     assert task is not None
     assert _rcfile_flag(task.cmd) is None
@@ -188,7 +188,7 @@ def test_coverage_omits_rcfile_with_coveragerc_sidecar(
     (tmp_path / ".coveragerc").write_text("[run]\nbranch = True\n", encoding="utf-8")
     stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
     task = task_coverage()
     assert task is not None
     assert _rcfile_flag(task.cmd) is None
@@ -205,7 +205,7 @@ def test_coverage_uv_injects_coverage_without_project_dependency(
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     (tmp_path / "uv.lock").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     task = task_coverage()
 
@@ -236,7 +236,7 @@ def test_coverage_non_uv_preflights_target_coverage_import(
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     task = task_coverage()
 
@@ -257,7 +257,7 @@ def test_coverage_emits_json_under_progressive_preset(
     )
     (tmp_path / "uv.lock").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     task = task_coverage()
     assert task is not None
@@ -290,7 +290,7 @@ def test_coverage_can_append_property_tests_before_report(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     task = task_coverage(min_pct=80, include_properties=True, property_profile="check")
 
@@ -325,7 +325,7 @@ def test_coverage_properties_flag_selects_profile(
         captured.append(task)
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--properties=nightly"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--properties=nightly"])
     monkeypatch.setattr(coverage_mod, "run", capture_task)
 
     coverage_mod.cmd_coverage()
@@ -341,7 +341,7 @@ def test_coverage_properties_flag_rejects_unknown_profile(
     from interlocks.tasks.coverage import cmd_coverage
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--properties=slow"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--properties=slow"])
 
     with pytest.raises(SystemExit):
         cmd_coverage()
@@ -356,7 +356,11 @@ def test_coverage_properties_flag_rejects_unknown_profile_json_before_env_check(
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--properties=slow", "--json"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "gate", "coverage", "--properties=slow", "--json"],
+    )
 
     with pytest.raises(SystemExit) as exc:
         cmd_coverage()
@@ -380,7 +384,7 @@ def test_coverage_default_min_pct_uses_cfg(
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
     task = task_coverage()
     assert task is not None
     assert "--fail-under=80" in task.cmd
@@ -397,7 +401,7 @@ def test_coverage_config_override_wires_through(
     )
     stub_project_venv(tmp_path)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
     task = task_coverage()
     assert task is not None
     assert "--fail-under=95" in task.cmd
@@ -414,7 +418,7 @@ def test_task_coverage_returns_none_without_project_env(
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     assert task_coverage() is None
     assert "no project environment" in capsys.readouterr().out
@@ -428,7 +432,7 @@ def test_cmd_coverage_skips_without_project_env(
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     cmd_coverage()  # must not raise SystemExit
     assert "coverage: skipped — no project environment" in capsys.readouterr().out
@@ -443,7 +447,7 @@ def test_cmd_coverage_json_reports_missing_project_env(
 
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--json"])
 
     cmd_coverage()
 
@@ -526,6 +530,6 @@ def test_task_coverage_runs_for_uv_project_without_venv(
     (tmp_path / "pyproject.toml").write_text(_BARE_PYPROJECT, encoding="utf-8")
     (tmp_path / "uv.lock").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
 
     assert task_coverage() is not None

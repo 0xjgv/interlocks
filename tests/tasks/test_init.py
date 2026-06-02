@@ -25,7 +25,7 @@ def test_init_scaffolds_greenfield_project(tmp_path: Path) -> None:
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "created pyproject.toml" in result.stdout
     assert "interlocks presets set progressive" in result.stdout
-    assert "interlocks init-properties" in result.stdout
+    assert "interlocks init --properties" in result.stdout
     pyproject = tmp_path / "pyproject.toml"
     assert pyproject.is_file()
     body = pyproject.read_text(encoding="utf-8")
@@ -70,7 +70,7 @@ def test_init_json_scaffolds_greenfield_project(tmp_path: Path) -> None:
     assert payload["next_actions"] == [
         "Run `git init`, then `interlocks setup` to install local integrations.",
         "Run `interlocks presets set progressive` for ratcheting defaults.",
-        "Run `interlocks init-properties` to scaffold property tests.",
+        "Run `interlocks init --properties` to scaffold property tests.",
     ]
     assert (tmp_path / "pyproject.toml").is_file()
     assert (tmp_path / "tests" / "__init__.py").is_file()
@@ -140,7 +140,7 @@ def test_init_in_process_scaffolds(
     assert "created pyproject.toml" in out
     assert "git init" in out
     assert "interlocks setup" in out
-    assert "interlocks init-properties" in out
+    assert "interlocks init --properties" in out
     assert (tmp_path / "pyproject.toml").is_file()
     assert (tmp_path / "tests" / "__init__.py").is_file()
     assert (tmp_path / "tests" / "test_smoke.py").is_file()

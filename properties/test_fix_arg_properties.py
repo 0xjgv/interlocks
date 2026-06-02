@@ -18,7 +18,7 @@ _VERIFY_CMDS = st.lists(_WORDS, min_size=1, max_size=5).map(tuple)
 
 
 def _argv(command: str, *args: str) -> list[str]:
-    return ["interlocks", command, *args]
+    return ["interlocks", *command.split(), *args]
 
 
 @given(rule=_WORDS, base=_WORDS, budget=_WORDS, apply=st.booleans(), verify_cmd=_VERIFY_CMDS)
@@ -32,7 +32,7 @@ def test_fix_rule_explicit_args_override_argv(
     with patch.object(
         sys,
         "argv",
-        _argv("fix-rule", "--rule=ARGV", "--apply", "--base=argv", "--budget=argv"),
+        _argv("fix rule", "--rule=ARGV", "--apply", "--base=argv", "--budget=argv"),
     ):
         resolved = fix_rule._resolve_args(rule, apply, base, budget, verify_cmd)
 
@@ -44,7 +44,7 @@ def test_fix_rule_explicit_falsey_values_still_override_argv(apply: bool) -> Non
     with patch.object(
         sys,
         "argv",
-        _argv("fix-rule", "--rule=ARGV", "--apply", "--base=argv", "--budget=argv"),
+        _argv("fix rule", "--rule=ARGV", "--apply", "--base=argv", "--budget=argv"),
     ):
         resolved = fix_rule._resolve_args("", apply, "", "", ())
 
@@ -61,7 +61,7 @@ def test_fix_rule_argv_defaults_are_used_when_kwargs_are_none(
 ) -> None:
     raw_verify = " ".join(shlex.quote(word) for word in verify_cmd)
     argv = _argv(
-        "fix-rule",
+        "fix rule",
         f"--rule={rule}",
         f"--base={base}",
         f"--budget={budget}",
@@ -80,18 +80,18 @@ def test_fix_rule_argv_defaults_are_used_when_kwargs_are_none(
 def test_fix_rule_verify_cmd_splits_shell_words(verify_cmd: tuple[str, ...]) -> None:
     raw = " ".join(shlex.quote(word) for word in verify_cmd)
 
-    with patch.object(sys, "argv", _argv("fix-rule", f"--verify-cmd={raw}")):
-        assert fix_cli.verify_cmd_from_argv("fix-rule") == verify_cmd
+    with patch.object(sys, "argv", _argv("fix rule", f"--verify-cmd={raw}")):
+        assert fix_cli.verify_cmd_from_argv("fix rule") == verify_cmd
 
 
 @given(raw=st.text(max_size=80))
 def test_fix_rule_verify_cmd_rejects_or_resolves_without_traceback(raw: str) -> None:
     with (
         redirect_stderr(StringIO()),
-        patch.object(sys, "argv", _argv("fix-rule", f"--verify-cmd={raw}")),
+        patch.object(sys, "argv", _argv("fix rule", f"--verify-cmd={raw}")),
     ):
         try:
-            resolved = fix_cli.verify_cmd_from_argv("fix-rule")
+            resolved = fix_cli.verify_cmd_from_argv("fix rule")
         except SystemExit as exc:
             assert exc.code == 2
         else:
@@ -116,7 +116,7 @@ def test_fix_optimize_explicit_options_override_argv(
         sys,
         "argv",
         _argv(
-            "fix-optimize",
+            "fix optimize",
             "--base=argv",
             "--budget=argv",
             "--apply",
@@ -141,7 +141,7 @@ def test_fix_optimize_explicit_falsey_options_still_override_argv(apply: bool) -
         sys,
         "argv",
         _argv(
-            "fix-optimize",
+            "fix optimize",
             "--base=argv",
             "--budget=argv",
             "--apply",
@@ -170,7 +170,7 @@ def test_fix_optimize_argv_budget_precedence(
     renovate: bool,
 ) -> None:
     argv = _argv(
-        "fix-optimize",
+        "fix optimize",
         f"--base={base}",
         f"--budget={budget}",
         f"--mutation-budget={mutation_budget}",
@@ -191,18 +191,18 @@ def test_fix_optimize_argv_budget_precedence(
 def test_fix_optimize_verify_cmd_splits_shell_words(verify_cmd: tuple[str, ...]) -> None:
     raw = " ".join(shlex.quote(word) for word in verify_cmd)
 
-    with patch.object(sys, "argv", _argv("fix-optimize", f"--verify-cmd={raw}")):
-        assert fix_cli.verify_cmd_from_argv("fix-optimize") == verify_cmd
+    with patch.object(sys, "argv", _argv("fix optimize", f"--verify-cmd={raw}")):
+        assert fix_cli.verify_cmd_from_argv("fix optimize") == verify_cmd
 
 
 @given(raw=st.text(max_size=80))
 def test_fix_optimize_verify_cmd_rejects_or_resolves_without_traceback(raw: str) -> None:
     with (
         redirect_stderr(StringIO()),
-        patch.object(sys, "argv", _argv("fix-optimize", f"--verify-cmd={raw}")),
+        patch.object(sys, "argv", _argv("fix optimize", f"--verify-cmd={raw}")),
     ):
         try:
-            resolved = fix_cli.verify_cmd_from_argv("fix-optimize")
+            resolved = fix_cli.verify_cmd_from_argv("fix optimize")
         except SystemExit as exc:
             assert exc.code == 2
         else:

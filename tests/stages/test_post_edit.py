@@ -1,4 +1,4 @@
-"""Integration tests for `interlocks post-edit` stage."""
+"""Integration tests for `interlocks hook post-edit` stage."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def tmp_project(tmp_path: Path) -> Path:
 
 def _run_post_edit(cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "post-edit"],
+        [sys.executable, "-m", "interlocks.cli", "hook", "post-edit"],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -101,7 +101,7 @@ def test_post_edit_noop_json_in_process(
     from interlocks.stages import post_edit as post_edit_mod
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "post-edit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "hook", "post-edit", "--json"])
     monkeypatch.setattr(post_edit_mod, "changed_py_files", list)
 
     post_edit_mod.cmd_post_edit()
@@ -138,7 +138,7 @@ def test_post_edit_json_reports_budgeted_mutation(
     from interlocks.stages import post_edit as post_edit_mod
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "post-edit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "hook", "post-edit", "--json"])
     monkeypatch.setattr(post_edit_mod, "changed_py_files", lambda: ["app/mod.py"])
     monkeypatch.setattr(post_edit_mod, "run_budgeted_mutation", lambda **_kw: None)
 
@@ -151,7 +151,7 @@ def test_post_edit_json_reports_budgeted_mutation(
     assert payload["passed"] is True
     assert payload["gates"] == [
         {
-            "name": "fix-optimize",
+            "name": "fix optimize",
             "status": "ok",
             "elapsed_seconds": None,
         }
@@ -170,7 +170,7 @@ def test_post_edit_json_reports_advisory_failure(
         raise SystemExit(7)
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "post-edit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "hook", "post-edit", "--json"])
     monkeypatch.setattr(post_edit_mod, "changed_py_files", lambda: ["app/mod.py"])
     monkeypatch.setattr(post_edit_mod, "run_budgeted_mutation", fail_budgeted_mutation)
 

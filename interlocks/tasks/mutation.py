@@ -660,7 +660,7 @@ def _write_mutation_evidence(
     run_config: _MutationRun,
     execution: _MutationExecution,
 ) -> None:
-    """Mark cached mutmut stats as produced by ``interlocks mutation``."""
+    """Mark cached mutmut stats as produced by ``interlocks gate mutation``."""
     project_root = find_project_root()
     evidence_path = project_root / MUTATION_EVIDENCE
     evidence_path.parent.mkdir(parents=True, exist_ok=True)
@@ -778,11 +778,11 @@ def _skip_mutation_no_coverage(*, start: float, json_mode: bool, min_cov: float)
         _emit_mutation_skip_json(
             reason="no coverage data",
             start=start,
-            next_action="Run `interlocks coverage` before `interlocks mutation`.",
+            next_action="Run `interlocks gate coverage` before `interlocks gate mutation`.",
             min_coverage=min_cov,
         )
         return
-    warn_skip("Mutation: no coverage data — run `interlocks coverage` first")
+    warn_skip("Mutation: no coverage data — run `interlocks gate coverage` first")
 
 
 def _skip_mutation_low_coverage(
@@ -813,7 +813,7 @@ def _skip_mutation_no_changed_src(
         _emit_mutation_skip_json(
             reason=reason,
             start=start,
-            next_action="Run `interlocks mutation` without `--changed-only` for a full run.",
+            next_action="Run `interlocks gate mutation` without `--changed-only` for a full run.",
             min_coverage=min_cov,
             coverage_pct=coverage_pct,
         )
@@ -896,9 +896,9 @@ def _mutation_no_results_next_action(log_path: Path, *, context: _NoResultsConte
     if _mutation_progress_started(context.progress) and not context.completed:
         return (
             f"Inspect `{log_path}` for the last progress line and rerun "
-            "`interlocks mutation` with a higher `--max-runtime=`."
+            "`interlocks gate mutation` with a higher `--max-runtime=`."
         )
-    return f"Inspect `{log_path}` and rerun `interlocks mutation`."
+    return f"Inspect `{log_path}` and rerun `interlocks gate mutation`."
 
 
 def _mutation_no_results_error(context: _NoResultsContext) -> str:

@@ -32,7 +32,15 @@ def _keep_existing_hook(hook: object, new_command: str) -> bool:
     existing = hook.get("command")
     if existing == new_command:
         return False
-    return not is_post_edit_command(existing)
+    if is_post_edit_command(existing):
+        return False
+    return not (
+        isinstance(existing, str)
+        and (
+            existing.endswith("interlocks.cli post-edit")
+            or existing == "uv run interlocks post-edit"
+        )
+    )
 
 
 def _ensure_stop_hook(settings: dict[str, object], command: str) -> dict[str, object]:
@@ -56,7 +64,7 @@ def install_hooks(project_root: Path | None = None) -> None:
 
     hook = root / ".git" / "hooks" / "pre-commit"
     hook.parent.mkdir(parents=True, exist_ok=True)
-    script = f"#!/bin/sh\nexec {python} -m interlocks.cli pre-commit\n"
+    script = f"#!/bin/sh\nexec {python} -m interlocks.cli hook pre-commit\n"
     hook.write_text(script, encoding="utf-8")
     hook.chmod(0o755)
     ok("Installed pre-commit hook")
@@ -69,6 +77,6 @@ def install_hooks(project_root: Path | None = None) -> None:
         existing = {}
     if not isinstance(existing, dict):
         existing = {}
-    existing = _ensure_stop_hook(existing, f"{python} -m interlocks.cli post-edit")
+    existing = _ensure_stop_hook(existing, f"{python} -m interlocks.cli hook post-edit")
     settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
     ok("Installed Claude Code Stop hook")

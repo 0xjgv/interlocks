@@ -10,6 +10,10 @@ from interlocks.command_docs import ALIASES, COMMAND_DOCS_BY_NAME
 from interlocks.tasks import explain
 
 _KNOWN_REQUEST = st.sampled_from(tuple(COMMAND_DOCS_BY_NAME) + tuple(ALIASES))
+_KNOWN_POSITIONAL = st.sampled_from(
+    tuple((name.split(), ALIASES.get(name, name)) for name in COMMAND_DOCS_BY_NAME)
+    + tuple((alias.split(), target) for alias, target in ALIASES.items())
+)
 _UNKNOWN_REQUEST = st.text(min_size=1, max_size=50).filter(
     lambda request: request not in COMMAND_DOCS_BY_NAME and request not in ALIASES
 )
@@ -45,11 +49,13 @@ def test_explain_payload_for_single_command_uses_resolved_doc(
     assert "when_to_use" in payload
 
 
-@given(first=_KNOWN_REQUEST, rest=st.lists(_KNOWN_REQUEST, min_size=1, max_size=5))
-def test_explain_payload_uses_first_positional_command(first: str, rest: list[str]) -> None:
-    resolved = ALIASES.get(first, first)
+@given(command_pair=_KNOWN_POSITIONAL)
+def test_explain_payload_joins_nested_command_tokens(
+    command_pair: tuple[list[str], str],
+) -> None:
+    positional, resolved = command_pair
 
-    payload = explain._explain_payload(want_all=False, positional=[first, *rest])
+    payload = explain._explain_payload(want_all=False, positional=positional)
 
     assert payload["command"] == resolved
 

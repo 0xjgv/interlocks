@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 _CRAP_ADVISORY_LIMIT = 5
 _CRAP_JSON_OFFENDER_LIMIT = 20
-_CRAP_COVERAGE_NEXT_ACTION = "Run `interlocks coverage` before `interlocks crap`."
+_CRAP_COVERAGE_NEXT_ACTION = "Run `interlocks gate coverage` before `interlocks gate crap`."
 
 
 @dataclass(frozen=True)

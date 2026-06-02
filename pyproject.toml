@@ -252,7 +252,7 @@ extend_exclude = ["interlocks/defaults"]
 
 # ── Import-Linter ──────────────────────────────────────────────────
 # Declaring explicit contracts overrides the default (src ↛ tests) that
-# `interlocks arch` synthesizes otherwise.
+# `interlocks gate arch` synthesizes otherwise.
 
 [tool.importlinter]
 root_packages = ["interlocks", "tests"]

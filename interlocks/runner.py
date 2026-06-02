@@ -41,16 +41,15 @@ _INLINE_CONFIG_FLAG_MARKERS = tuple(f"{flag}=" for flag in _CONFIG_PATH_FLAGS)
 
 # Commands that must work without a project — diagnostics, scaffolding, meta.
 PREFLIGHT_EXEMPT: frozenset[str] = frozenset({
-    "agents",
     "config",
     "doctor",
     "evaluate",
     "explain",
+    "gate",
+    "hook",
     "init",
     "presets",
     "setup",
-    "setup-hooks",
-    "setup-skill",
     "version",
     "warm",
     "help",

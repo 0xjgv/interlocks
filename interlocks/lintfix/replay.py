@@ -2,7 +2,7 @@
 
 Walks the last N first-parent commits on ``base_branch`` (or the current
 branch when unspecified), and for each commit drives a temporary git
-worktree at that commit through ``interlocks fix-plan``. The plan JSON is
+worktree at that commit through ``interlocks fix plan``. The plan JSON is
 parsed back into :class:`stats.CandidateSample` records.
 
 We use ``git worktree add --detach`` rather than ``git checkout`` so the
@@ -14,7 +14,7 @@ cache and ruff process.
 from __future__ import annotations
 
 import json
-import subprocess  # noqa: S404 (boundary tool: git CLI + python -m fix-plan; inputs are trusted SHAs)
+import subprocess  # noqa: S404 (boundary tool: git CLI + python -m interlocks; inputs are trusted SHAs)
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -193,18 +193,19 @@ def _run_plan_and_load(
             sys.executable,
             "-m",
             "interlocks.cli",
-            "fix-plan",
+            "fix",
+            "plan",
             f"--base={parent}",
             f"--budget={budget_name}",
         ],
         cwd=worktree,
     )
     if proc.returncode != 0:
-        raise _ReplayError(f"fix-plan rc={proc.returncode}: {proc.stderr.strip()[:200]}")
+        raise _ReplayError(f"fix plan rc={proc.returncode}: {proc.stderr.strip()[:200]}")
 
     plan_path = worktree / ".lintfix" / "plan.json"
     if not plan_path.is_file():
-        raise _ReplayError("plan.json missing after fix-plan")
+        raise _ReplayError("plan.json missing after fix plan")
 
     try:
         payload = json.loads(plan_path.read_text(encoding="utf-8"))

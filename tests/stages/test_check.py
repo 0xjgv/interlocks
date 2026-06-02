@@ -236,10 +236,12 @@ def test_check_json_verbose_changed_emits_single_object(tmp_project: Path) -> No
     payload = json.loads(scoped_lines[0])
     assert payload["command"] == "check"
     skipped = {entry["name"]: entry for entry in payload["skipped"]}
-    assert skipped["test"]["next_action"] == "Run `interlocks test` for the full suite."
-    assert skipped["deps"]["next_action"] == "Run `interlocks deps` for dependency graph checks."
+    assert skipped["test"]["next_action"] == "Run `interlocks gate test` for the full suite."
+    assert skipped["deps"]["next_action"] == (
+        "Run `interlocks gate deps` for dependency graph checks."
+    )
     assert skipped["attribution"]["next_action"] == (
-        "Run `interlocks behavior-attribution` for registry-wide attribution."
+        "Run `interlocks gate behavior-attribution` for registry-wide attribution."
     )
     assert "changed vs" not in scoped.stdout
 

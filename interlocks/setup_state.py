@@ -51,6 +51,10 @@ class SetupArtifactStatus:
     def target(self) -> str:
         return self.artifact.target
 
+    @property
+    def installed_detail(self) -> str:
+        return self.artifact.installed_detail
+
 
 def iter_workflow_bodies(project_root: Path) -> list[str]:
     """Read every ``.github/workflows/*.y*ml`` file body. Empty list when dir is absent."""
@@ -69,9 +73,10 @@ def iter_workflow_bodies(project_root: Path) -> list[str]:
 
 
 def is_post_edit_command(command: object) -> bool:
-    """True when ``command`` is a recognizable ``interlocks post-edit`` invocation."""
+    """True when ``command`` is the managed post-edit hook invocation."""
     return isinstance(command, str) and (
-        command.endswith("interlocks.cli post-edit") or command == "uv run interlocks post-edit"
+        command.endswith("interlocks.cli hook post-edit")
+        or command == "uv run interlocks hook post-edit"
     )
 
 
@@ -81,13 +86,13 @@ def is_git_repo(project_root: Path) -> bool:
 
 
 def pre_commit_hook_installed(project_root: Path) -> bool:
-    """True when ``.git/hooks/pre-commit`` exists and invokes ``interlocks pre-commit``."""
+    """True when ``.git/hooks/pre-commit`` exists and invokes the managed hook command."""
     hook = project_root / ".git" / "hooks" / "pre-commit"
     try:
         body = hook.read_text(encoding="utf-8")
     except OSError:
         return False
-    return "interlocks.cli pre-commit" in body or "interlocks pre-commit" in body
+    return "interlocks.cli hook pre-commit" in body or "interlocks hook pre-commit" in body
 
 
 def claude_stop_hook_installed(project_root: Path) -> bool:

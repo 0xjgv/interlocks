@@ -490,11 +490,11 @@ def _run_in_project(cmd: str, project_root: Path) -> CliResult:
 def _inspect_task(
     cmd: str, project_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> CoverageCommands:
-    assert cmd == "interlocks coverage"
+    assert cmd == "interlocks gate coverage"
     from interlocks.tasks.coverage import task_coverage
 
     monkeypatch.chdir(project_root)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage"])
     clear_cache()
     task = task_coverage()
     assert task is not None  # scenario layouts are env-ready, so coverage runs

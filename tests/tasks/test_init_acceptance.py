@@ -1,4 +1,4 @@
-"""Tests for `interlocks init-acceptance`."""
+"""Tests for `interlocks init --acceptance`."""
 
 from __future__ import annotations
 
@@ -38,13 +38,13 @@ def _run_cli(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_init_acceptance_scaffolds_layout(tmp_project: Path) -> None:
-    result = _run_cli(tmp_project, "init-acceptance")
+    result = _run_cli(tmp_project, "init", "--acceptance")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "created tests/features/example.feature" in result.stdout
     assert "created tests/step_defs/test_example.py" in result.stdout
     assert "created tests/step_defs/conftest.py" in result.stdout
     assert "next: add `pytest-bdd>=8`" in result.stdout
-    assert "next: run `interlocks acceptance`" in result.stdout
+    assert "next: run `interlocks gate acceptance`" in result.stdout
     assert (tmp_project / "tests" / "features" / "example.feature").is_file()
     assert (tmp_project / "tests" / "step_defs" / "test_example.py").is_file()
     assert (tmp_project / "tests" / "step_defs" / "conftest.py").is_file()
@@ -56,7 +56,7 @@ def test_init_acceptance_preserves_existing_files_and_creates_missing(tmp_projec
     (tmp_project / "tests" / "step_defs").mkdir()
     existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
-    result = _run_cli(tmp_project, "init-acceptance")
+    result = _run_cli(tmp_project, "init", "--acceptance")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert existing.read_text(encoding="utf-8") == "# pre-existing\n"
     assert "created tests/features/example.feature" in result.stdout
@@ -65,11 +65,11 @@ def test_init_acceptance_preserves_existing_files_and_creates_missing(tmp_projec
 
 
 def test_init_acceptance_json_scaffolds_layout(tmp_project: Path) -> None:
-    result = _run_cli(tmp_project, "init-acceptance", "--json")
+    result = _run_cli(tmp_project, "init", "--acceptance", "--json")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload["command"] == "init-acceptance"
+    assert payload["command"] == "init"
     assert payload["passed"] is True
     assert payload["status"] == "created"
     assert payload["created"] == [
@@ -86,7 +86,7 @@ def test_init_acceptance_json_scaffolds_layout(tmp_project: Path) -> None:
         "Add `pytest-bdd>=8` to test/dev dependencies if it is missing.",
         "Create or sync the project environment if `interlocks doctor` reports one missing.",
         "Replace the example scenario with project behavior.",
-        "Run `interlocks acceptance`.",
+        "Run `interlocks gate acceptance`.",
     ]
     assert (tmp_project / "tests" / "features" / "example.feature").is_file()
     assert (tmp_project / "tests" / "step_defs" / "test_example.py").is_file()
@@ -111,7 +111,7 @@ def test_init_acceptance_omits_dependency_action_when_pytest_bdd_declared(
         encoding="utf-8",
     )
 
-    result = _run_cli(tmp_project, "init-acceptance", "--json")
+    result = _run_cli(tmp_project, "init", "--acceptance", "--json")
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     payload = json.loads(result.stdout)
@@ -119,7 +119,7 @@ def test_init_acceptance_omits_dependency_action_when_pytest_bdd_declared(
         "Add `pytest-bdd>=8` to test/dev dependencies if it is missing."
         not in payload["next_actions"]
     )
-    assert "Run `interlocks acceptance`." in payload["next_actions"]
+    assert "Run `interlocks gate acceptance`." in payload["next_actions"]
 
 
 def test_init_acceptance_json_preserves_existing_files_and_creates_missing(
@@ -128,11 +128,11 @@ def test_init_acceptance_json_preserves_existing_files_and_creates_missing(
     (tmp_project / "tests" / "step_defs").mkdir()
     existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
-    result = _run_cli(tmp_project, "init-acceptance", "--json")
+    result = _run_cli(tmp_project, "init", "--acceptance", "--json")
     assert result.returncode == 0
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload["command"] == "init-acceptance"
+    assert payload["command"] == "init"
     assert payload["passed"] is True
     assert payload["status"] == "scaffold-present"
     assert payload["created"] == [
@@ -158,11 +158,11 @@ def test_init_acceptance_keeps_domain_features_without_adding_example(tmp_projec
         encoding="utf-8",
     )
 
-    result = _run_cli(tmp_project, "init-acceptance")
+    result = _run_cli(tmp_project, "init", "--acceptance")
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "kept tests/features/" in result.stdout
-    assert "next: run `interlocks acceptance`" in result.stdout
+    assert "next: run `interlocks gate acceptance`" in result.stdout
     assert not (features / "example.feature").exists()
     assert not (tmp_project / "tests" / "step_defs").exists()
 
@@ -178,19 +178,19 @@ def test_init_acceptance_json_keeps_domain_features_without_adding_example(
         encoding="utf-8",
     )
 
-    result = _run_cli(tmp_project, "init-acceptance", "--json")
+    result = _run_cli(tmp_project, "init", "--acceptance", "--json")
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
     assert payload == {
-        "command": "init-acceptance",
+        "command": "init",
         "passed": True,
         "status": "domain-acceptance-present",
         "created": [],
         "files": [],
         "domain_acceptance_feature_count": 1,
         "domain_acceptance_features": ["tests/features/billing.feature"],
-        "next_actions": ["Run `interlocks acceptance`."],
+        "next_actions": ["Run `interlocks gate acceptance`."],
     }
     assert not (features / "example.feature").exists()
     assert not (tmp_project / "tests" / "step_defs").exists()
@@ -214,7 +214,7 @@ def test_init_acceptance_success_payload_is_exact(tmp_path: Path) -> None:
     ]
 
     assert mod._init_acceptance_success_payload(cfg, files) == {
-        "command": "init-acceptance",
+        "command": "init",
         "passed": True,
         "status": "scaffold-present",
         "created": ["tests/step_defs/test_example.py"],
@@ -223,7 +223,7 @@ def test_init_acceptance_success_payload_is_exact(tmp_path: Path) -> None:
             "Add `pytest-bdd>=8` to test/dev dependencies if it is missing.",
             "Create or sync the project environment if `interlocks doctor` reports one missing.",
             "Replace the example scenario with project behavior.",
-            "Run `interlocks acceptance`.",
+            "Run `interlocks gate acceptance`.",
         ],
     }
 
@@ -250,7 +250,7 @@ def test_init_acceptance_in_process_json_scaffolds(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "init-acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "init", "--acceptance", "--json"])
     from interlocks.tasks.init_acceptance import cmd_init_acceptance
 
     cmd_init_acceptance()
@@ -289,7 +289,7 @@ def test_init_acceptance_in_process_json_preserves_existing_files(
     existing = tmp_project / "tests" / "step_defs" / "conftest.py"
     existing.write_text("# pre-existing\n", encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "init-acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "init", "--acceptance", "--json"])
     from interlocks.tasks.init_acceptance import cmd_init_acceptance
 
     cmd_init_acceptance()

@@ -1,4 +1,4 @@
-"""Tests for `interlocks agents`."""
+"""Tests for `interlocks setup --agents`."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _run_agents(
 
     monkeypatch.chdir(project)
     clear_cache()
-    monkeypatch.setattr(sys, "argv", ["interlocks", "agents", *args])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "setup", "--agents", *args])
     returncode = 0
     try:
         cmd_agents()

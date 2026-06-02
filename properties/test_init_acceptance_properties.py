@@ -40,7 +40,7 @@ def test_init_acceptance_success_payload_shape_is_stable() -> None:
     with TemporaryDirectory() as raw_root:
         payload = _init_acceptance_success_payload(_cfg(Path(raw_root)), files)
 
-    assert payload["command"] == "init-acceptance"
+    assert payload["command"] == "init"
     assert payload["passed"] is True
     assert payload["status"] == "created"
     assert payload["created"] == list(_INIT_ACCEPTANCE_OUTPUTS)
@@ -63,7 +63,7 @@ def test_init_acceptance_success_payload_reports_created_subset(
     with TemporaryDirectory() as raw_root:
         payload = _init_acceptance_success_payload(_cfg(Path(raw_root)), files)
 
-    assert payload["command"] == "init-acceptance"
+    assert payload["command"] == "init"
     assert payload["passed"] is True
     assert payload["status"] == scaffold_status(files)
     assert payload["files"] == files
@@ -103,14 +103,14 @@ def test_init_acceptance_domain_payload_reports_domain_files(paths: list[str]) -
 
     payload = _init_acceptance_domain_payload(cfg, domain_files)
 
-    assert payload["command"] == "init-acceptance"
+    assert payload["command"] == "init"
     assert payload["passed"] is True
     assert payload["status"] == "domain-acceptance-present"
     assert payload["created"] == []
     assert payload["files"] == []
     assert payload["domain_acceptance_feature_count"] == len(domain_files)
     assert payload["domain_acceptance_features"] == [str(path) for path in domain_files]
-    assert payload["next_actions"] == ["Run `interlocks acceptance`."]
+    assert payload["next_actions"] == ["Run `interlocks gate acceptance`."]
 
 
 @given(

@@ -260,7 +260,7 @@ def test_json_refresh_failure_returns_stage_payload(
     payload = behavior_mod._refresh_evidence_if_needed_json(load_config())
 
     assert payload is not None
-    assert payload["command"] == "behavior-attribution"
+    assert payload["command"] == "gate behavior-attribution"
     assert payload["passed"] is False
     assert payload["status"] == "failed"
     assert payload["error"] == "acceptance evidence refresh failed"

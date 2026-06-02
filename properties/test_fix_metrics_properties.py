@@ -119,7 +119,7 @@ def test_fix_metrics_payload_embeds_written_metrics(metrics: dict[str, object]) 
 
         payload = _fix_metrics_payload(root, out_path)
 
-    assert payload["command"] == "fix-metrics"
+    assert payload["command"] == "fix metrics"
     assert payload["passed"] is True
     assert payload["metrics_path"] == ".lintfix/metrics.json"
     assert payload["sources"] == metrics.get("sources", {})

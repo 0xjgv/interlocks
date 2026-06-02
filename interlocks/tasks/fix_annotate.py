@@ -115,7 +115,7 @@ def _missing_annotation_result(
 ) -> AnnotationResult:
     if report_missing and not emit_json:
         ui.gate_row(
-            "fix-annotate",
+            "fix annotate",
             relpath(project_root, path),
             "ok",
             detail="no plan",
@@ -137,7 +137,7 @@ def _read_annotation_payload(
         if emit_json:
             ui.print_json(_fix_annotate_error_payload(project_root, source, path, str(exc)))
             sys.exit(2)
-        ui.row("fix-annotate", "parse", str(exc), state="fail")
+        ui.row("fix annotate", "parse", str(exc), state="fail")
         sys.exit(2)
     return payload if isinstance(payload, dict) else {}
 
@@ -169,7 +169,7 @@ def _render_annotation_summary(
     if emit_json:
         return
     if not emit_json:
-        ui.section("fix-annotate")
+        ui.section("fix annotate")
         ui.kv_block([
             ("source", relpath(project_root, result.path)),
             ("notice", str(result.notice)),
@@ -183,14 +183,14 @@ def _arg_source() -> Source:
     if value not in ("plan", "optimize"):
         if ui.is_json():
             ui.print_json({
-                "command": "fix-annotate",
+                "command": "fix annotate",
                 "passed": False,
                 "status": "invalid-source",
                 "error": f"invalid source: {value!r}",
                 "expected_sources": ["plan", "optimize"],
             })
             sys.exit(2)
-        ui.row("fix-annotate", "source", f"invalid: {value!r}", state="fail")
+        ui.row("fix annotate", "source", f"invalid: {value!r}", state="fail")
         sys.exit(2)
     return value
 
@@ -282,7 +282,7 @@ def _format_message(c: dict[str, Any]) -> str:
     if classification == "escrow" and patch_path:
         return f"{base}. Patch staged at {patch_path}; review before applying."
     if classification == "auto":
-        return f"{base}. Apply with `interlocks fix-rule --rule={rule} --apply`."
+        return f"{base}. Apply with `interlocks fix rule --rule={rule} --apply`."
     return base
 
 
@@ -296,7 +296,7 @@ def _escape_workflow_command_property(value: object) -> str:
 
 def _fix_annotate_payload(project_root: Path, result: AnnotationResult) -> dict[str, object]:
     return {
-        "command": "fix-annotate",
+        "command": "fix annotate",
         "passed": True,
         "status": "annotated" if result.found else "missing",
         "source": result.source,
@@ -316,7 +316,7 @@ def _fix_annotate_error_payload(
     error: str,
 ) -> dict[str, object]:
     return {
-        "command": "fix-annotate",
+        "command": "fix annotate",
         "passed": False,
         "status": "invalid-json",
         "source": source,

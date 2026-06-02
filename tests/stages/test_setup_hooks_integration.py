@@ -1,4 +1,4 @@
-"""Integration tests for `interlocks setup-hooks` stage."""
+"""Integration tests for `interlocks setup --hooks` stage."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def tmp_project(make_tmp_project: TmpProjectFactory) -> Path:
 
 def _run_setup_hooks(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "setup-hooks", *args],
+        [sys.executable, "-m", "interlocks.cli", "setup", "--hooks", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -57,7 +57,7 @@ def test_setup_hooks_installs_pre_commit_and_stop_hook(tmp_project: Path) -> Non
     pre_commit = tmp_project / ".git" / "hooks" / "pre-commit"
     assert pre_commit.exists()
     assert os.access(pre_commit, os.X_OK)
-    assert "-m interlocks.cli pre-commit" in pre_commit.read_text(encoding="utf-8")
+    assert "-m interlocks.cli hook pre-commit" in pre_commit.read_text(encoding="utf-8")
 
     settings_path = tmp_project / ".claude" / "settings.json"
     assert settings_path.exists()
@@ -65,7 +65,7 @@ def test_setup_hooks_installs_pre_commit_and_stop_hook(tmp_project: Path) -> Non
     stop = settings["hooks"]["Stop"]
     assert len(stop) == 1
     hooks = stop[0]["hooks"]
-    suffix = "-m interlocks.cli post-edit"
+    suffix = "-m interlocks.cli hook post-edit"
     assert any(h["type"] == "command" and h["command"].endswith(suffix) for h in hooks)
 
 
@@ -75,7 +75,9 @@ def test_setup_hooks_is_idempotent(tmp_project: Path) -> None:
 
     settings = json.loads((tmp_project / ".claude" / "settings.json").read_text(encoding="utf-8"))
     hooks = settings["hooks"]["Stop"][0]["hooks"]
-    post_edit_hooks = [h for h in hooks if h["command"].endswith("-m interlocks.cli post-edit")]
+    post_edit_hooks = [
+        h for h in hooks if h["command"].endswith("-m interlocks.cli hook post-edit")
+    ]
     assert len(post_edit_hooks) == 1
 
 
@@ -86,22 +88,23 @@ def test_setup_hooks_json_reports_installed_hooks(tmp_project: Path) -> None:
     assert result.stderr == ""
     payload = json.loads(result.stdout)
     assert payload == {
-        "command": "setup-hooks",
+        "command": "setup",
+        "mode": "hooks",
+        "check": False,
         "passed": True,
         "status": "installed",
-        "installed": True,
-        "hooks": [
+        "artifacts": [
             {
                 "label": "git hook",
                 "target": ".git/hooks/pre-commit",
-                "action": "installed",
                 "installed": True,
+                "status": "installed",
             },
             {
                 "label": "claude hook",
                 "target": ".claude/settings.json → Stop",
-                "action": "installed",
                 "installed": True,
+                "status": "installed",
             },
         ],
         "next_actions": ["Run `interlocks setup --check` to verify all local integrations."],
@@ -116,5 +119,5 @@ def test_setup_hooks_json_reports_refreshed_hooks_on_rerun(tmp_project: Path) ->
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert [hook["action"] for hook in payload["hooks"]] == ["refreshed", "refreshed"]
-    assert payload["installed"] is True
+    assert [artifact["status"] for artifact in payload["artifacts"]] == ["installed", "installed"]
+    assert payload["passed"] is True

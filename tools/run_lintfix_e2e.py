@@ -142,7 +142,7 @@ def _replay_repo(context: ScenarioContext, name: str) -> Path:
 
 def scenario_fix_plan_preview(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-plan-preview")
-    result = run_cli(repo, "fix-plan", "--base=HEAD", repo_root=context.repo_root)
+    result = run_cli(repo, "fix", "plan", "--base=HEAD", repo_root=context.repo_root)
     _expect_success(result)
     _expect_output(result, "I001", "F401", "UP045")
 
@@ -161,7 +161,9 @@ def scenario_fix_optimize_preview(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-optimize-preview")
     # --verbose: the rich SELECTED / NOT SELECTED summary (asserted below) is
     # verbose-gated; default mode emits only the one-line gate row.
-    result = run_cli(repo, "fix-optimize", "--base=HEAD", "--verbose", repo_root=context.repo_root)
+    result = run_cli(
+        repo, "fix", "optimize", "--base=HEAD", "--verbose", repo_root=context.repo_root
+    )
     _expect_success(result)
     _expect_output(result, "I001", "W292", "F401", "policy mode is escrow")
 
@@ -180,7 +182,8 @@ def scenario_fix_optimize_budget(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-optimize-budget")
     result = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--budget=renovation",
         repo_root=context.repo_root,
@@ -215,15 +218,16 @@ def scenario_fix_optimize_budget(context: ScenarioContext) -> None:
 
 def scenario_fix_annotate(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-annotate")
-    _expect_success(run_cli(repo, "fix-plan", "--base=HEAD", repo_root=context.repo_root))
-    plan_annotations = run_cli(repo, "fix-annotate", repo_root=context.repo_root)
+    _expect_success(run_cli(repo, "fix", "plan", "--base=HEAD", repo_root=context.repo_root))
+    plan_annotations = run_cli(repo, "fix", "annotate", repo_root=context.repo_root)
     _expect_success(plan_annotations)
     _expect_output(plan_annotations, "::notice file=", "[I001]", "[F401]")
 
-    _expect_success(run_cli(repo, "fix-optimize", "--base=HEAD", repo_root=context.repo_root))
+    _expect_success(run_cli(repo, "fix", "optimize", "--base=HEAD", repo_root=context.repo_root))
     opt_annotations = run_cli(
         repo,
-        "fix-annotate",
+        "fix",
+        "annotate",
         "--source=optimize",
         repo_root=context.repo_root,
     )
@@ -234,9 +238,9 @@ def scenario_fix_annotate(context: ScenarioContext) -> None:
 
 def scenario_fix_metrics(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-metrics")
-    _expect_success(run_cli(repo, "fix-plan", "--base=HEAD", repo_root=context.repo_root))
-    _expect_success(run_cli(repo, "fix-optimize", "--base=HEAD", repo_root=context.repo_root))
-    result = run_cli(repo, "fix-metrics", repo_root=context.repo_root)
+    _expect_success(run_cli(repo, "fix", "plan", "--base=HEAD", repo_root=context.repo_root))
+    _expect_success(run_cli(repo, "fix", "optimize", "--base=HEAD", repo_root=context.repo_root))
+    result = run_cli(repo, "fix", "metrics", repo_root=context.repo_root)
     _expect_success(result)
     _expect_output(result, ".lintfix/metrics.json", "selected=2", "rejected=")
 
@@ -252,7 +256,8 @@ def scenario_apply_success(context: ScenarioContext) -> None:
     repo = _repo(context, "apply-success")
     result = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--apply",
         f"--verify-cmd={sys.executable} -c pass",
@@ -271,7 +276,8 @@ def scenario_apply_rollback(context: ScenarioContext) -> None:
     repo = _repo(context, "apply-rollback")
     result = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--apply",
         f'--verify-cmd={sys.executable} -c "import sys; sys.exit(1)"',
@@ -286,8 +292,8 @@ def scenario_apply_rollback(context: ScenarioContext) -> None:
 def scenario_empty_plan(context: ScenarioContext) -> None:
     repo = _repo(context, "empty-plan")
     git(repo, "restore", ".")
-    plan_result = run_cli(repo, "fix-plan", "--base=HEAD", repo_root=context.repo_root)
-    optimize_result = run_cli(repo, "fix-optimize", "--base=HEAD", repo_root=context.repo_root)
+    plan_result = run_cli(repo, "fix", "plan", "--base=HEAD", repo_root=context.repo_root)
+    optimize_result = run_cli(repo, "fix", "optimize", "--base=HEAD", repo_root=context.repo_root)
     _expect_success(plan_result)
     _expect_success(optimize_result)
     _expect(_read_json(repo / ".lintfix" / "plan.json")["candidates"] == [], "plan not empty")
@@ -300,7 +306,9 @@ def scenario_empty_plan(context: ScenarioContext) -> None:
 def scenario_fix_optimize_self_sufficient(context: ScenarioContext) -> None:
     """One `fix-optimize` run writes the full `.lintfix/` artifact set."""
     repo = _repo(context, "fix-optimize-self-sufficient")
-    result = run_cli(repo, "fix-optimize", "--base=HEAD", "--metrics", repo_root=context.repo_root)
+    result = run_cli(
+        repo, "fix", "optimize", "--base=HEAD", "--metrics", repo_root=context.repo_root
+    )
     _expect_success(result)
     plan = _read_json(repo / ".lintfix" / "plan.json")
     _expect({"I001", "F401"}.issubset({c["rule"] for c in plan["candidates"]}), "plan.json sparse")
@@ -314,7 +322,7 @@ def scenario_fix_optimize_self_sufficient(context: ScenarioContext) -> None:
 def scenario_fix_optimize_annotate(context: ScenarioContext) -> None:
     repo = _repo(context, "fix-optimize-annotate")
     result = run_cli(
-        repo, "fix-optimize", "--base=HEAD", "--annotate", repo_root=context.repo_root
+        repo, "fix", "optimize", "--base=HEAD", "--annotate", repo_root=context.repo_root
     )
     _expect_success(result)
     _expect_output(result, "::notice file=", "[I001]")
@@ -325,21 +333,22 @@ def scenario_fix_optimize_auto_stats(context: ScenarioContext) -> None:
     """`.lintfix/replay.json` is auto-discovered; `--no-stats` opts out."""
     repo = _replay_repo(context, "fix-optimize-auto-stats")
     _expect_success(
-        run_cli(repo, "fix-replay", "--base=main", "--n=2", repo_root=context.repo_root)
+        run_cli(repo, "fix", "replay", "--base=main", "--n=2", repo_root=context.repo_root)
     )
     _expect((repo / ".lintfix" / "replay.json").is_file(), "fix-replay wrote no replay.json")
 
     # A fresh dirty file gives fix-optimize candidates to weigh against the stats.
     write_text(repo / "c.py", REPLAY_REORDERED_IMPORTS)
     discovered = run_cli(
-        repo, "fix-optimize", "--base=HEAD", "--verbose", repo_root=context.repo_root
+        repo, "fix", "optimize", "--base=HEAD", "--verbose", repo_root=context.repo_root
     )
     _expect_success(discovered)
     _expect_output(discovered, ".lintfix/replay.json")
 
     skipped = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--no-stats",
         "--verbose",
@@ -356,7 +365,7 @@ def scenario_fix_optimize_auto_stats(context: ScenarioContext) -> None:
 def scenario_unblock_alias(context: ScenarioContext) -> None:
     """`unblock` is an alias for `fix-optimize` — identical artifact set."""
     repo = _repo(context, "unblock-alias")
-    result = run_cli(repo, "unblock", "--base=HEAD", repo_root=context.repo_root)
+    result = run_cli(repo, "fix", "unblock", "--base=HEAD", repo_root=context.repo_root)
     _expect_success(result)
     _expect((repo / ".lintfix" / "optimize.json").is_file(), "optimize.json missing")
     _expect((repo / ".lintfix" / "plan.json").is_file(), "plan.json missing under unblock alias")
@@ -366,7 +375,7 @@ def scenario_unblock_alias(context: ScenarioContext) -> None:
 
 def scenario_fix_replay(context: ScenarioContext) -> None:
     repo = _replay_repo(context, "fix-replay")
-    result = run_cli(repo, "fix-replay", "--base=main", "--n=2", repo_root=context.repo_root)
+    result = run_cli(repo, "fix", "replay", "--base=main", "--n=2", repo_root=context.repo_root)
     _expect_success(result)
     _expect_output(result, "commits replayed", "rules observed")
     replay = _read_json(repo / ".lintfix" / "replay.json")
@@ -385,7 +394,8 @@ def scenario_budget_small_format_skip(context: ScenarioContext) -> None:
 
     result = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--budget=dynamic",
         "--apply",
@@ -414,7 +424,8 @@ def scenario_budget_renovation_format(context: ScenarioContext) -> None:
 
     result = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--budget=renovation",
         "--apply",
@@ -450,7 +461,8 @@ def scenario_budget_deleted_file(context: ScenarioContext) -> None:
 
     result = run_cli(
         repo,
-        "fix-optimize",
+        "fix",
+        "optimize",
         "--base=HEAD",
         "--budget=dynamic",
         repo_root=context.repo_root,

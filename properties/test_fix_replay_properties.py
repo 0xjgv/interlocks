@@ -194,7 +194,7 @@ def test_fix_replay_payload_reports_rule_count_and_frontier(
     rules = cast("list[object]", payload["rules"])
     result = _fix_replay_payload(payload, ".lintfix/replay.json")
 
-    assert result["command"] == "fix-replay"
+    assert result["command"] == "fix replay"
     assert result["passed"] is True
     assert result["replay_path"] == ".lintfix/replay.json"
     assert result["rules_count"] == len(rules)
@@ -216,7 +216,7 @@ def test_fix_replay_payload_treats_only_list_rules_as_rows(
 ) -> None:
     result = _fix_replay_payload({"rules": rules}, replay_path)
 
-    assert result["command"] == "fix-replay"
+    assert result["command"] == "fix replay"
     assert result["passed"] is True
     assert result["status"] == "replayed"
     assert result["replay_path"] == replay_path

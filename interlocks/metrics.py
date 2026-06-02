@@ -233,7 +233,7 @@ def compute_crap_rows(
 
     When ``max_crap`` is ``None``, returns every row (reader mode — used by
     ``interlocks trust``). When set, returns only rows whose CRAP exceeds the
-    threshold (gate mode — used by ``interlocks crap``). ``changed``, when given,
+    threshold (gate mode — used by ``interlocks gate crap``). ``changed``, when given,
     filters to functions in those paths.
     """
     rows: list[CrapRow] = []
@@ -265,7 +265,7 @@ def read_mutation_summary(*, require_interlocks_evidence: bool = True) -> Mutati
     """Return a parsed mutation summary from ``mutmut results --all=true``.
 
     Returns ``None`` when no mutmut output directory exists (no prior run), or
-    when the latest mutmut stats were not produced by ``interlocks mutation``.
+    when the latest mutmut stats were not produced by ``interlocks gate mutation``.
     Does not run mutation; only reads cached results.
     """
     if not any(Path(p).is_dir() for p in ("mutants", ".mutmut-cache")):

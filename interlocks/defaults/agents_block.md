@@ -6,9 +6,9 @@ After edits, run `interlocks check`. If a gate fails, fix it and re-run. Do not 
 |---|---|
 | `interlocks check` | First command after edits: fix, format, typecheck, tests, optional acceptance/properties, advisory gates |
 | `interlocks doctor` | Diagnose paths, tools, config, and setup state when checks fail |
-| `interlocks pre-commit` | Pre-commit stage, normally run by the installed git hook |
+| `interlocks hook pre-commit` | Pre-commit stage, normally run by the installed git hook |
 | `interlocks ci` | PR/CI stage with blocking verification |
-| `interlocks unblock` | Multi-rule lint fix: discover + plan + optimize fixable ruff rules into `.lintfix/`; `--apply` mutates after verify, restores on fail |
+| `interlocks fix unblock` | Multi-rule lint fix: discover + plan + optimize fixable ruff rules into `.lintfix/`; `--apply` mutates after verify, restores on fail |
 | `interlocks nightly` | Scheduled long-running coverage/properties/audit/mutation stage |
 | `interlocks warm` | Pre-fetch bundled tool wheels into `~/.cache/uv` for `UV_OFFLINE=1` |
 | `interlocks setup --check` | Verify local integrations read-only |

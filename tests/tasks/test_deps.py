@@ -1,4 +1,4 @@
-"""Integration + unit tests for `interlocks deps` (deptry dependency hygiene)."""
+"""Integration + unit tests for `interlocks gate deps` (deptry dependency hygiene)."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def dirty_project(tmp_path: Path) -> Path:
 
 def _run_deps(cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "deps"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "deps"],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -99,7 +99,7 @@ def test_deps_json_uses_shared_runner(monkeypatch: pytest.MonkeyPatch) -> None:
     from interlocks.tasks import deps as deps_mod
 
     captured: list[tuple[str, Task]] = []
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps", "--json"])
     monkeypatch.setattr(
         deps_mod,
         "run_task_json",
@@ -122,7 +122,7 @@ def test_deps_json_reports_gate_result(
     from interlocks.tasks import deps as deps_mod
 
     task = Task("Deps (deptry)", [sys.executable, "-c", ""], label="deps", display="deptry")
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps", "--json"])
     monkeypatch.setattr(deps_mod, "task_deps", lambda: task)
 
     deps_mod.cmd_deps()

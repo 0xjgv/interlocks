@@ -1,4 +1,4 @@
-"""Shared pytest-bdd fixtures for the interlocks acceptance suite."""
+"""Shared pytest-bdd fixtures for the interlocks gate acceptance suite."""
 
 from __future__ import annotations
 
@@ -261,7 +261,7 @@ def make_tmp_project(tmp_path: Path) -> Path:
       - tests/test_ok.py (a single `def test_ok(): assert True`)
 
     ``tests/`` is deliberately *not* a Python package — that keeps the
-    default ``interlocks arch`` contract (src ↛ tests) dormant, so the tmp
+    default ``interlocks gate arch`` contract (src ↛ tests) dormant, so the tmp
     project's ``ci`` stage doesn't need ``src/`` on ``PYTHONPATH`` for
     import-linter to resolve ``tmp``.
     """

@@ -1,4 +1,4 @@
-"""Tests for ``interlocks fix-rule``.
+"""Tests for ``interlocks fix rule``.
 
 Two layers:
 
@@ -75,7 +75,7 @@ def repo(tmp_path: Path) -> Path:
 
 def _run_fix_rule(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-rule", "--base=HEAD", *args],
+        [sys.executable, "-m", "interlocks.cli", "fix", "rule", "--base=HEAD", *args],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -101,7 +101,7 @@ def test_plan_mode_json_reports_auto_eligible(repo: Path) -> None:
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload["command"] == "fix-rule"
+    assert payload["command"] == "fix rule"
     assert payload["passed"] is True
     assert payload["status"] == "auto-eligible"
     assert payload["rule"] == "I001"
@@ -204,7 +204,7 @@ def test_missing_rule_json_exits_with_usage(repo: Path) -> None:
 
     assert result.returncode == 2
     payload = json.loads(result.stdout)
-    assert payload["command"] == "fix-rule"
+    assert payload["command"] == "fix rule"
     assert payload["passed"] is False
     assert payload["status"] == "missing-rule"
     assert "missing required --rule" in payload["error"]
@@ -214,18 +214,18 @@ def test_required_rule_missing_json_payload_is_exact(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-rule", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "rule", "--json"])
 
     with pytest.raises(SystemExit) as exc:
         fix_rule_mod._required_rule()
 
     assert exc.value.code == 2
     assert json.loads(capsys.readouterr().out) == {
-        "command": "fix-rule",
+        "command": "fix rule",
         "passed": False,
         "status": "missing-rule",
         "error": "missing required --rule=<value>",
-        "usage": "usage: interlocks fix-rule --rule=<value> [--apply] [--json]",
+        "usage": "usage: interlocks fix rule --rule=<value> [--apply] [--json]",
     }
 
 
@@ -302,7 +302,7 @@ def test_resolve_args_falls_back_to_argv(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(
         sys,
         "argv",
-        ["interlocks", "fix-rule", "--rule=I001", "--apply", "--base=dev"],
+        ["interlocks", "fix", "rule", "--rule=I001", "--apply", "--base=dev"],
     )
     resolved = fix_rule_mod._resolve_args(None, None, None, None, None)
     assert resolved.rule == "I001"

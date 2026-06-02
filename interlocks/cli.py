@@ -36,9 +36,7 @@ from interlocks.stages.clean import cmd_clean
 from interlocks.stages.nightly import cmd_nightly
 from interlocks.stages.post_edit import cmd_post_edit
 from interlocks.stages.pre_commit import cmd_pre_commit
-from interlocks.stages.setup_hooks import cmd_hooks
 from interlocks.tasks.acceptance import cmd_acceptance
-from interlocks.tasks.agents import cmd_agents
 from interlocks.tasks.arch import cmd_arch
 from interlocks.tasks.audit import cmd_audit
 from interlocks.tasks.baseline_cmd import cmd_baseline
@@ -62,13 +60,11 @@ from interlocks.tasks.fix_rule import cmd_fix_rule
 from interlocks.tasks.format import cmd_format
 from interlocks.tasks.format_check import cmd_format_check
 from interlocks.tasks.init import cmd_init
-from interlocks.tasks.init_acceptance import cmd_init_acceptance
 from interlocks.tasks.lint import cmd_lint
 from interlocks.tasks.mutation import cmd_mutation
-from interlocks.tasks.properties import cmd_init_properties, cmd_properties
+from interlocks.tasks.properties import cmd_properties
 from interlocks.tasks.property_candidates import cmd_property_candidates
 from interlocks.tasks.setup import cmd_setup
-from interlocks.tasks.setup_skill import cmd_setup_skill
 from interlocks.tasks.stats import cmd_trust
 from interlocks.tasks.test import cmd_test
 from interlocks.tasks.typecheck import cmd_typecheck
@@ -130,17 +126,64 @@ def cmd_task_help(task_name: str) -> None:
             print(f"  {spec.name:<{width}}  {spec.kind:<{kind_width}}{spec.description}{default}")
 
 
+def cmd_gate_help() -> None:
+    names = _nested_command_names("gate")
+    if ui.is_json():
+        ui.print_json({
+            **_task_help_payload("gate"),
+            "subcommands": [_help_command_payload(name) for name in names],
+        })
+        return
+    cmd_task_help("gate")
+    ui.section("Gates")
+    width = max(len(name) for name in names) + 2
+    for name in names:
+        _, description = TASKS[name]
+        _print_command_row(name, description, width)
+
+
+def cmd_hook_help() -> None:
+    names = _nested_command_names("hook")
+    if ui.is_json():
+        ui.print_json({
+            **_task_help_payload("hook"),
+            "subcommands": [_help_command_payload(name) for name in names],
+        })
+        return
+    cmd_task_help("hook")
+    ui.section("Hooks")
+    width = max(len(name) for name in names) + 2
+    for name in names:
+        _, description = TASKS[name]
+        _print_command_row(name, description, width)
+
+
+def _nested_command_names(parent: str) -> tuple[str, ...]:
+    prefix = parent + " "
+    return tuple(name for _, group in TASK_GROUPS for name in group if name.startswith(prefix))
+
+
 def cmd_help_from_argv() -> None:
     positionals = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
     if positionals and ALIASES.get(positionals[0], positionals[0]) == "help":
         target = positionals[1:]
         if target:
-            task_name = ALIASES.get(target[0], target[0])
+            task_name = _resolve_help_target(target)
             if task_name not in TASKS:
-                fail_skip(f"help: unknown command {target[0]!r}")
+                fail_skip(f"help: unknown command {' '.join(target)!r}")
             cmd_task_help(task_name)
             return
     cmd_help(advanced="--advanced" in sys.argv[1:])
+
+
+def _resolve_help_target(target: list[str]) -> str:
+    if len(target) >= 2:
+        requested = f"{target[0]} {target[1]}"
+        resolved = ALIASES.get(requested, requested)
+        if resolved in TASKS:
+            return resolved
+    requested = target[0]
+    return ALIASES.get(requested, requested)
 
 
 def _help_payload(cfg: InterlockConfig | None, *, advanced: bool) -> dict[str, object]:
@@ -416,26 +459,9 @@ def _write_project_preset(pyproject: Path, preset: str) -> None:
 
 
 _HELP_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Start here", ("doctor", "check", "ci", "setup")),
-    (
-        "Common gates",
-        (
-            "fix",
-            "fix-optimize",
-            "format",
-            "format-check",
-            "lint",
-            "typecheck",
-            "test",
-            "coverage",
-            "properties",
-            "audit",
-            "deps",
-            "arch",
-            "acceptance",
-        ),
-    ),
-    ("Project", ("init", "config", "presets", "version")),
+    ("Start here", ("doctor", "setup", "check", "ci", "nightly")),
+    ("Direct access", ("gate", "fix")),
+    ("Project", ("init", "config", "presets", "explain", "clean", "version")),
 )
 
 
@@ -505,51 +531,48 @@ def _print_verbose_detected_block(cfg: InterlockConfig) -> None:
 
 
 TASK_HANDLERS: dict[str, Callable[..., None]] = {
-    "acceptance": cmd_acceptance,
-    "agents": cmd_agents,
-    "arch": cmd_arch,
-    "audit": cmd_audit,
     "baseline": cmd_baseline,
-    "behavior-attribution": cmd_behavior_attribution,
     "check": cmd_check,
     "ci": cmd_ci,
     "clean": cmd_clean,
-    "complexity": cmd_complexity,
     "config": cmd_config,
-    "coverage": cmd_coverage,
-    "crap": cmd_crap,
-    "deps": cmd_deps,
-    "deps-freshness": cmd_deps_freshness,
     "doctor": cmd_doctor,
     "evaluate": cmd_evaluate,
     "explain": cmd_explain,
     "fix": cmd_fix,
-    "fix-annotate": cmd_fix_annotate,
-    "fix-metrics": cmd_fix_metrics,
-    "fix-optimize": cmd_fix_optimize,
-    "fix-plan": cmd_fix_plan,
-    "fix-replay": cmd_fix_replay,
-    "fix-rule": cmd_fix_rule,
-    "format": cmd_format,
-    "format-check": cmd_format_check,
+    "fix annotate": cmd_fix_annotate,
+    "fix metrics": cmd_fix_metrics,
+    "fix optimize": cmd_fix_optimize,
+    "fix plan": cmd_fix_plan,
+    "fix replay": cmd_fix_replay,
+    "fix rule": cmd_fix_rule,
+    "gate": cmd_gate_help,
+    "gate acceptance": cmd_acceptance,
+    "gate arch": cmd_arch,
+    "gate audit": cmd_audit,
+    "gate behavior-attribution": cmd_behavior_attribution,
+    "gate complexity": cmd_complexity,
+    "gate coverage": cmd_coverage,
+    "gate crap": cmd_crap,
+    "gate deps": cmd_deps,
+    "gate deps-freshness": cmd_deps_freshness,
+    "gate format": cmd_format,
+    "gate format-check": cmd_format_check,
+    "gate lint": cmd_lint,
+    "gate mutation": cmd_mutation,
+    "gate properties": cmd_properties,
+    "gate test": cmd_test,
+    "gate typecheck": cmd_typecheck,
     "help": cmd_help_from_argv,
+    "hook": cmd_hook_help,
+    "hook post-edit": cmd_post_edit,
+    "hook pre-commit": cmd_pre_commit,
     "init": cmd_init,
-    "init-acceptance": cmd_init_acceptance,
-    "init-properties": cmd_init_properties,
-    "lint": cmd_lint,
-    "mutation": cmd_mutation,
     "nightly": cmd_nightly,
-    "post-edit": cmd_post_edit,
-    "pre-commit": cmd_pre_commit,
     "presets": cmd_presets,
-    "properties": cmd_properties,
     "property-candidates": cmd_property_candidates,
     "setup": cmd_setup,
-    "setup-hooks": cmd_hooks,
-    "setup-skill": cmd_setup_skill,
-    "test": cmd_test,
     "trust": cmd_trust,
-    "typecheck": cmd_typecheck,
     "version": cmd_version,
     "warm": cmd_warm,
 }
@@ -575,6 +598,8 @@ TASK_GROUPS: list[tuple[str, dict[str, tuple[Callable[..., None], str]]]] = (
 TASKS: dict[str, tuple[Callable[..., None], str]] = {
     name: entry for _, group in TASK_GROUPS for name, entry in group.items()
 }
+
+_NESTED_COMMANDS: frozenset[str] = frozenset({"fix", "gate", "hook"})
 
 
 def main() -> None:
@@ -602,11 +627,26 @@ def _resolve_task_name(raw_args: list[str]) -> str | None:
             _fail_missing_command()
         cmd_help_from_argv()
         return None
-    requested = args[0]
-    task_name = ALIASES.get(requested, requested)
-    if task_name not in TASKS:
+    task_name = _match_task_name(args)
+    if task_name is None:
+        requested = " ".join(args[:2]) if args[0] in _NESTED_COMMANDS else args[0]
         _fail_unknown_command(requested)
     return task_name
+
+
+def _match_task_name(positionals: list[str]) -> str | None:
+    if len(positionals) >= 2:
+        requested = f"{positionals[0]} {positionals[1]}"
+        task_name = ALIASES.get(requested, requested)
+        if task_name in TASKS:
+            return task_name
+        if positionals[0] in _NESTED_COMMANDS:
+            return None
+    requested = positionals[0]
+    task_name = ALIASES.get(requested, requested)
+    if task_name in TASKS:
+        return task_name
+    return None
 
 
 def _maybe_render_task_help(task_name: str, raw_args: list[str]) -> bool:

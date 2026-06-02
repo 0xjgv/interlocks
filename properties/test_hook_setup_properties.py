@@ -14,9 +14,9 @@ _TEXT = st.text(max_size=40)
 _KEY = st.text(min_size=1, max_size=20)
 _SCALAR = st.one_of(st.none(), st.booleans(), st.integers(), _TEXT)
 _POST_EDIT_COMMANDS = st.sampled_from((
-    "uv run interlocks post-edit",
-    "python -m interlocks.cli post-edit",
-    "/example/.venv/bin/python -m interlocks.cli post-edit",
+    "uv run interlocks hook post-edit",
+    "python -m interlocks.cli hook post-edit",
+    "/example/.venv/bin/python -m interlocks.cli hook post-edit",
 ))
 _COMMAND = st.one_of(_TEXT, _POST_EDIT_COMMANDS)
 _HOOK = st.one_of(
@@ -123,7 +123,7 @@ def test_ensure_stop_hook_removes_prior_post_edit_commands() -> None:
             "Stop": [
                 {
                     "hooks": [
-                        {"type": "command", "command": "uv run interlocks post-edit"},
+                        {"type": "command", "command": "uv run interlocks hook post-edit"},
                         {"type": "command", "command": "echo keep"},
                     ]
                 }

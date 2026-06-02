@@ -75,7 +75,7 @@ def test_complexity_json_passes_on_simple_code(
 ) -> None:
     (tmp_project / "interlocks" / "mod.py").write_text(_SIMPLE_SRC, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "complexity", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "complexity", "--json"])
 
     from interlocks.tasks.complexity import cmd_complexity
 
@@ -109,7 +109,7 @@ def test_complexity_json_fails_on_tangled_function(
 ) -> None:
     (tmp_project / "interlocks" / "mod.py").write_text(_COMPLEX_SRC, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "complexity", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "complexity", "--json"])
 
     from interlocks.tasks.complexity import cmd_complexity
 

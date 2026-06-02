@@ -355,7 +355,9 @@ def _acceptance_row(cfg: InterlockConfig) -> CheckRow:
     if acceptance_scaffold_present(cfg):
         return CheckRow("acceptance", features_target, "scaffolded", "ok")
     if cfg.acceptance_runner is not None:
-        return CheckRow("acceptance", features_target, "run `interlocks init-acceptance`", "warn")
+        return CheckRow(
+            "acceptance", features_target, "run `interlocks init --acceptance`", "warn"
+        )
     return CheckRow("acceptance", features_target, "not wired", "warn")
 
 
@@ -366,7 +368,7 @@ def _properties_row(cfg: InterlockConfig) -> CheckRow:
         return CheckRow("properties", target, "detected", "ok")
     if files:
         return CheckRow("properties", target, "replace scaffold example", "warn")
-    return CheckRow("properties", target, "run `interlocks init-properties`", "warn")
+    return CheckRow("properties", target, "run `interlocks init --properties`", "warn")
 
 
 def _crash_report_cache_row() -> CheckRow:
@@ -413,8 +415,8 @@ _NEXT_STEP_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
         ("interlocks cfg", "preset"),
         "Run `interlocks presets set progressive` to enable ratcheting defaults.",
     ),
-    (("acceptance",), "Run `interlocks init-acceptance` to scaffold Gherkin tests."),
-    (("properties",), "Run `interlocks init-properties` to scaffold property tests."),
+    (("acceptance",), "Run `interlocks init --acceptance` to scaffold Gherkin tests."),
+    (("properties",), "Run `interlocks init --properties` to scaffold property tests."),
     (
         ("ci workflow",),
         "Run `interlocks setup --ci=github` to install a GitHub Actions workflow, "
@@ -483,9 +485,9 @@ def _properties_next_step(row: CheckRow) -> str:
     if row.detail == "replace scaffold example":
         return (
             f"Replace {row.target}/test_example_properties.py with domain invariants, "
-            "then run `interlocks properties --profile=check`."
+            "then run `interlocks gate properties --profile=check`."
         )
-    return "Run `interlocks init-properties` to scaffold property tests."
+    return "Run `interlocks init --properties` to scaffold property tests."
 
 
 def _detected_json(

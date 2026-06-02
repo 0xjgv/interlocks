@@ -80,23 +80,23 @@ _EVALUATE = ClosurePath("interlocks evaluate", "task", "static config and metada
 _ACCEPTANCE_TRACE = ClosurePath(
     "interlocks evaluate",
     "task",
-    "traceability is feature metadata; interlocks acceptance only runs scenarios",
+    "traceability is feature metadata; interlocks gate acceptance only runs scenarios",
 )
 _CI_STAGE = ClosurePath("interlocks ci", "stage", "PR-grade merge gate owner")
 _NIGHTLY_STAGE = ClosurePath("interlocks nightly", "stage", "long-running gate owner")
 _INIT_ACCEPTANCE = ClosurePath(
-    "interlocks init-acceptance", "task", "scaffolds acceptance feature files"
+    "interlocks init --acceptance", "task", "scaffolds acceptance feature files"
 )
 _ACCEPTANCE_RUNNER = ClosurePath(
-    "interlocks acceptance", "task", "executes Gherkin scenarios outside evaluate"
+    "interlocks gate acceptance", "task", "executes Gherkin scenarios outside evaluate"
 )
 _INIT_PROPERTIES = ClosurePath(
-    "interlocks init-properties", "task", "scaffolds Hypothesis property-test files"
+    "interlocks init --properties", "task", "scaffolds Hypothesis property-test files"
 )
 _PROPERTIES = ClosurePath(
-    "interlocks properties", "task", "executes generated-input property tests"
+    "interlocks gate properties", "task", "executes generated-input property tests"
 )
-_AUDIT = ClosurePath("interlocks audit", "task", "vulnerability audit owns severity policy")
+_AUDIT = ClosurePath("interlocks gate audit", "task", "vulnerability audit owns severity policy")
 _MISSING_PYPROJECT_NEXT_ACTION = (
     "Run `interlocks init` to scaffold pyproject.toml, tests, and interlocks defaults."
 )
@@ -261,7 +261,7 @@ def _acceptance_item(cfg: InterlockConfig) -> EvaluationItem:
             "acceptance",
             0,
             detail,
-            "Run `interlocks init-acceptance` to scaffold feature files.",
+            "Run `interlocks init --acceptance` to scaffold feature files.",
             closure=_INIT_ACCEPTANCE,
         )
     if scenario_total == 0:
@@ -349,7 +349,7 @@ def _properties_item(cfg: InterlockConfig) -> EvaluationItem:
             "properties",
             0,
             "no property tests detected",
-            "Run `interlocks init-properties` and replace the example with domain invariants.",
+            "Run `interlocks init --properties` and replace the example with domain invariants.",
             closure=_INIT_PROPERTIES,
         )
     if not domain_property_test_files(cfg):
@@ -468,14 +468,14 @@ def _latest_mutation_no_results(cfg: InterlockConfig) -> bool:
 
 def _mutation_rerun_action(cfg: InterlockConfig, *, no_results: bool) -> str:
     command = (
-        "interlocks mutation "
+        "interlocks gate mutation "
         f"--min-score={cfg.mutation_min_score:.0f} "
         f"--max-runtime={cfg.mutation_max_runtime}"
     )
     if no_results:
         return (
             f"Rerun `{command}` with more runtime, or use "
-            "`interlocks mutation --changed-only --since=HEAD` for a bounded local pass."
+            "`interlocks gate mutation --changed-only --since=HEAD` for a bounded local pass."
         )
     return f"Rerun `{command}`."
 
@@ -534,7 +534,7 @@ def _dependency_freshness_item(cfg: InterlockConfig) -> EvaluationItem:
 
 
 def _security_item() -> EvaluationItem:
-    audit_exposed = _cli_source_contains('"audit"')
+    audit_exposed = _cli_source_contains('"gate audit"')
     audit_in_ci = _ci_source_contains("task_audit(")
     deps_in_ci = _ci_source_contains("task_deps(")
     detail = "audit + dep hygiene in CI"
@@ -542,7 +542,7 @@ def _security_item() -> EvaluationItem:
     if audit_exposed and audit_in_ci and deps_in_ci:
         return _item("security", 3, detail)
     if not audit_exposed:
-        return _item("security", 0, detail, "Expose `interlocks audit` and task_audit().")
+        return _item("security", 0, detail, "Expose `interlocks gate audit` and task_audit().")
     if not audit_in_ci:
         return _item(
             "security",
@@ -554,7 +554,7 @@ def _security_item() -> EvaluationItem:
 
 
 def _audit_severity_item(cfg: InterlockConfig) -> EvaluationItem:
-    audit_exposed = _cli_source_contains('"audit"')
+    audit_exposed = _cli_source_contains('"gate audit"')
     audit_in_ci = _ci_source_contains("task_audit(")
     detail = "severity threshold for vulnerability audit"
 
@@ -563,7 +563,7 @@ def _audit_severity_item(cfg: InterlockConfig) -> EvaluationItem:
             "audit-severity",
             0,
             detail,
-            "Expose `interlocks audit` before configuring severity policy.",
+            "Expose `interlocks gate audit` before configuring severity policy.",
             closure=_AUDIT,
         )
     if not audit_in_ci:

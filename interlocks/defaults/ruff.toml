@@ -1,5 +1,5 @@
 # Bundled interlocks ruff defaults.
-# Used by `interlocks lint|fix|format|format-check` when the target project has
+# Used by `interlocks gate lint|fix|format|format-check` when the target project has
 # no [tool.ruff] in pyproject.toml and no ruff.toml / .ruff.toml sidecar.
 #
 # Project-local configs (per-file-ignores, isort.known-first-party) are

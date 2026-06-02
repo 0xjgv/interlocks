@@ -1,5 +1,5 @@
 @greenfield
-Feature: interlocks unblock flow on a legacy greenfield project
+Feature: interlocks fix unblock flow on a legacy greenfield project
   As an engineer asked to land a fix in an unadopted codebase
   I want the lint-fix harness to preview safe paths without rewriting unrelated code
   So that I can unblock my PR without inheriting legacy cleanup
@@ -14,38 +14,38 @@ Feature: interlocks unblock flow on a legacy greenfield project
     And the greenfield output mentions ruff
 
   # req: greenfield-fix-plan-non-mutating
-  Scenario: `interlocks fix-plan` previews fixes without mutating the tree
-    When I run "interlocks fix-plan --base=HEAD" in the greenfield project
+  Scenario: `interlocks fix plan` previews fixes without mutating the tree
+    When I run "interlocks fix plan --base=HEAD" in the greenfield project
     Then the greenfield command exits 0
     And the file ".lintfix/plan.json" exists in the greenfield project
     And the seeded source files are unchanged
     And the plan groups candidates by classification
 
   # req: greenfield-fix-rule-preview
-  Scenario: `interlocks fix-rule --rule=I001` previews without mutating
-    When I run "interlocks fix-rule --rule=I001 --base=HEAD" in the greenfield project
+  Scenario: `interlocks fix rule --rule=I001` previews without mutating
+    When I run "interlocks fix rule --rule=I001 --base=HEAD" in the greenfield project
     Then the greenfield command exits 0
     And the seeded source files are unchanged
 
   # req: greenfield-fix-optimize-non-mutating
-  Scenario: `interlocks fix-optimize` selects without mutating
-    When I run "interlocks fix-optimize --base=HEAD" in the greenfield project
+  Scenario: `interlocks fix optimize` selects without mutating
+    When I run "interlocks fix optimize --base=HEAD" in the greenfield project
     Then the greenfield command exits 0
     And the file ".lintfix/optimize.json" exists in the greenfield project
     And the optimize payload exposes selected and not_selected lists
     And the seeded source files are unchanged
 
   # req: greenfield-fix-annotate
-  Scenario: `interlocks fix-annotate` emits workflow command lines
-    Given I have run "interlocks fix-plan --base=HEAD" in the greenfield project
-    When I run "interlocks fix-annotate" in the greenfield project
+  Scenario: `interlocks fix annotate` emits workflow command lines
+    Given I have run "interlocks fix plan --base=HEAD" in the greenfield project
+    When I run "interlocks fix annotate" in the greenfield project
     Then the greenfield command exits 0
     And the greenfield output contains "::notice file="
 
   # req: greenfield-fix-metrics
-  Scenario: `interlocks fix-metrics` rolls up the per-run JSON files
-    Given I have run "interlocks fix-plan --base=HEAD" in the greenfield project
-    When I run "interlocks fix-metrics" in the greenfield project
+  Scenario: `interlocks fix metrics` rolls up the per-run JSON files
+    Given I have run "interlocks fix plan --base=HEAD" in the greenfield project
+    When I run "interlocks fix metrics" in the greenfield project
     Then the greenfield command exits 0
     And the file ".lintfix/metrics.json" exists in the greenfield project
     And the metrics payload exposes a sources truthtable

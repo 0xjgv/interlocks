@@ -520,7 +520,7 @@ def test_doctor_detects_git_pre_commit_hook(
     hooks = tmp_path / ".git" / "hooks"
     hooks.mkdir(parents=True)
     (hooks / "pre-commit").write_text(
-        "#!/bin/sh\nexec python -m interlocks.cli pre-commit\n", encoding="utf-8"
+        "#!/bin/sh\nexec python -m interlocks.cli hook pre-commit\n", encoding="utf-8"
     )
 
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
@@ -566,7 +566,7 @@ def test_doctor_warns_on_acceptance_configured_without_scaffold(
     stub_project_venv(tmp_path)
 
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
-    assert "Run `interlocks init-acceptance`" in out
+    assert "Run `interlocks init --acceptance`" in out
 
 
 def test_doctor_warns_on_missing_properties_scaffold(
@@ -576,7 +576,7 @@ def test_doctor_warns_on_missing_properties_scaffold(
     stub_project_venv(tmp_path)
 
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
-    assert "Run `interlocks init-properties`" in out
+    assert "Run `interlocks init --properties`" in out
 
 
 def test_doctor_detects_property_tests(
@@ -593,7 +593,7 @@ def test_doctor_detects_property_tests(
     out = _run_cmd_doctor(tmp_path, monkeypatch, capsys)
     assert "[properties]" in out
     assert "detected" in out
-    assert "Run `interlocks init-properties`" not in out
+    assert "Run `interlocks init --properties`" not in out
 
 
 def test_doctor_warns_when_only_property_scaffold_example_exists(
@@ -612,7 +612,7 @@ def test_doctor_warns_when_only_property_scaffold_example_exists(
     assert "[properties]" in out
     assert "replace scaffold example" in out
     assert "Replace properties/test_example_properties.py with domain invariants" in out
-    assert "Run `interlocks init-properties`" not in out
+    assert "Run `interlocks init --properties`" not in out
 
 
 def test_doctor_json_next_steps_distinguish_scaffold_only_properties(
@@ -636,7 +636,7 @@ def test_doctor_json_next_steps_distinguish_scaffold_only_properties(
         step.startswith("Replace properties/test_example_properties.py with domain invariants")
         for step in next_steps
     )
-    assert "Run `interlocks init-properties` to scaffold property tests." not in next_steps
+    assert "Run `interlocks init --properties` to scaffold property tests." not in next_steps
     assert "properties: replace scaffold example" in warnings
 
 
@@ -658,7 +658,7 @@ def test_doctor_ready_state_when_all_artifacts_wired(
     hooks = tmp_path / ".git" / "hooks"
     hooks.mkdir(parents=True)
     (hooks / "pre-commit").write_text(
-        "#!/bin/sh\nexec python -m interlocks.cli pre-commit\n", encoding="utf-8"
+        "#!/bin/sh\nexec python -m interlocks.cli hook pre-commit\n", encoding="utf-8"
     )
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".claude" / "settings.json").write_text(
@@ -667,7 +667,10 @@ def test_doctor_ready_state_when_all_artifacts_wired(
                 "Stop": [
                     {
                         "hooks": [
-                            {"type": "command", "command": "python -m interlocks.cli post-edit"}
+                            {
+                                "type": "command",
+                                "command": "python -m interlocks.cli hook post-edit",
+                            }
                         ]
                     }
                 ]

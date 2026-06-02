@@ -2,11 +2,11 @@
 
 Usage::
 
-    interlocks fix-replay                       # last 25 commits on origin/main
-    interlocks fix-replay --base=main --n=10
-    interlocks fix-replay --budget=renovation
+    interlocks fix replay                       # last 25 commits on origin/main
+    interlocks fix replay --base=main --n=10
+    interlocks fix replay --budget=renovation
 
-Drives ``interlocks fix-plan`` against each of the last N first-parent
+Drives ``interlocks fix plan`` against each of the last N first-parent
 commits on ``base`` in a temporary git worktree, aggregates per-rule
 statistics, computes a Pareto frontier, and writes
 ``.lintfix/replay.json``. Never mutates the working tree.
@@ -106,7 +106,7 @@ def _fix_replay_payload(payload: dict[str, Any], replay_path: str) -> dict[str, 
     rules = payload.get("rules")
     rule_rows = rules if isinstance(rules, list) else []
     return {
-        "command": "fix-replay",
+        "command": "fix replay",
         "passed": True,
         "status": "replayed",
         "replay_path": replay_path,
@@ -137,13 +137,13 @@ def _print_summary(
 ) -> None:
     errors = sum(1 for p in result.points if p.error)
     ui.gate_row(
-        "fix-replay",
+        "fix replay",
         plan_rel,
         "ok",
         detail=f"commits={len(result.points)} errors={errors} rules={len(rule_stats)}",
         state="ok",
     )
-    header = f"fix-replay ({base}, n={result.requested}, budget={budget_name})"
+    header = f"fix replay ({base}, n={result.requested}, budget={budget_name})"
     ui.section(header)
     ui.kv_block([
         ("commits replayed", str(len(result.points))),
@@ -160,7 +160,7 @@ def _print_summary(
 
 
 def _print_empty_summary(plan_rel: str) -> None:
-    ui.row("fix-replay", "(no candidates observed)", "ok", state="ok")
+    ui.row("fix replay", "(no candidates observed)", "ok", state="ok")
     ui.kv_block([("plan", plan_rel)])
 
 

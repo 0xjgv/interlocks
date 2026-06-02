@@ -42,7 +42,7 @@ _INIT_PROPERTIES_NEXT_ACTIONS = (
     _INIT_PROPERTIES_DEP_ACTION,
     "Create or sync the project environment if `interlocks doctor` reports one missing.",
     "Replace the example property with domain invariants.",
-    "Run `interlocks properties --profile=check`.",
+    "Run `interlocks gate properties --profile=check`.",
 )
 _INIT_PROPERTIES_DOMAIN_FILE_LIMIT = 20
 
@@ -88,7 +88,7 @@ def _hypothesis_import_check_cmd(cfg: InterlockConfig) -> list[str]:
     message = (
         "interlocks: Hypothesis is not importable in the target Python environment. "
         "Add `hypothesis` to the project's test/dev dependencies, then re-run "
-        "`interlocks properties`.\n"
+        "`interlocks gate properties`.\n"
     )
     code = (
         "import importlib.util, sys; "
@@ -158,12 +158,12 @@ def cmd_properties(*, profile_default: str = "ci") -> None:
                     cfg,
                     profile,
                     "no property tests detected",
-                    f"Run `interlocks init-properties` to scaffold {properties_dir}/.",
+                    f"Run `interlocks init --properties` to scaffold {properties_dir}/.",
                 )
             )
             return
         warn_skip(
-            "properties: no property tests detected — run `interlocks init-properties` "
+            "properties: no property tests detected — run `interlocks init --properties` "
             f"to scaffold {properties_dir}/"
         )
         return
@@ -174,7 +174,8 @@ def cmd_properties(*, profile_default: str = "ci") -> None:
                     cfg,
                     profile,
                     project_env_skip_message("properties"),
-                    "Create or sync the project environment, then rerun `interlocks properties`.",
+                    "Create or sync the project environment, then rerun "
+                    "`interlocks gate properties`.",
                 )
             )
             return
@@ -221,13 +222,13 @@ def cmd_init_properties() -> None:
                     _InitPropertiesResult(
                         status="domain-properties-present",
                         domain_files=tuple(domain_files),
-                        next_actions=("Run `interlocks properties --profile=check`.",),
+                        next_actions=("Run `interlocks gate properties --profile=check`.",),
                     ),
                 )
             )
             return
         print(f"kept {cfg.relpath(properties_dir)}/")
-        print("next: run `interlocks properties --profile=check`")
+        print("next: run `interlocks gate properties --profile=check`")
         return
     files: list[ScaffoldFile] = []
     for target, template in _init_properties_targets(properties_dir):
@@ -264,7 +265,7 @@ def _init_properties_payload(
 ) -> dict[str, object]:
     domain_paths = [cfg.relpath(path) for path in result.domain_files]
     payload: dict[str, object] = {
-        "command": "init-properties",
+        "command": "init",
         "passed": True,
         "status": result.status,
         "properties_dir": cfg.relpath(properties_dir),

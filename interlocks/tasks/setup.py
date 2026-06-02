@@ -15,8 +15,10 @@ from interlocks.runner import fail_skip, ok
 from interlocks.setup_state import (
     ADVANCE_ARTIFACT,
     CI_ARTIFACTS,
+    SETUP_ARTIFACTS,
     SetupArtifactStatus,
     advance_workflow_present,
+    artifact_statuses,
     ci_artifact_statuses,
     ci_workflow_present,
     is_git_repo,
@@ -30,7 +32,7 @@ _PROGRESSIVE_RECOMMENDATION = (
     "for autopilot ratcheting."
 )
 _GIT_INIT_SETUP_ACTION = "Run `git init`, then `interlocks setup` to install local integrations."
-_SETUP_USAGE = "usage: interlocks setup [--check] [--ci=github]"
+_SETUP_USAGE = "usage: interlocks setup [--check] [--ci=github] [--hooks|--agents|--skill]"
 _LOCAL_INSTALL_NEXT_ACTIONS = (
     "Run `interlocks check` after edits.",
     "Run `interlocks doctor` to diagnose readiness or failures.",
@@ -42,6 +44,7 @@ _CI_INSTALL_NEXT_ACTIONS = (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 
@@ -56,6 +59,33 @@ def cmd_setup() -> None:
             _cmd_setup_ci_check(project_root)
         else:
             _cmd_setup_ci_install(project_root)
+    elif args.mode == "hooks":
+        _cmd_setup_focused(
+            project_root,
+            mode="hooks",
+            labels=("git hook", "claude hook"),
+            check_only=args.check_only,
+            install=lambda: install_hooks(project_root),
+            next_actions=["Run `interlocks setup --check` to verify all local integrations."],
+        )
+    elif args.mode == "agents":
+        _cmd_setup_focused(
+            project_root,
+            mode="agents",
+            labels=("agent docs",),
+            check_only=args.check_only,
+            install=lambda: install_agent_docs(project_root),
+            next_actions=["Run `interlocks setup --check` to verify all local integrations."],
+        )
+    elif args.mode == "skill":
+        _cmd_setup_focused(
+            project_root,
+            mode="skill",
+            labels=("claude skill",),
+            check_only=args.check_only,
+            install=lambda: install_skill(project_root),
+            next_actions=["Run `interlocks setup --check` to verify all local integrations."],
+        )
     elif args.check_only:
         _cmd_setup_check(project_root)
     else:
@@ -67,12 +97,14 @@ def cmd_setup() -> None:
 class _SetupArgs:
     check_only: bool = False
     ci: Literal["github"] | None = None
+    mode: Literal["local", "hooks", "agents", "skill"] = "local"
 
 
 def _parse_args() -> _SetupArgs:
     raw = [arg for arg in sys.argv[2:] if arg not in {"--quiet", "--verbose", "--json"}]
     check_only = False
     ci: Literal["github"] | None = None
+    mode: Literal["local", "hooks", "agents", "skill"] = "local"
     for arg in raw:
         if arg == "--check":
             check_only = True
@@ -80,9 +112,66 @@ def _parse_args() -> _SetupArgs:
             ci = "github"
         elif arg.startswith("--ci="):
             _fail_setup_error("unsupported CI setup target: " + arg.split("=", 1)[1])
+        elif arg == "--hooks":
+            if mode != "local":
+                _fail_setup_error(_SETUP_USAGE)
+            mode = "hooks"
+        elif arg == "--agents":
+            if mode != "local":
+                _fail_setup_error(_SETUP_USAGE)
+            mode = "agents"
+        elif arg == "--skill":
+            if mode != "local":
+                _fail_setup_error(_SETUP_USAGE)
+            mode = "skill"
         else:
             _fail_setup_error(_SETUP_USAGE)
-    return _SetupArgs(check_only=check_only, ci=ci)
+    if ci is not None and mode != "local":
+        _fail_setup_error(_SETUP_USAGE)
+    return _SetupArgs(check_only=check_only, ci=ci, mode=mode)
+
+
+def _cmd_setup_focused(
+    project_root: Path,
+    *,
+    mode: Literal["hooks", "agents", "skill"],
+    labels: tuple[str, ...],
+    check_only: bool,
+    install: Callable[[], object],
+    next_actions: list[str],
+) -> None:
+    if not check_only:
+        if mode == "hooks" and not is_git_repo(project_root):
+            _fail_setup_error(
+                "setup: not a git repository — run `git init` first, then "
+                "`interlocks setup --hooks`",
+                next_actions=[_GIT_INIT_SETUP_ACTION],
+            )
+        install()
+    statuses = _focused_statuses(project_root, labels)
+    if ui.is_json():
+        _emit_setup_payload(
+            _setup_payload(
+                mode=mode,
+                check_only=check_only,
+                statuses=statuses,
+                next_actions=next_actions,
+            )
+        )
+        return
+    ui.section(f"Setup {mode.title()}")
+    _render_status(statuses)
+    if check_only and not all(status.installed for status in statuses):
+        _render_check_next_steps([f"Run `interlocks setup --{mode}`."])
+        sys.exit(1)
+    if ui.is_verbose():
+        ui.section("Next Steps")
+        ui.message_list(next_actions)
+
+
+def _focused_statuses(project_root: Path, labels: tuple[str, ...]) -> list[SetupArtifactStatus]:
+    statuses = artifact_statuses(SETUP_ARTIFACTS, project_root)
+    return [status for status in statuses if status.label in labels]
 
 
 def _cmd_setup_install(project_root: Path) -> None:
@@ -280,7 +369,7 @@ def _artifact_payload(status: SetupArtifactStatus) -> dict[str, object]:
         "label": status.label,
         "target": status.target,
         "installed": status.installed,
-        "status": "installed" if status.installed else "missing/stale",
+        "status": status.installed_detail if status.installed else "missing/stale",
     }
 
 
@@ -350,7 +439,7 @@ def _render_status(statuses: list[SetupArtifactStatus]) -> None:
         ui.row(
             status.label,
             status.target,
-            "installed" if status.installed else "missing/stale",
+            status.installed_detail if status.installed else "missing/stale",
             state=state,
             force=True,
         )

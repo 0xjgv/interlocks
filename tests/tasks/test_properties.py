@@ -1,4 +1,4 @@
-"""Tests for `interlocks properties` and `interlocks init-properties`."""
+"""Tests for `interlocks gate properties` and `interlocks init --properties`."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def _run_init_properties(
 
     monkeypatch.chdir(project)
     clear_cache()
-    argv = ["interlocks", "init-properties", *args]
+    argv = ["interlocks", "init", "--properties", *args]
     monkeypatch.setattr(sys, "argv", argv)
     returncode = 0
     try:
@@ -100,7 +100,7 @@ def _run_properties_command(
 
     monkeypatch.chdir(project)
     clear_cache()
-    argv = ["interlocks", "properties", *args]
+    argv = ["interlocks", "gate", "properties", *args]
     monkeypatch.setattr(sys, "argv", argv)
     returncode = 0
     try:
@@ -152,7 +152,7 @@ def test_init_properties_scaffolds_root_layout(
     assert (tmp_project / "properties" / "test_example_properties.py").is_file()
     assert "hypothesis>=6" in result.stdout
     assert "project environment" in result.stdout
-    assert "interlocks properties --profile=check" in result.stdout
+    assert "interlocks gate properties --profile=check" in result.stdout
 
 
 def test_init_properties_json_reports_scaffold_actions(
@@ -165,7 +165,7 @@ def test_init_properties_json_reports_scaffold_actions(
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     payload = json.loads(result.stdout)
     assert payload == {
-        "command": "init-properties",
+        "command": "init",
         "passed": True,
         "status": "scaffold-present",
         "properties_dir": "properties",
@@ -181,7 +181,7 @@ def test_init_properties_json_reports_scaffold_actions(
             "Add `hypothesis>=6` to test/dev dependencies if it is missing.",
             "Create or sync the project environment if `interlocks doctor` reports one missing.",
             "Replace the example property with domain invariants.",
-            "Run `interlocks properties --profile=check`.",
+            "Run `interlocks gate properties --profile=check`.",
         ],
     }
     assert (tmp_project / "properties" / "test_example_properties.py").is_file()
@@ -215,7 +215,7 @@ def test_init_properties_omits_dependency_action_when_hypothesis_declared(
         "Add `hypothesis>=6` to test/dev dependencies if it is missing."
         not in payload["next_actions"]
     )
-    assert "Run `interlocks properties --profile=check`." in payload["next_actions"]
+    assert "Run `interlocks gate properties --profile=check`." in payload["next_actions"]
 
 
 def test_init_properties_preserves_existing_files_and_creates_missing(
@@ -257,7 +257,7 @@ def test_init_properties_does_not_add_example_when_domain_properties_exist(
     assert not (properties / "test_example_properties.py").exists()
     assert "kept properties/" in result.stdout
     assert "replace the example" not in result.stdout
-    assert "interlocks properties --profile=check" in result.stdout
+    assert "interlocks gate properties --profile=check" in result.stdout
 
 
 def test_init_properties_json_reports_domain_properties_present(
@@ -276,14 +276,14 @@ def test_init_properties_json_reports_domain_properties_present(
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload == {
-        "command": "init-properties",
+        "command": "init",
         "passed": True,
         "status": "domain-properties-present",
         "properties_dir": "properties",
         "files": [],
         "domain_property_test_count": 1,
         "domain_property_tests": ["properties/test_domain_properties.py"],
-        "next_actions": ["Run `interlocks properties --profile=check`."],
+        "next_actions": ["Run `interlocks gate properties --profile=check`."],
     }
     assert not (properties / "test_example_properties.py").exists()
 
@@ -356,7 +356,7 @@ def test_cmd_properties_json_reports_missing_property_tests(
         "profile": "ci",
         "properties_dir": "properties",
         "reason": "no property tests detected",
-        "next_actions": ["Run `interlocks init-properties` to scaffold properties/."],
+        "next_actions": ["Run `interlocks init --properties` to scaffold properties/."],
     }
 
 
@@ -373,7 +373,9 @@ def test_cmd_properties_reports_missing_property_tests_before_project_env(
     payload = json.loads(result.stdout)
     assert payload["status"] == "skipped"
     assert payload["reason"] == "no property tests detected"
-    assert payload["next_actions"] == ["Run `interlocks init-properties` to scaffold properties/."]
+    assert payload["next_actions"] == [
+        "Run `interlocks init --properties` to scaffold properties/."
+    ]
 
 
 def test_cmd_properties_skips_when_project_env_missing(
@@ -412,7 +414,7 @@ def test_cmd_properties_json_reports_project_env_missing(
     monkeypatch.setattr(
         properties_mod, "project_env_skip_message", lambda label: f"{label}: no env"
     )
-    monkeypatch.setattr(sys, "argv", ["interlocks", "properties", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "properties", "--json"])
 
     properties_mod.cmd_properties()
 
@@ -433,7 +435,7 @@ def test_cmd_properties_runs_task_for_requested_profile(
     _write_property(tmp_project)
     monkeypatch.chdir(tmp_project)
     clear_cache()
-    monkeypatch.setattr(sys, "argv", ["interlocks", "properties", "--profile=check"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "properties", "--profile=check"])
     tasks: list[Task] = []
     monkeypatch.setattr(properties_mod, "run", tasks.append)
 
@@ -468,7 +470,7 @@ def test_properties_cli_skip_mentions_detected_nested_dir(tmp_project: Path) -> 
     nested = tmp_project / "tests" / "properties"
     nested.mkdir(parents=True)
 
-    result = _run_cli(tmp_project, "properties")
+    result = _run_cli(tmp_project, "gate", "properties")
 
     assert result.returncode == 0, result.stderr
     assert "to scaffold tests/properties/" in result.stdout
@@ -477,7 +479,7 @@ def test_properties_cli_skip_mentions_detected_nested_dir(tmp_project: Path) -> 
 def test_properties_cli_runs_root_property_tests(tmp_project: Path) -> None:
     _write_property(tmp_project)
 
-    result = _run_cli(tmp_project, "properties", "--profile=default")
+    result = _run_cli(tmp_project, "gate", "properties", "--profile=default")
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "[properties]" in result.stdout
@@ -503,7 +505,7 @@ def test_properties_cli_runs_nested_property_tests_without_scaffold_conftest(
         encoding="utf-8",
     )
 
-    result = _run_cli(tmp_project, "properties", "--profile=check")
+    result = _run_cli(tmp_project, "gate", "properties", "--profile=check")
 
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "[properties]" in result.stdout
@@ -551,7 +553,11 @@ def test_properties_rejects_unknown_profile_before_env_check(
     monkeypatch.chdir(tmp_project)
     clear_cache()
     monkeypatch.setattr(properties_mod, "project_env_ready", lambda _cfg: False)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "properties", "--profile=slow", "--json"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["interlocks", "gate", "properties", "--profile=slow", "--json"],
+    )
 
     with pytest.raises(SystemExit) as exc:
         properties_mod.cmd_properties()
@@ -1309,7 +1315,7 @@ def test_property_candidates_text_output_reports_no_candidates(
         result.stdout
     )
     assert "extract or add typed, side-effect-light domain functions" in result.stdout
-    assert "interlocks init-properties" in result.stdout
+    assert "interlocks init --properties" in result.stdout
 
 
 def test_property_candidates_changed_scope_filters_and_skips_bad_python(

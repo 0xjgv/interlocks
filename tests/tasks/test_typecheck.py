@@ -70,7 +70,7 @@ def test_typecheck_json_clean_exits_zero(
 
     (tmp_project / "interlocks" / "mod.py").write_text(CLEAN, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "typecheck", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "typecheck", "--json"])
     clear_cache()
 
     cmd_typecheck()
@@ -106,7 +106,7 @@ def test_typecheck_json_violating_exits_nonzero(
 
     (tmp_project / "interlocks" / "mod.py").write_text(VIOLATING, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "typecheck", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "typecheck", "--json"])
     clear_cache()
 
     with pytest.raises(SystemExit) as excinfo:
@@ -371,7 +371,7 @@ def test_cmd_typecheck_json_skips_without_project_env(
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "typecheck", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "typecheck", "--json"])
     clear_cache()
 
     cmd_typecheck()
@@ -382,7 +382,7 @@ def test_cmd_typecheck_json_skips_without_project_env(
     assert payload["status"] == "skipped"
     assert "no project environment" in payload["reason"]
     assert payload["next_actions"] == [
-        "Create or sync the project environment, then rerun `interlocks typecheck`."
+        "Create or sync the project environment, then rerun `interlocks gate typecheck`."
     ]
 
 

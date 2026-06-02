@@ -84,7 +84,7 @@ def test_mutation_exits_when_enforced_and_below_threshold(
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
     _run_coverage(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--max-runtime=30"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--max-runtime=30"])
 
     from interlocks.tasks.mutation import cmd_mutation
 
@@ -106,7 +106,7 @@ def test_mutation_stays_advisory_when_not_enforced(
     monkeypatch.chdir(tmp_project)
     monkeypatch.syspath_prepend(str(tmp_project))
     _run_coverage(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "mutation", "--max-runtime=30"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "mutation", "--max-runtime=30"])
 
     from interlocks.tasks.mutation import cmd_mutation
 

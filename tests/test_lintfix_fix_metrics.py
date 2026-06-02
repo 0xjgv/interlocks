@@ -1,4 +1,4 @@
-"""Unit + integration tests for ``interlocks fix-metrics``."""
+"""Unit + integration tests for ``interlocks fix metrics``."""
 
 from __future__ import annotations
 
@@ -170,7 +170,7 @@ def test_missing_all_inputs_writes_empty_metrics(
     assert "optimize" not in payload
     assert "replay" not in payload
     out = capsys.readouterr().out
-    assert "[fix-metrics]" in out
+    assert "[fix metrics]" in out
     assert ".lintfix/metrics.json" in out
     assert "sources=none" in out
 
@@ -178,14 +178,14 @@ def test_missing_all_inputs_writes_empty_metrics(
 def test_fix_metrics_json_writes_and_emits_metrics(
     project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-metrics", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "metrics", "--json"])
 
     fix_metrics.cmd_fix_metrics()
 
     captured = capsys.readouterr()
     assert captured.err == ""
     payload = json.loads(captured.out)
-    assert payload["command"] == "fix-metrics"
+    assert payload["command"] == "fix metrics"
     assert payload["passed"] is True
     assert payload["metrics_path"] == ".lintfix/metrics.json"
     assert payload["sources"] == {"plan": False, "optimize": False, "replay": False}
@@ -197,7 +197,7 @@ def test_fix_metrics_payload_defaults_missing_sources_to_empty_mapping(project: 
     missing_path = project / ".lintfix" / "missing-metrics.json"
 
     assert fix_metrics._fix_metrics_payload(project, missing_path) == {
-        "command": "fix-metrics",
+        "command": "fix metrics",
         "passed": True,
         "metrics_path": ".lintfix/missing-metrics.json",
         "sources": {},
@@ -260,7 +260,7 @@ def test_cli_entrypoint_writes_metrics(project: Path) -> None:
         encoding="utf-8",
     )
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-metrics"],
+        [sys.executable, "-m", "interlocks.cli", "fix", "metrics"],
         cwd=project,
         capture_output=True,
         text=True,
@@ -268,5 +268,5 @@ def test_cli_entrypoint_writes_metrics(project: Path) -> None:
     )
     assert result.returncode == 0, result.stderr + result.stdout
     assert (project / ".lintfix" / "metrics.json").is_file()
-    assert "[fix-metrics]" in result.stdout
+    assert "[fix metrics]" in result.stdout
     assert ".lintfix/metrics.json" in result.stdout

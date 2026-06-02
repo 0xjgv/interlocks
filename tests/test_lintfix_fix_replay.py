@@ -1,4 +1,4 @@
-"""Tests for ``interlocks fix-replay``.
+"""Tests for ``interlocks fix replay``.
 
 Two layers:
 
@@ -72,7 +72,7 @@ def repo_with_history(tmp_path: Path) -> Path:
 
 def _run_fix_replay(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-replay", "--base=main", *args],
+        [sys.executable, "-m", "interlocks.cli", "fix", "replay", "--base=main", *args],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -118,7 +118,7 @@ def test_fix_replay_json_reports_replay_summary(repo_with_history: Path) -> None
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload["command"] == "fix-replay"
+    assert payload["command"] == "fix replay"
     assert payload["passed"] is True
     assert payload["status"] == "replayed"
     assert payload["replay_path"] == ".lintfix/replay.json"
@@ -210,7 +210,7 @@ def test_cmd_fix_replay_serializes_recommendation_payload(
     assert f401["recommended_mode"] == "auto"
     assert f401["rationale"]
     out = capsys.readouterr().out
-    assert "[fix-replay]" in out
+    assert "[fix replay]" in out
     assert ".lintfix/replay.json" in out
     assert "commits=5" in out
     assert "rules=1" in out
@@ -225,7 +225,7 @@ def _completed(rc: int, stdout: str = "", stderr: str = "") -> subprocess.Comple
 
 def test_run_plan_and_load_bad_rc_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(replay_module, "_run", lambda *_a, **_kw: _completed(1, stderr="boom"))
-    with pytest.raises(replay_module._ReplayError, match="fix-plan rc=1"):
+    with pytest.raises(replay_module._ReplayError, match="fix plan rc=1"):
         replay_module._run_plan_and_load(tmp_path, "parentsha", "unblock", "commitsha")
 
 
@@ -300,11 +300,11 @@ def test_replay_one_surfaces_replay_error(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(replay_module, "_remove_worktree", lambda *_a: None)
 
     def _boom(*_a: object) -> object:
-        raise replay_module._ReplayError("fix-plan rc=2: kaboom")
+        raise replay_module._ReplayError("fix plan rc=2: kaboom")
 
     monkeypatch.setattr(replay_module, "_run_plan_and_load", _boom)
     point = replay_module._replay_one("commitsha", "unblock", tmp_path, "main")
-    assert point.error == "fix-plan rc=2: kaboom"
+    assert point.error == "fix plan rc=2: kaboom"
     assert point.samples == ()
 
 

@@ -342,7 +342,7 @@ def test_acceptance_item_without_feature_files_requests_scaffold(detail: str) ->
     assert item.category == "acceptance"
     assert item.score == 0
     assert item.detail == detail
-    assert item.next_action == "Run `interlocks init-acceptance` to scaffold feature files."
+    assert item.next_action == "Run `interlocks init --acceptance` to scaffold feature files."
 
 
 @given(detail=_DETAIL)
@@ -531,7 +531,9 @@ def test_mutation_item_partial_evidence_reduces_score(completed: bool | None) ->
     if completed is False:
         assert item.score == 2
         assert item.status == "warn"
-        assert item.next_action is not None and "Rerun `interlocks mutation" in item.next_action
+        assert (
+            item.next_action is not None and "Rerun `interlocks gate mutation" in item.next_action
+        )
     else:
         assert item.score == 3
         assert item.status == "ok"
@@ -560,7 +562,7 @@ def test_mutation_rerun_action_only_suggests_changed_only_for_no_results(
 
     action = _mutation_rerun_action(cfg, no_results=no_results)
 
-    assert f"interlocks mutation --min-score={min_score:.0f}" in action
+    assert f"interlocks gate mutation --min-score={min_score:.0f}" in action
     assert f"--max-runtime={max_runtime}" in action
     assert ("--changed-only" in action) is no_results
     assert ("--since=HEAD" in action) is no_results
@@ -584,9 +586,11 @@ def test_mutation_rerun_action_partial_evidence_uses_full_rerun_command(
         mutation_max_runtime=max_runtime,
     )
 
-    assert _mutation_rerun_action(cfg, no_results=False) == (
-        f"Rerun `interlocks mutation --min-score={min_score:.0f} --max-runtime={max_runtime}`."
+    expected = (
+        f"Rerun `interlocks gate mutation --min-score={min_score:.0f} "
+        f"--max-runtime={max_runtime}`."
     )
+    assert _mutation_rerun_action(cfg, no_results=False) == expected
 
 
 @given(
@@ -611,7 +615,7 @@ def test_mutation_rerun_action_no_results_names_bounded_local_pass(
 
     assert f"--min-score={min_score:.0f}" in action
     assert f"--max-runtime={max_runtime}" in action
-    assert "`interlocks mutation --changed-only --since=HEAD`" in action
+    assert "`interlocks gate mutation --changed-only --since=HEAD`" in action
 
 
 @given(completed=st.one_of(st.none(), st.booleans(), st.integers(), st.text(max_size=20)))
@@ -798,7 +802,7 @@ def test_properties_item_without_property_files_requests_init(
     assert item.category == "properties"
     assert item.score == 0
     assert item.next_action == (
-        "Run `interlocks init-properties` and replace the example with domain invariants."
+        "Run `interlocks init --properties` and replace the example with domain invariants."
     )
 
 
@@ -1162,7 +1166,7 @@ def _security_item_for(
         patch.object(
             evaluate_mod,
             "_cli_source_contains",
-            lambda needle: audit_exposed if needle == '"audit"' else False,
+            lambda needle: audit_exposed if needle == '"gate audit"' else False,
         ),
         patch.object(
             evaluate_mod,
@@ -1190,7 +1194,7 @@ def test_security_item_scores_audit_and_dependency_ci_wiring(
         assert item.next_action is None
     elif not audit_exposed:
         assert item.score == 0
-        assert item.next_action == "Expose `interlocks audit` and task_audit()."
+        assert item.next_action == "Expose `interlocks gate audit` and task_audit()."
     elif not audit_in_ci:
         assert item.score == (2 if deps_in_ci else 1)
         assert item.next_action == "Wire task_audit() into `interlocks ci`."

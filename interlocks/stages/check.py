@@ -142,7 +142,7 @@ def _test_task(
         _skip_under_changed(
             "test",
             "full-suite, not file-level",
-            "Run `interlocks test` for the full suite.",
+            "Run `interlocks gate test` for the full suite.",
         )
         return None
     if not project_env_ready(cfg):
@@ -197,7 +197,7 @@ def _acceptance_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None
         _skip_under_changed(
             "acceptance",
             "scenario-level, not file-level",
-            "Run `interlocks acceptance` for full scenario coverage.",
+            "Run `interlocks gate acceptance` for full scenario coverage.",
         )
         return None
     acceptance = classify_acceptance_with_details(cfg)
@@ -217,7 +217,7 @@ def _properties_task(cfg: InterlockConfig, scope_ref: str | None) -> Task | None
         _skip_under_changed(
             "properties",
             "property-wide, not file-level",
-            "Run `interlocks properties --profile=check` for generated-input coverage.",
+            "Run `interlocks gate properties --profile=check` for generated-input coverage.",
         )
         return None
     return task_properties(profile="check")
@@ -232,7 +232,7 @@ def _run_advisory(
         _skip_under_changed(
             "deps",
             "graph-wide by construction",
-            "Run `interlocks deps` for dependency graph checks.",
+            "Run `interlocks gate deps` for dependency graph checks.",
         )
     run_unless_skipped(
         "crap",
@@ -245,7 +245,7 @@ def _run_advisory(
         _skip_under_changed(
             "attribution",
             "registry-wide",
-            "Run `interlocks behavior-attribution` for registry-wide attribution.",
+            "Run `interlocks gate behavior-attribution` for registry-wide attribution.",
         )
 
 

@@ -36,7 +36,7 @@ def test_deps_freshness_passes_when_no_outdated_packages(
 def test_deps_freshness_json_passes_when_no_outdated_packages(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps-freshness", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps-freshness", "--json"])
     monkeypatch.setattr(freshness_mod, "capture", lambda _cmd: _StubProc(0, "[]"))
 
     freshness_mod.cmd_deps_freshness()
@@ -72,7 +72,7 @@ def test_deps_freshness_fails_when_packages_are_outdated(
 def test_deps_freshness_json_fails_when_packages_are_outdated(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps-freshness", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps-freshness", "--json"])
     monkeypatch.setattr(
         freshness_mod,
         "capture",
@@ -109,7 +109,7 @@ def test_deps_freshness_fails_on_lookup_error(
 def test_deps_freshness_json_fails_on_lookup_error(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps-freshness", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps-freshness", "--json"])
     monkeypatch.setattr(freshness_mod, "capture", lambda _cmd: _StubProc(2, stderr="network down"))
 
     with pytest.raises(SystemExit) as exc:
@@ -156,7 +156,7 @@ def test_deps_freshness_falls_back_to_uv_when_target_python_has_no_pip(
 def test_deps_freshness_json_falls_back_to_uv_when_target_python_has_no_pip(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps-freshness", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps-freshness", "--json"])
     monkeypatch.setattr(freshness_mod, "detect_target_interpreter", lambda _root: None)
     monkeypatch.setattr(
         freshness_mod.shutil,
@@ -188,7 +188,7 @@ def test_freshness_retry_notice_json_is_exact(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps-freshness", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps-freshness", "--json"])
 
     freshness_mod._freshness_retry_notice()
 
@@ -208,7 +208,7 @@ def test_freshness_retry_notice_human_is_exact(
     def fake_warn_skip(message: str) -> None:
         notices.append(message)
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "deps-freshness"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "deps-freshness"])
     monkeypatch.setattr(freshness_mod, "warn_skip", fake_warn_skip)
 
     freshness_mod._freshness_retry_notice()

@@ -226,7 +226,7 @@ def test_fail_setup_error_json_payload_uses_default_help_action(
         "passed": False,
         "status": "error",
         "error": "unsupported option",
-        "usage": "usage: interlocks setup [--check] [--ci=github]",
+        "usage": "usage: interlocks setup [--check] [--ci=github] [--hooks|--agents|--skill]",
         "next_actions": ["Run `interlocks help setup` for supported flags."],
     }
 
@@ -277,12 +277,12 @@ def test_setup_installs_hooks_agent_docs_and_skill(
     pre_commit = tmp_path / ".git" / "hooks" / "pre-commit"
     assert pre_commit.is_file()
     assert os.access(pre_commit, os.X_OK)
-    assert "-m interlocks.cli pre-commit" in pre_commit.read_text(encoding="utf-8")
+    assert "-m interlocks.cli hook pre-commit" in pre_commit.read_text(encoding="utf-8")
 
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     hooks = settings["hooks"]["Stop"][0]["hooks"]
     assert any(
-        hook["type"] == "command" and hook["command"].endswith("-m interlocks.cli post-edit")
+        hook["type"] == "command" and hook["command"].endswith("-m interlocks.cli hook post-edit")
         for hook in hooks
     )
 
@@ -302,7 +302,7 @@ def test_setup_installs_hooks_agent_docs_and_skill(
     installed_text = installed.read_text(encoding="utf-8")
     assert "unblock" in installed_text
     assert "properties run in `check`" in installed_text
-    assert "il properties --profile=check" in installed_text
+    assert "il gate properties --profile=check" in installed_text
 
 
 def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -316,7 +316,7 @@ def test_setup_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     settings = json.loads((tmp_path / ".claude" / "settings.json").read_text(encoding="utf-8"))
     hooks = settings["hooks"]["Stop"][0]["hooks"]
     post_edit_hooks = [
-        hook for hook in hooks if hook["command"].endswith("-m interlocks.cli post-edit")
+        hook for hook in hooks if hook["command"].endswith("-m interlocks.cli hook post-edit")
     ]
     assert len(post_edit_hooks) == 1
     assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == first_agents
@@ -424,11 +424,11 @@ def test_setup_ci_installs_github_workflow(
     assert "uses: 0xjgv/interlocks@v1" in body
     # fix-optimize is self-sufficient: it subsumes fix-plan / fix-annotate / fix-metrics,
     # so the workflow invokes it alone rather than chaining the three.
-    assert "interlocks fix-optimize" in body
+    assert "interlocks fix optimize" in body
     assert "--annotate --metrics" in body
-    assert "interlocks fix-plan" not in body
-    assert "interlocks fix-annotate" not in body
-    assert "interlocks fix-metrics" not in body
+    assert "interlocks fix plan" not in body
+    assert "interlocks fix annotate" not in body
+    assert "interlocks fix metrics" not in body
     assert "Installed GitHub Actions workflow" in capsys.readouterr().out
 
     first = workflow.read_text(encoding="utf-8")

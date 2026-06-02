@@ -1,4 +1,4 @@
-"""Setup-hooks stage — writes git pre-commit + Claude Code Stop hooks."""
+"""Focused setup helper — writes git pre-commit + Claude Code Stop hooks."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _SETUP_HOOKS_NEXT_ACTIONS = ("Run `interlocks setup --check` to verify all local
 def cmd_hooks() -> None:
     start = time.monotonic()
     project_root = Path()
-    ui.command_banner("setup-hooks", load_optional_config())
+    ui.command_banner("setup", load_optional_config())
     ui.section("Setup Hooks")
     try:
         _install_and_render_hooks(project_root)
@@ -44,7 +44,7 @@ def _setup_hooks_payload(
 ) -> dict[str, object]:
     installed = all(status.installed for status in after)
     return {
-        "command": "setup-hooks",
+        "command": "setup",
         "passed": installed,
         "status": "installed" if installed else "missing/stale",
         "installed": installed,

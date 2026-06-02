@@ -468,7 +468,7 @@ def test_trust_json_error_when_no_coverage(
     assert payload["next_actions"] == [
         {
             "kind": "coverage",
-            "message": "no coverage data — run `interlocks coverage` first",
+            "message": "no coverage data — run `interlocks gate coverage` first",
         }
     ]
 
@@ -636,7 +636,7 @@ def test_cmd_trust_refresh_failure_json_reports_error(
         "next_actions": [
             {
                 "kind": "coverage",
-                "message": "Run `interlocks coverage --properties=ci` for details.",
+                "message": "Run `interlocks gate coverage --properties=ci` for details.",
             }
         ],
     }
@@ -796,7 +796,7 @@ def test_trust_next_actions_explain_mutation_and_coverage_shortfalls() -> None:
     coverage_message = actions["coverage"]["message"]
     assert isinstance(mutation_message, str)
     assert isinstance(coverage_message, str)
-    assert "interlocks mutation --min-score=90" in mutation_message
+    assert "interlocks gate mutation --min-score=90" in mutation_message
     assert actions["coverage"]["targets"] == []
     assert "80%" in coverage_message
     assert "refresh" not in actions
@@ -826,7 +826,7 @@ def test_trust_mutation_action_reports_completed_survivor_targets() -> None:
 
     assert stats_mod._trust_mutation_action(report) == {
         "kind": "mutation",
-        "message": "Run `interlocks mutation --min-score=90 --max-runtime=900`; cover or "
+        "message": "Run `interlocks gate mutation --min-score=90 --max-runtime=900`; cover or "
         "simplify surviving mutants, or lower mutation_min_score after review.",
         "targets": survivors[: stats_mod.TRUST_ACTION_TARGET_LIMIT],
         "omitted_targets": 5,
@@ -856,7 +856,7 @@ def test_trust_mutation_action_reports_incomplete_without_targets() -> None:
 
     assert stats_mod._trust_mutation_action(report) == {
         "kind": "mutation",
-        "message": "Last mutation run timed out; rerun `interlocks mutation --min-score=60 "
+        "message": "Last mutation run timed out; rerun `interlocks gate mutation --min-score=60 "
         "--max-runtime=900` with more runtime, then cover or simplify surviving mutants.",
     }
 
@@ -938,7 +938,7 @@ def test_trust_next_action_explains_partial_mutation_timeout() -> None:
     assert isinstance(message, str)
     assert "timed out" in message
     assert "with more runtime" in message
-    assert "interlocks mutation --min-score=60 --max-runtime=900" in message
+    assert "interlocks gate mutation --min-score=60 --max-runtime=900" in message
     assert "targets" not in actions["mutation"]
     assert "omitted_targets" not in actions["mutation"]
 
@@ -1025,7 +1025,7 @@ def test_render_next_actions_omits_generic_refresh_after_specific_action(
     stats_mod._render_next_actions(report, verbose=False)
 
     out = capsys.readouterr().out
-    assert "Run `interlocks mutation --min-score=60`" in out
+    assert "Run `interlocks gate mutation --min-score=60`" in out
     assert "trust --refresh" not in out
 
 
@@ -1165,7 +1165,7 @@ def test_render_mutation_next_action_preserves_missing_message(
 
     assert (
         capsys.readouterr().out
-        == "    Run `interlocks mutation --min-score=60 --max-runtime=900`.\n"
+        == "    Run `interlocks gate mutation --min-score=60 --max-runtime=900`.\n"
     )
 
 
@@ -1190,7 +1190,7 @@ def test_render_mutation_next_action_preserves_survivors_under_verbose(
     stats_mod._render_mutation_next_action(report, verbose=True)
 
     out = capsys.readouterr().out
-    assert "Run `interlocks mutation --min-score=60 --max-runtime=900`" in out
+    assert "Run `interlocks gate mutation --min-score=60 --max-runtime=900`" in out
     for survivor in survivors:
         assert f"      {survivor}" in out
     assert "more (use --verbose)" not in out
@@ -1209,7 +1209,7 @@ def test_render_mutation_actions_limits_completed_survivors_when_not_verbose(
     )
 
     assert capsys.readouterr().out == (
-        "    Run `interlocks mutation --min-score=60 --max-runtime=900`; cover or simplify "
+        "    Run `interlocks gate mutation --min-score=60 --max-runtime=900`; cover or simplify "
         "surviving mutants, or lower mutation_min_score after review.\n"
         "      pkg.mod.x_func__mutmut_0\n"
         "      pkg.mod.x_func__mutmut_1\n"
@@ -1236,7 +1236,7 @@ def test_render_mutation_actions_omits_partial_survivor_rows(
     )
 
     assert capsys.readouterr().out == (
-        "    Last mutation run timed out; rerun `interlocks mutation --min-score=60 "
+        "    Last mutation run timed out; rerun `interlocks gate mutation --min-score=60 "
         "--max-runtime=900` with more runtime, then cover or simplify surviving mutants.\n"
     )
 
@@ -1321,7 +1321,7 @@ def test_trust_next_actions_explain_missing_mutation_summary() -> None:
 
     actions = {action["kind"]: action for action in stats_mod._trust_next_actions(report)}
 
-    assert actions["mutation"]["message"] == "Run `interlocks mutation --min-score=60`."
+    assert actions["mutation"]["message"] == "Run `interlocks gate mutation --min-score=60`."
     assert actions["mutation"]["targets"] == []
     assert "refresh" not in actions
 
@@ -1346,7 +1346,7 @@ def test_trust_next_actions_explain_stale_mutation_evidence() -> None:
         "kind": "mutation",
         "message": (
             "Cached mutation evidence is stale after a newer mutmut run; "
-            "rerun `interlocks mutation --min-score=60 --max-runtime=900`."
+            "rerun `interlocks gate mutation --min-score=60 --max-runtime=900`."
         ),
         "targets": [],
     }
@@ -1371,7 +1371,7 @@ def test_trust_next_actions_explain_no_result_mutation_evidence() -> None:
     message = actions["mutation"]["message"]
     assert isinstance(message, str)
     assert "before any mutants were checked" in message
-    assert "interlocks mutation --changed-only --since=HEAD" in message
+    assert "interlocks gate mutation --changed-only --since=HEAD" in message
     assert actions["mutation"]["targets"] == []
 
 

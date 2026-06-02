@@ -6,7 +6,7 @@ lint or formatting debt, and you want interlocks to fix only the safe,
 review-sized part of the change.
 
 The default stage behavior is conservative. `interlocks check` and
-`interlocks pre-commit` size their lint/format mutation budget from your
+`interlocks hook pre-commit` size their lint/format mutation budget from your
 author diff. Broad cleanup is opt-in through renovation mode.
 
 ## What You Will See
@@ -71,7 +71,7 @@ uv run interlocks check
 For direct inspection without running the full stage, run the optimizer:
 
 ```bash
-uv run interlocks fix-optimize \
+uv run interlocks fix optimize \
   --base=HEAD \
   --budget=dynamic \
   --apply \
@@ -107,7 +107,7 @@ uv run interlocks check --renovate
 Or inspect/apply only the optimizer path:
 
 ```bash
-uv run interlocks fix-optimize \
+uv run interlocks fix optimize \
   --base=HEAD \
   --budget=renovation \
   --apply \
@@ -183,7 +183,7 @@ uv run interlocks check
 Use direct optimizer inspection when diagnosing a specific lint/format decision:
 
 ```bash
-uv run interlocks fix-optimize --base=origin/main --budget=dynamic
+uv run interlocks fix optimize --base=origin/main --budget=dynamic
 ```
 
 Use renovation only for deliberate cleanup PRs:

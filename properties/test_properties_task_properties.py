@@ -62,7 +62,7 @@ def test_init_properties_payload_uses_project_relative_paths(
         )
 
     expected: dict[str, object] = {
-        "command": "init-properties",
+        "command": "init",
         "passed": True,
         "status": status,
         "properties_dir": properties_dir,

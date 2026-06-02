@@ -1,4 +1,4 @@
-"""Integration + unit tests for `interlocks arch` (import-linter contracts)."""
+"""Integration + unit tests for `interlocks gate arch` (import-linter contracts)."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ def non_package_tests(tmp_path: Path) -> Path:
 
 def _run_arch(cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "arch"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "arch"],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -104,7 +104,7 @@ def _run_arch(cwd: Path) -> subprocess.CompletedProcess[str]:
 
 def _run_arch_json(cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "arch", "--json"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "arch", "--json"],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -388,7 +388,7 @@ def test_cmd_arch_json_skip_emits_exact_payload(
     tests = proj / "tests"
     tests.mkdir()
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "arch", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "arch", "--json"])
     _stub_load_config(monkeypatch, _ArchProject(proj, src, tests))
 
     arch_mod.cmd_arch()
@@ -428,7 +428,7 @@ def test_cmd_arch_json_runs_arch_task(
     def fake_run_task_json(command: str, observed_task: Task) -> None:
         calls.append((command, observed_task))
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "arch", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "arch", "--json"])
     monkeypatch.setattr(arch_mod, "load_config", lambda: cfg)
     monkeypatch.setattr(arch_mod, "task_arch", lambda: task)
     monkeypatch.setattr(arch_mod, "run_task_json", fake_run_task_json)
@@ -459,7 +459,7 @@ def test_cmd_arch_human_runs_arch_task(
     def fake_run(observed_task: Task) -> None:
         calls.append(observed_task)
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "arch"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "arch"])
     monkeypatch.setattr(arch_mod, "load_config", lambda: cfg)
     monkeypatch.setattr(arch_mod, "task_arch", lambda: task)
     monkeypatch.setattr(arch_mod, "run", fake_run)

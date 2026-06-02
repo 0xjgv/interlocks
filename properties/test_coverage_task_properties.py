@@ -41,7 +41,7 @@ def test_coverage_options_resolve_cli_properties_and_threshold(
     default_profile: str,
     cli_properties: str | None,
 ) -> None:
-    argv = ["interlocks", "coverage"]
+    argv = ["interlocks", "gate", "coverage"]
     if cli_min is not None:
         argv.append(f"--min={cli_min}")
     if cli_properties == "<bare>":
@@ -95,7 +95,11 @@ def test_coverage_options_properties_flag_always_enables_properties(
         coverage_min=80,
     )
 
-    with patch.object(sys, "argv", ["interlocks", "coverage", f"--properties={explicit_profile}"]):
+    with patch.object(
+        sys,
+        "argv",
+        ["interlocks", "gate", "coverage", f"--properties={explicit_profile}"],
+    ):
         _min_pct, include_properties, property_profile = _coverage_options(
             cfg,
             min_pct=None,

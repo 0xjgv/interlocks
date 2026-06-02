@@ -57,7 +57,7 @@ def install_skill(project_root: Path | None = None) -> SkillInstallResult:
 def _setup_skill_payload(project_root: Path, result: SkillInstallResult) -> dict[str, object]:
     installed = result.installed and skill_installed(project_root)
     return {
-        "command": "setup-skill",
+        "command": "setup",
         "passed": True,
         "status": "installed" if installed else "missing/stale",
         "installed": installed,

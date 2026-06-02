@@ -1,7 +1,7 @@
 Feature: Example acceptance scenario
   As a new project
   I want one runnable Gherkin scenario
-  So that `interlocks acceptance` has something to execute
+  So that `interlocks gate acceptance` has something to execute
 
   Scenario: Arithmetic sanity
     Given the number 2

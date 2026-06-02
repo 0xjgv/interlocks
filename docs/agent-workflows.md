@@ -70,13 +70,13 @@ non-zero when local integration state is missing or stale.
 
 For narrow integration troubleshooting:
 
-- `setup-hooks`: writes only the git pre-commit hook and Claude Code Stop hook.
-- `agents`: appends or creates the `AGENTS.md` / `CLAUDE.md` interlocks block.
-- `setup-skill`: installs or refreshes `.claude/skills/interlocks/SKILL.md`.
+- `setup --hooks`: writes only the git pre-commit hook and Claude Code Stop hook.
+- `setup --agents`: appends or creates the `AGENTS.md` / `CLAUDE.md` interlocks block.
+- `setup --skill`: installs or refreshes `.claude/skills/interlocks/SKILL.md`.
 
 Hooks reference the Python that installed interlocks, so rerun
 `interlocks setup` after switching install locations or interpreters.
-`interlocks pre-commit` and `interlocks post-edit` are the stable hook
+`interlocks hook pre-commit` and `interlocks hook post-edit` are the stable hook
 interfaces when integrating with a custom hook manager.
 
 ## CI Setup
@@ -167,7 +167,7 @@ such as dependency checks, behavior attribution, and acceptance are skipped
 with a banner. Property tests are skipped too because they are property-wide
 rather than file-level, and the test suite is skipped because running it would
 re-open pre-existing failures the flag is meant to filter out. Run
-`interlocks test` and `interlocks properties --profile=check` separately when
+`interlocks gate test` and `interlocks gate properties --profile=check` separately when
 you want the full suite. `pre-commit` and `ci` are unchanged.
 
 ## Debugging Failing Gates
@@ -175,14 +175,14 @@ you want the full suite. `pre-commit` and `ci` are unchanged.
 When `interlocks check` or `interlocks ci` fails, run the failing gate directly:
 
 ```bash
-il lint
-il typecheck
-il test
-il coverage --min=80 --properties
-il deps
-il audit
-il arch
-il acceptance
+il gate lint
+il gate typecheck
+il gate test
+il gate coverage --min=80 --properties
+il gate deps
+il gate audit
+il gate arch
+il gate acceptance
 ```
 
 Pass `--help` to any gate for available flags. `interlocks help` shows the
@@ -207,15 +207,15 @@ Unknown skip labels exit 1, and skipped gates print warnings. `fix` and
 
 ## Advanced Evidence Gates
 
-For mature repositories and AI-authored review, use `crap`, `mutation`,
-`properties`, `trust`, and `evaluate` beyond the local edit loop.
+For mature repositories and AI-authored review, use `gate crap`, `gate mutation`,
+`gate properties`, `trust`, and `evaluate` beyond the local edit loop.
 
-- `crap` catches complex code without matching tests.
-- `mutation` catches tests that execute code without checking behavior.
-- `properties` catches invariant breaks across generated inputs.
+- `gate crap` catches complex code without matching tests.
+- `gate mutation` catches tests that execute code without checking behavior.
+- `gate properties` catches invariant breaks across generated inputs.
 - `property-candidates --json --uncovered` ranks source functions for the next
   property-test slice, suppressing functions already referenced by property tests.
-- `coverage` and complexity trends expose drift before users notice.
+- `gate coverage` and complexity trends expose drift before users notice.
 - `trust` combines coverage, CRAP, mutation, suspicious-test inspection, recent
   git diff, and next actions into one report.
 - `evaluate` gives a read-only 12-check scorecard for policy and evidence gaps.
@@ -228,11 +228,11 @@ dependency hygiene, and architectural drift.
 ## Unblock Flow
 
 When a pull request is blocked by several fixable lint families, use
-`fix-optimize` or its alias `unblock`:
+`fix optimize` or its alias `fix unblock`:
 
 ```bash
-interlocks unblock
-interlocks unblock --apply
+interlocks fix unblock
+interlocks fix unblock --apply
 ```
 
 It discovers fixable Ruff rules on the changed file set, picks the
@@ -241,15 +241,15 @@ highest-value subset under a budget, and writes `.lintfix/plan.json` plus
 `.lintfix/metrics.json`. `--apply` applies the selected subset, verifies, and
 restores the tree on failure.
 
-When a pull request is blocked by one lint family, use `fix-rule`:
+When a pull request is blocked by one lint family, use `fix rule`:
 
 ```bash
-interlocks fix-rule --rule=I001
-interlocks fix-rule --rule=I001 --apply
-interlocks fix-rule --rule=F401 --apply
+interlocks fix rule --rule=I001
+interlocks fix rule --rule=I001 --apply
+interlocks fix rule --rule=F401 --apply
 ```
 
-`fix-rule` plans by default. With `--apply`, it mutates only when the rule mode
+`fix rule` plans by default. With `--apply`, it mutates only when the rule mode
 is `auto`, budgets pass, and the verifier passes. Escrow-mode rules such as
 `F401` and `UP*` write `.lintfix/escrow/<rule>.patch` for review instead of
 mutating the tree.
@@ -283,13 +283,13 @@ changing the exit code:
 ```yaml
 - name: Unblock pass (advisory)
   if: always()
-  run: interlocks fix-optimize --base=origin/main --annotate --metrics
+  run: interlocks fix optimize --base=origin/main --annotate --metrics
 ```
 
 `--annotate` emits `::notice::` and `::warning::` PR annotations, never
 `::error::`. The practical lintfix walkthrough is in
 [`lintfix-mutation-budget-howto.md`](lintfix-mutation-budget-howto.md).
 
-The phased commands behind `fix-optimize` remain available for finer control:
-`fix-plan`, `fix-replay`, `fix-annotate`, and `fix-metrics`. The full design is
+The phased commands behind `fix optimize` remain available for finer control:
+`fix plan`, `fix replay`, `fix annotate`, and `fix metrics`. The full design is
 in [`../lint_fix_harness_SPEC.md`](../lint_fix_harness_SPEC.md).

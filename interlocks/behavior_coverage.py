@@ -282,25 +282,25 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "agents-create-missing",
         "agents",
         "agents creates AGENTS.md and CLAUDE.md when absent",
-        "interlocks.tasks.agents:cmd_agents",
+        "interlocks.tasks.agents:install_agent_docs",
     ),
     Behavior(
         "agents-append-when-missing",
         "agents",
         "agents appends the canonical block to docs without an interlocks reference",
-        "interlocks.tasks.agents:cmd_agents",
+        "interlocks.tasks.agents:install_agent_docs",
     ),
     Behavior(
         "agents-idempotent",
         "agents",
         "agents leaves docs unchanged when the check stage is already documented",
-        "interlocks.tasks.agents:cmd_agents",
+        "interlocks.tasks.agents:install_agent_docs",
     ),
     Behavior(
         "agents-append-when-stage-missing",
         "agents",
         "agents appends the canonical block when docs mention interlocks but not the check stage",
-        "interlocks.tasks.agents:cmd_agents",
+        "interlocks.tasks.agents:install_agent_docs",
     ),
     Behavior(
         "meta-help-no-project", "meta", "help runs without project config", "interlocks.cli:main"
@@ -321,19 +321,19 @@ INTERLOCKS_BEHAVIORS: tuple[Behavior, ...] = (
         "meta-setup-hooks",
         "meta",
         "setup-hooks installs local hooks",
-        "interlocks.stages.setup_hooks:cmd_hooks",
+        "interlocks.hook_setup:install_hooks",
     ),
     Behavior(
         "meta-setup-skill-installs",
         "meta",
         "setup-skill writes the bundled SKILL.md",
-        "interlocks.tasks.setup_skill:cmd_setup_skill",
+        "interlocks.tasks.setup_skill:install_skill",
     ),
     Behavior(
         "meta-setup-skill-idempotent",
         "meta",
         "setup-skill is idempotent on re-run",
-        "interlocks.tasks.setup_skill:cmd_setup_skill",
+        "interlocks.tasks.setup_skill:install_skill",
     ),
     Behavior(
         "stage-check",

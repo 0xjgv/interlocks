@@ -1,4 +1,4 @@
-"""Tests for `interlocks setup-skill`."""
+"""Tests for `interlocks setup --skill`."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def _run_setup_skill(
 
     monkeypatch.chdir(project)
     clear_cache()
-    monkeypatch.setattr(sys, "argv", ["interlocks", "setup-skill", *args])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "setup", "--skill", *args])
     returncode = 0
     try:
         cmd_setup_skill()
@@ -45,7 +45,7 @@ def test_setup_skill_json_reports_installed(
     assert stderr == ""
     payload = json.loads(stdout)
     assert payload == {
-        "command": "setup-skill",
+        "command": "setup",
         "passed": True,
         "status": "installed",
         "installed": True,

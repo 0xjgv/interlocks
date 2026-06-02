@@ -48,7 +48,7 @@ def test_next_actions_without_declared_dependency_omits_declared_dependency(
     declared: bool,
 ) -> None:
     action = "Add `pytest-bdd>=8` to test/dev dependencies if it is missing."
-    actions = (action, "Run `interlocks acceptance`.")
+    actions = (action, "Run `interlocks gate acceptance`.")
     pyproject = {"dependency-groups": {"dev": ["pytest_bdd>=8"]}} if declared else {}
 
     next_actions = next_actions_without_declared_dependency(
@@ -58,7 +58,7 @@ def test_next_actions_without_declared_dependency_omits_declared_dependency(
         actions=actions,
     )
 
-    assert next_actions == (("Run `interlocks acceptance`.",) if declared else actions)
+    assert next_actions == (("Run `interlocks gate acceptance`.",) if declared else actions)
 
 
 @given(actions=st.lists(st.text(max_size=30), max_size=8).map(tuple))

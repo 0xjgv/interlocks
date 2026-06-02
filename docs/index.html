@@ -1074,12 +1074,12 @@
         <div class="shell-header">
           <p class="shell-title" id="shell-fail-title">failure example</p>
           <div class="shell-meta">
-            <span class="status-pill info">il coverage --min=85</span>
+            <span class="status-pill info">il gate coverage --min=85</span>
             <span class="status-pill fail">FAIL</span>
           </div>
         </div>
         <pre
-          class="shell-body"><span class="shell-row"><span class="prompt">$</span> il coverage --min=85</span>
+          class="shell-body"><span class="shell-row"><span class="prompt">$</span> il gate coverage --min=85</span>
 <span class="shell-row">coverage                                      <span class="shell-fail">79.2% &lt; required 85%</span></span>
 <span class="shell-row shell-muted">next: inspect uncovered files</span>
 <span class="shell-row"><span class="prompt">$</span> il trust --refresh --verbose</span></pre>
@@ -1110,7 +1110,7 @@
       </article>
       <article class="pipeline-card">
         <h3>Before commit</h3>
-        <code>il pre-commit</code>
+        <code>il hook pre-commit</code>
         <div class="pipeline-meta">
           <span class="status-pill info">HOOK</span>
           <span class="status-pill ok">BLOCKING</span>
@@ -1301,7 +1301,7 @@
             <td><span class="status-pill">UTILITY</span></td>
           </tr>
           <tr>
-            <td><code>init-acceptance</code></td>
+            <td><code>init --acceptance</code></td>
             <td class="purpose">Scaffold tests/features and step_defs.</td>
             <td><span class="status-pill info">LOCAL</span></td>
             <td><span class="status-pill">UTILITY</span></td>

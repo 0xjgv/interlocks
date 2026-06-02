@@ -66,13 +66,13 @@ def test_cmd_behavior_attribution_json_skips_empty_registry(
 ) -> None:
     project = make_tmp_project()
     monkeypatch.chdir(project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "behavior-attribution", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "behavior-attribution", "--json"])
 
     cmd_behavior_attribution(refresh=False)
 
     payload = json.loads(capsys.readouterr().out)
     assert payload == {
-        "command": "behavior-attribution",
+        "command": "gate behavior-attribution",
         "passed": True,
         "status": "skipped",
         "reason": "no public symbols declared",
@@ -107,7 +107,7 @@ def test_cmd_behavior_attribution_json_ok_with_matching_evidence(
 ) -> None:
     project = _active_registry_project(tmp_path, behavior_id="task-coverage")
     monkeypatch.chdir(project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "behavior-attribution", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "behavior-attribution", "--json"])
     _write_evidence(
         project,
         reached_symbols=["interlocks.tasks.coverage:cmd_coverage"],
@@ -117,7 +117,7 @@ def test_cmd_behavior_attribution_json_ok_with_matching_evidence(
     cmd_behavior_attribution(refresh=False)
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "behavior-attribution"
+    assert payload["command"] == "gate behavior-attribution"
     assert payload["passed"] is True
     assert payload["status"] == "ok"
     assert payload["coverage"] == {"resolved": 1, "total": 1, "pct": 100.0}
@@ -151,7 +151,7 @@ def test_cmd_behavior_attribution_json_fails_for_incomplete_attribution(
 ) -> None:
     project = _active_registry_project(tmp_path, behavior_id="task-coverage")
     monkeypatch.chdir(project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "behavior-attribution", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "behavior-attribution", "--json"])
     _write_evidence(project, reached_symbols=[])
     clear_cache()
 
@@ -160,7 +160,7 @@ def test_cmd_behavior_attribution_json_fails_for_incomplete_attribution(
 
     payload = json.loads(capsys.readouterr().out)
     assert exc.value.code == 1
-    assert payload["command"] == "behavior-attribution"
+    assert payload["command"] == "gate behavior-attribution"
     assert payload["passed"] is False
     assert payload["status"] == "failed"
     assert "mis-attributed" in payload["error"]
@@ -199,14 +199,14 @@ def test_cmd_behavior_attribution_json_warns_when_not_enforced(
         enforce_behavior_attribution=False,
     )
     monkeypatch.chdir(project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "behavior-attribution", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "behavior-attribution", "--json"])
     _write_evidence(project, reached_symbols=[])
     clear_cache()
 
     cmd_behavior_attribution(refresh=False)
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "behavior-attribution"
+    assert payload["command"] == "gate behavior-attribution"
     assert payload["passed"] is True
     assert payload["status"] == "warn"
     assert "mis-attributed" in payload["detail"]
@@ -222,7 +222,7 @@ def test_cmd_behavior_attribution_json_required_acceptance_gap(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "behavior-attribution", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "behavior-attribution", "--json"])
     clear_cache()
 
     with pytest.raises(SystemExit) as exc:
@@ -230,7 +230,7 @@ def test_cmd_behavior_attribution_json_required_acceptance_gap(
 
     payload = json.loads(capsys.readouterr().out)
     assert exc.value.code == 1
-    assert payload["command"] == "behavior-attribution"
+    assert payload["command"] == "gate behavior-attribution"
     assert payload["passed"] is False
     assert "features directory not found" in payload["error"]
 

@@ -45,7 +45,7 @@ def test_setup_payload_projects_artifact_statuses(
             "label": artifact.label,
             "target": artifact.target,
             "installed": value,
-            "status": "installed" if value else "missing/stale",
+            "status": artifact.installed_detail if value else "missing/stale",
         }
         for artifact, value in zip(_ARTIFACTS, installed, strict=True)
     ]

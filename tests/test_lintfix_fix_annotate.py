@@ -1,4 +1,4 @@
-"""Unit + integration tests for ``interlocks fix-annotate``."""
+"""Unit + integration tests for ``interlocks fix annotate``."""
 
 from __future__ import annotations
 
@@ -119,12 +119,12 @@ def _capsys_stdout(capsys: pytest.CaptureFixture[str]) -> str:
 def test_missing_plan_file_exits_zero_with_no_annotations(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate"]):
+    with mock.patch.object(sys, "argv", ["interlocks", "fix", "annotate"]):
         fix_annotate.cmd_fix_annotate()
     out = _capsys_stdout(capsys)
     assert "::notice" not in out
     assert "::warning" not in out
-    assert "[fix-annotate]" in out
+    assert "[fix annotate]" in out
     assert ".lintfix/plan.json" in out
     assert "no plan" in out
 
@@ -132,14 +132,14 @@ def test_missing_plan_file_exits_zero_with_no_annotations(
 def test_missing_plan_json_reports_zero_annotations(
     project: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate", "--json"]):
+    with mock.patch.object(sys, "argv", ["interlocks", "fix", "annotate", "--json"]):
         fix_annotate.cmd_fix_annotate()
 
     captured = capsys.readouterr()
     assert captured.err == ""
     payload = json.loads(captured.out)
     assert payload == {
-        "command": "fix-annotate",
+        "command": "fix annotate",
         "passed": True,
         "status": "missing",
         "source": "plan",
@@ -180,7 +180,7 @@ def test_missing_annotation_result_reports_human_row_when_requested(
     )
 
     assert result == fix_annotate.AnnotationResult(source="plan", path=path, found=False)
-    assert rows == [("fix-annotate", ".lintfix/plan.json", "ok", "no plan", "ok")]
+    assert rows == [("fix annotate", ".lintfix/plan.json", "ok", "no plan", "ok")]
 
 
 def test_missing_annotation_result_suppresses_row_for_quiet_callers(
@@ -231,7 +231,7 @@ def test_plan_json_emits_annotations_for_each_candidate(
     }
     (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
 
-    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate"]):
+    with mock.patch.object(sys, "argv", ["interlocks", "fix", "annotate"]):
         fix_annotate.cmd_fix_annotate()
     out = _capsys_stdout(capsys)
     assert "::notice file=a.py,line=1::" in out  # I001
@@ -257,7 +257,7 @@ def test_plan_json_json_reports_annotation_counts_without_workflow_commands(
     }
     (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
 
-    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate", "--json"]):
+    with mock.patch.object(sys, "argv", ["interlocks", "fix", "annotate", "--json"]):
         fix_annotate.cmd_fix_annotate()
 
     out = capsys.readouterr().out
@@ -311,7 +311,7 @@ def test_optimize_source_reads_selected_and_not_selected(
     }
     (project / ".lintfix" / "optimize.json").write_text(json.dumps(optimize), encoding="utf-8")
 
-    with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate", "--source=optimize"]):
+    with mock.patch.object(sys, "argv", ["interlocks", "fix", "annotate", "--source=optimize"]):
         fix_annotate.cmd_fix_annotate()
     out = _capsys_stdout(capsys)
     # Selected I001 (auto) → notice
@@ -337,7 +337,7 @@ def test_emit_annotations_and_cmd_wrapper_share_behavior(
     (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
 
     if entry == "cmd":
-        with mock.patch.object(sys, "argv", ["interlocks", "fix-annotate"]):
+        with mock.patch.object(sys, "argv", ["interlocks", "fix", "annotate"]):
             fix_annotate.cmd_fix_annotate()
     else:
         fix_annotate.emit_annotations(project, source="plan")
@@ -354,7 +354,7 @@ def test_emit_annotations_missing_file_is_non_failing(
     fix_annotate.emit_annotations(project, source="plan")
     out = _capsys_stdout(capsys)
     assert "::notice" not in out
-    assert "[fix-annotate]" not in out
+    assert "[fix annotate]" not in out
 
 
 def test_emit_annotations_reads_optimize_source(
@@ -401,7 +401,7 @@ def test_cli_entrypoint_runs_fix_annotate(project: Path) -> None:
     }
     (project / ".lintfix" / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-annotate"],
+        [sys.executable, "-m", "interlocks.cli", "fix", "annotate"],
         cwd=project,
         capture_output=True,
         text=True,

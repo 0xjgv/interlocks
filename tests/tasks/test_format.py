@@ -35,7 +35,7 @@ def test_format_cli_clean_exits_zero(tmp_project: Path) -> None:
     f = tmp_project / "sample.py"
     f.write_text(CLEAN, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "format"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "format"],
         cwd=tmp_project,
         capture_output=True,
         text=True,
@@ -49,7 +49,7 @@ def test_format_cli_modifies_unformatted_file(tmp_project: Path) -> None:
     f = tmp_project / "sample.py"
     f.write_text(UNFORMATTED, encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "format"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "format"],
         cwd=tmp_project,
         capture_output=True,
         text=True,
@@ -71,7 +71,7 @@ def test_format_json_reports_clean_run(
     f = tmp_project / "sample.py"
     f.write_text(CLEAN, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "format", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "format", "--json"])
     clear_cache()
 
     cmd_format()
@@ -96,7 +96,7 @@ def test_format_json_formats_file(
     f = tmp_project / "sample.py"
     f.write_text(UNFORMATTED, encoding="utf-8")
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "format", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "format", "--json"])
     clear_cache()
 
     cmd_format()

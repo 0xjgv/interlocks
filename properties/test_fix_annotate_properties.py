@@ -159,7 +159,7 @@ def test_format_message_auto_classification_names_apply_command(rule: str) -> No
         "files": [],
     })
 
-    assert message.endswith(f"Apply with `interlocks fix-rule --rule={rule} --apply`.")
+    assert message.endswith(f"Apply with `interlocks fix rule --rule={rule} --apply`.")
 
 
 @given(payload=st.dictionaries(st.text(max_size=20), _JSONISH, max_size=10))
@@ -264,7 +264,7 @@ def test_fix_annotate_payload_projects_counts(
 
     payload = _fix_annotate_payload(Path(), result)
 
-    assert payload["command"] == "fix-annotate"
+    assert payload["command"] == "fix annotate"
     assert payload["passed"] is True
     assert payload["status"] == ("annotated" if found else "missing")
     assert payload["annotation_count"] == notice + warning

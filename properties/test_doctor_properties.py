@@ -185,7 +185,7 @@ def test_acceptance_row_reflects_disabled_scaffolded_or_missing_state(
         assert row.detail == "scaffolded"
         assert row.state == "ok"
     elif runner is not None:
-        assert row.detail == "run `interlocks init-acceptance`"
+        assert row.detail == "run `interlocks init --acceptance`"
         assert row.state == "warn"
     else:
         assert row.detail == "not wired"
@@ -370,9 +370,9 @@ def test_blocked_next_steps_falls_back_when_blocker_is_unknown() -> None:
 
 def test_next_steps_include_property_scaffold_for_properties_gap() -> None:
     assert _next_steps(
-        [CheckRow("properties", "properties", "run `interlocks init-properties`", "warn")],
+        [CheckRow("properties", "properties", "run `interlocks init --properties`", "warn")],
         is_blocked=False,
-    ) == ["Run `interlocks init-properties` to scaffold property tests."]
+    ) == ["Run `interlocks init --properties` to scaffold property tests."]
 
 
 def test_next_steps_replace_scaffold_for_scaffold_only_properties_gap() -> None:
@@ -381,7 +381,7 @@ def test_next_steps_replace_scaffold_for_scaffold_only_properties_gap() -> None:
         is_blocked=False,
     ) == [
         "Replace tests/properties/test_example_properties.py with domain invariants, "
-        "then run `interlocks properties --profile=check`."
+        "then run `interlocks gate properties --profile=check`."
     ]
 
 

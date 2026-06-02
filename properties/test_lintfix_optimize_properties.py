@@ -621,7 +621,7 @@ def test_resolve_stats_path_prefers_explicit_then_no_stats(
     explicit: str | None,
     no_stats: bool,
 ) -> None:
-    argv = ["interlocks", "fix-optimize"]
+    argv = ["interlocks", "fix optimize"]
     if explicit is not None:
         argv.append(f"--stats={explicit}")
     if no_stats:
@@ -643,7 +643,7 @@ def test_resolve_stats_path_prefers_explicit_then_no_stats(
 
 def test_resolve_stats_path_defaults_to_replay_json_without_flags() -> None:
     old_argv = sys.argv
-    sys.argv = ["interlocks", "fix-optimize"]
+    sys.argv = ["interlocks", "fix optimize"]
     try:
         assert fix_optimize_mod._resolve_stats_path() == ".lintfix/replay.json"
     finally:
@@ -652,7 +652,7 @@ def test_resolve_stats_path_defaults_to_replay_json_without_flags() -> None:
 
 def test_resolve_stats_path_ignores_empty_explicit_stats_flag() -> None:
     old_argv = sys.argv
-    sys.argv = ["interlocks", "fix-optimize", "--stats="]
+    sys.argv = ["interlocks", "fix optimize", "--stats="]
     try:
         assert fix_optimize_mod._resolve_stats_path() == ".lintfix/replay.json"
     finally:

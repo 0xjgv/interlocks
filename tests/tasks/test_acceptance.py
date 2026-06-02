@@ -1,4 +1,4 @@
-"""Integration + unit tests for `interlocks acceptance`."""
+"""Integration + unit tests for `interlocks gate acceptance`."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def _run_cli(project: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 def test_acceptance_noop_without_features(tmp_project: Path) -> None:
     """Empty foreign project: exit 0 + skip nudge, never a crash."""
-    result = _run_cli(tmp_project, "acceptance")
+    result = _run_cli(tmp_project, "gate", "acceptance")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "acceptance:" in result.stdout
 
@@ -97,7 +97,7 @@ def _scaffold_feature(project: Path, feature_body: str) -> None:
 @pytest.mark.slow
 def test_acceptance_passes_on_valid_scenario(tmp_project: Path) -> None:
     _scaffold_feature(tmp_project, _PASSING_FEATURE)
-    result = _run_cli(tmp_project, "acceptance")
+    result = _run_cli(tmp_project, "gate", "acceptance")
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     assert "[acceptance]" in result.stdout
 
@@ -105,7 +105,7 @@ def test_acceptance_passes_on_valid_scenario(tmp_project: Path) -> None:
 @pytest.mark.slow
 def test_acceptance_fails_on_broken_scenario(tmp_project: Path) -> None:
     _scaffold_feature(tmp_project, _FAILING_FEATURE)
-    result = _run_cli(tmp_project, "acceptance")
+    result = _run_cli(tmp_project, "gate", "acceptance")
     assert result.returncode != 0
 
 
@@ -188,7 +188,7 @@ def test_task_acceptance_trace_flag_wraps_without_hidden_env(
     )
     monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE", raising=False)
     monkeypatch.delenv("INTERLOCKS_ACCEPTANCE_TRACE_IN_PROCESS", raising=False)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--trace"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance", "--trace"])
     monkeypatch.chdir(tmp_project)
     clear_cache()
 
@@ -234,7 +234,7 @@ def test_cmd_acceptance_optional_missing_warns_and_exits_zero(
 
     out = capsys.readouterr().out
     assert "no features/ directory" in out
-    assert "interlocks init-acceptance" in out
+    assert "interlocks init --acceptance" in out
     assert called == []
 
 
@@ -247,7 +247,7 @@ def test_cmd_acceptance_optional_missing_json_skip(
     from interlocks.tasks import acceptance as mod
 
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance", "--json"])
     clear_cache()
 
     called: list[object] = []
@@ -262,9 +262,10 @@ def test_cmd_acceptance_optional_missing_json_skip(
         "status": "skipped",
         "acceptance_status": "optional_missing",
         "reason": (
-            "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
+            "acceptance: no features/ directory — run "
+            "`interlocks init --acceptance` to scaffold one"
         ),
-        "next_actions": ["Run `interlocks init-acceptance` to scaffold feature files."],
+        "next_actions": ["Run `interlocks init --acceptance` to scaffold feature files."],
     }
     assert called == []
 
@@ -282,7 +283,7 @@ def test_cmd_acceptance_disabled_json_skip(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance", "--json"])
     clear_cache()
 
     mod.cmd_acceptance()
@@ -317,7 +318,7 @@ def test_cmd_acceptance_required_missing_exits_one(
     with pytest.raises(SystemExit) as exc:
         mod.cmd_acceptance()
     assert exc.value.code == 1
-    assert "interlocks init-acceptance" in capsys.readouterr().out
+    assert "interlocks init --acceptance" in capsys.readouterr().out
 
 
 def test_cmd_acceptance_required_missing_json_exits_one(
@@ -333,7 +334,7 @@ def test_cmd_acceptance_required_missing_json_exits_one(
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance", "--json"])
     clear_cache()
 
     with pytest.raises(SystemExit) as exc:
@@ -347,9 +348,9 @@ def test_cmd_acceptance_required_missing_json_exits_one(
         "acceptance_status": "missing_features_dir",
         "error": (
             "acceptance: features directory not found — "
-            "run `interlocks init-acceptance` to scaffold one"
+            "run `interlocks init --acceptance` to scaffold one"
         ),
-        "next_actions": ["Run `interlocks init-acceptance` to scaffold feature files."],
+        "next_actions": ["Run `interlocks init --acceptance` to scaffold feature files."],
     }
 
 
@@ -359,13 +360,13 @@ def test_acceptance_failure_next_actions_are_status_specific() -> None:
 
     assert (
         mod._acceptance_failure_next_action(AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE)
-        == "Add or update Gherkin behavior markers, then rerun `interlocks acceptance`."
+        == "Add or update Gherkin behavior markers, then rerun `interlocks gate acceptance`."
     )
     assert mod._acceptance_failure_next_action(AcceptanceStatus.MISSING_SCENARIOS) == (
-        "Add at least one scenario, then rerun `interlocks acceptance`."
+        "Add at least one scenario, then rerun `interlocks gate acceptance`."
     )
     assert mod._acceptance_failure_next_action(AcceptanceStatus.MISSING_FEATURES_DIR) == (
-        "Run `interlocks init-acceptance` to scaffold feature files."
+        "Run `interlocks init --acceptance` to scaffold feature files."
     )
 
 
@@ -384,7 +385,7 @@ def test_acceptance_failure_payload_uses_status_specific_action() -> None:
         "acceptance_status": "missing_behavior_coverage",
         "error": "coverage gap",
         "next_actions": [
-            "Add or update Gherkin behavior markers, then rerun `interlocks acceptance`."
+            "Add or update Gherkin behavior markers, then rerun `interlocks gate acceptance`."
         ],
     }
 
@@ -412,7 +413,7 @@ def test_emit_acceptance_failure_json_routes_remediation_inputs(
         observed.append((status, features_dir, result))
         return "exact remediation"
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance", "--json"])
     monkeypatch.setattr(mod, "remediation_message", fake_remediation_message)
     classification = AcceptanceClassification(
         AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE,
@@ -447,7 +448,7 @@ def test_emit_acceptance_failure_human_passes_exact_message(
         messages.append(message)
         raise SystemExit(1)
 
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance"])
     monkeypatch.setattr(mod, "remediation_message", lambda *_args: "exact human remediation")
     monkeypatch.setattr(mod, "fail_skip", fake_fail_skip)
 
@@ -520,7 +521,7 @@ def test_cmd_acceptance_runnable_json_calls_shared_runner(
 
     _scaffold_feature(tmp_project, _PASSING_FEATURE)
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "acceptance", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "acceptance", "--json"])
     clear_cache()
 
     called: list[tuple[str, Task]] = []

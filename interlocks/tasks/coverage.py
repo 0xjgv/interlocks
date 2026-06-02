@@ -289,7 +289,7 @@ def _emit_coverage_env_skip(
             property_profile=property_profile,
             reason=project_env_skip_message("coverage"),
             next_action=(
-                "Create or sync the project environment, then rerun `interlocks coverage`."
+                "Create or sync the project environment, then rerun `interlocks gate coverage`."
             ),
         )
     )

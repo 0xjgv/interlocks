@@ -2,9 +2,9 @@
 
 Usage::
 
-    interlocks fix-plan                    # plan vs origin/main, unblock budget
-    interlocks fix-plan --base=main
-    interlocks fix-plan --budget=renovation
+    interlocks fix plan                    # plan vs origin/main, unblock budget
+    interlocks fix plan --base=main
+    interlocks fix plan --budget=renovation
 
 Discovers every fixable ruff rule on the changed file set, simulates each
 in isolation, classifies the candidate patch, writes ``.lintfix/plan.json``,
@@ -66,7 +66,7 @@ def _exit_if_discovery_failed(plan: plan_module.Plan) -> None:
         ui.print_json(_fix_plan_error_payload(plan.discovery_error))
         sys.exit(plan.discovery_error.returncode)
     ui.row(
-        "fix-plan",
+        "fix plan",
         "discover",
         "ruff failed",
         detail=f"rc={plan.discovery_error.returncode}",
@@ -91,13 +91,13 @@ def _render_plan(plan: plan_module.Plan, base: str, budget_name: str, plan_rel: 
 
 def _print_plan(plan: plan_module.Plan, base: str, budget_name: str, plan_rel: str) -> None:
     ui.gate_row(
-        "fix-plan",
+        "fix plan",
         plan_rel,
         "ok",
         detail=f"{len(plan.candidates)} candidate(s), base={base}, budget={budget_name}",
         state="ok",
     )
-    ui.section(f"fix-plan ({base}, budget={budget_name})")
+    ui.section(f"fix plan ({base}, budget={budget_name})")
     if not plan.candidates:
         ui.kv_block([("plan", plan_rel)])
         return
@@ -143,7 +143,7 @@ def _fix_plan_payload(
     plan_path: str,
 ) -> dict[str, object]:
     return {
-        "command": "fix-plan",
+        "command": "fix plan",
         "passed": True,
         "status": "planned",
         "base": base,
@@ -166,7 +166,7 @@ def _fix_plan_error_payload(error: object) -> dict[str, object]:
     returncode = _error_returncode(error)
     stderr = getattr(error, "stderr", "")
     return {
-        "command": "fix-plan",
+        "command": "fix plan",
         "passed": False,
         "status": "discovery-failed",
         "returncode": returncode,

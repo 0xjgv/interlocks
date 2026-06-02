@@ -21,7 +21,7 @@ jobs:
       - name: Unblock pass (advisory)
         if: always()
         run: >-
-          interlocks fix-optimize
+          interlocks fix optimize
           --base=origin/${{ github.event.pull_request.base.ref || 'main' }}
           --annotate --metrics
 

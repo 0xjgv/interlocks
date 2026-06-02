@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 _ATTRIBUTION_ENV = "INTERLOCKS_BEHAVIOR_ATTRIBUTION"
 _MISSING_FEATURES_NUDGE = (
-    "acceptance: no features/ directory — run `interlocks init-acceptance` to scaffold one"
+    "acceptance: no features/ directory — run `interlocks init --acceptance` to scaffold one"
 )
 
 
@@ -85,7 +85,7 @@ def cmd_acceptance() -> None:
         _emit_acceptance_skip(
             AcceptanceStatus.OPTIONAL_MISSING,
             reason=_MISSING_FEATURES_NUDGE,
-            next_actions=["Run `interlocks init-acceptance` to scaffold feature files."],
+            next_actions=["Run `interlocks init --acceptance` to scaffold feature files."],
         )
         return
     if ui.is_json():
@@ -106,7 +106,7 @@ def _handle_acceptance_nonrunnable(classification: AcceptanceClassification) -> 
         _emit_acceptance_skip(
             classification.status,
             reason=_MISSING_FEATURES_NUDGE,
-            next_actions=["Run `interlocks init-acceptance` to scaffold feature files."],
+            next_actions=["Run `interlocks init --acceptance` to scaffold feature files."],
         )
         return True
     if classification.is_required_failure:
@@ -161,10 +161,10 @@ def _acceptance_failure_payload(status: AcceptanceStatus, message: str) -> dict[
 
 def _acceptance_failure_next_action(status: AcceptanceStatus) -> str:
     if status is AcceptanceStatus.MISSING_BEHAVIOR_COVERAGE:
-        return "Add or update Gherkin behavior markers, then rerun `interlocks acceptance`."
+        return "Add or update Gherkin behavior markers, then rerun `interlocks gate acceptance`."
     if status is AcceptanceStatus.MISSING_SCENARIOS:
-        return "Add at least one scenario, then rerun `interlocks acceptance`."
-    return "Run `interlocks init-acceptance` to scaffold feature files."
+        return "Add at least one scenario, then rerun `interlocks gate acceptance`."
+    return "Run `interlocks init --acceptance` to scaffold feature files."
 
 
 def attribution_enabled() -> bool:
@@ -265,7 +265,7 @@ def _pytest_bdd_targets(cfg: InterlockConfig, features_dir: Path, features_arg: 
     """Directories pytest must collect for pytest-bdd to bind features → steps.
 
     Canonical scaffold drops step-defs as a sibling of ``features/``; pick that
-    up automatically when present so ``interlocks acceptance`` stays self-contained.
+    up automatically when present so ``interlocks gate acceptance`` stays self-contained.
     """
     dirs = [features_arg]
     step_defs = features_dir.parent / "step_defs"

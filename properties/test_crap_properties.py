@@ -59,7 +59,7 @@ def test_crap_context_projects_config_and_argv(
     json_flag: bool,
     changed_only: bool,
 ) -> None:
-    argv = ["interlocks", "crap", f"--max={max_crap}"]
+    argv = ["interlocks", "gate", "crap", f"--max={max_crap}"]
     if json_flag:
         argv.append("--json")
     if changed_only:
@@ -96,7 +96,7 @@ def test_crap_context_uses_configured_threshold_without_cli_override(
 
     original_argv = sys.argv
     try:
-        sys.argv = ["interlocks", "crap"]
+        sys.argv = ["interlocks", "gate", "crap"]
         context = _crap_context(cfg, emit_json=emit_json)
     finally:
         sys.argv = original_argv

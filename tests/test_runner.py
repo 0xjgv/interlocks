@@ -99,7 +99,7 @@ def test_run_prints_json_start_status_to_stderr(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--json"])
     task = Task(
         "Long coverage",
         [sys.executable, "-c", ""],
@@ -119,7 +119,7 @@ def test_run_prints_json_progress_steps_to_stderr(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "coverage", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "coverage", "--json"])
     task = Task(
         "Compound coverage",
         [sys.executable, "-c", ""],
@@ -142,7 +142,7 @@ def test_run_task_json_emits_single_payload(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "test", "--json"])
     task = Task(
         "Run tests",
         [sys.executable, "-c", ""],
@@ -166,7 +166,7 @@ def test_run_task_json_exits_on_failure(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "test", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "test", "--json"])
     task = Task("Run tests", [sys.executable, "-c", "import sys; sys.exit(7)"], label="test")
 
     with pytest.raises(SystemExit) as exc:

@@ -1,4 +1,4 @@
-"""Integration test for `interlocks audit` (pip-audit on deps)."""
+"""Integration test for `interlocks gate audit` (pip-audit on deps)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def tmp_project(tmp_path: Path) -> Path:
 def test_audit_clean_deps_passes(tmp_project: Path) -> None:
     """pip-audit against a project with no deps should report no vulnerabilities."""
     result = subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "audit"],
+        [sys.executable, "-m", "interlocks.cli", "gate", "audit"],
         cwd=tmp_project,
         capture_output=True,
         text=True,
@@ -60,7 +60,7 @@ def test_audit_json_clean_no_deps_passes(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.chdir(tmp_project)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "audit", "--json"])
 
     audit_mod.cmd_audit()
 
@@ -113,7 +113,7 @@ def test_audit_json_invokes_shared_runner(tmp_path: Path, monkeypatch: pytest.Mo
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "audit", "--json"])
     captured: dict[str, object] = {}
 
     def fake_run_task_json(command: str, task: Task) -> None:
@@ -191,7 +191,7 @@ def test_audit_network_skip_warns_when_pypi_unreachable(
 def test_audit_network_skip_json_warns_when_pypi_unreachable(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "audit", "--json"])
     monkeypatch.setattr(
         audit_mod,
         "capture",
@@ -256,7 +256,7 @@ def test_audit_network_skip_json_fails_on_real_findings(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "audit", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "gate", "audit", "--json"])
     monkeypatch.setattr(
         audit_mod,
         "capture",

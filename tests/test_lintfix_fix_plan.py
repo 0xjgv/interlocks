@@ -1,4 +1,4 @@
-"""Tests for ``interlocks fix-plan``.
+"""Tests for ``interlocks fix plan``.
 
 Two layers:
 
@@ -67,7 +67,7 @@ def repo(tmp_path: Path) -> Path:
 
 def _run_fix_plan(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "interlocks.cli", "fix-plan", "--base=HEAD", *args],
+        [sys.executable, "-m", "interlocks.cli", "fix", "plan", "--base=HEAD", *args],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -117,7 +117,7 @@ def test_fix_plan_json_reports_plan_summary(repo: Path) -> None:
     assert result.returncode == 0, result.stderr + result.stdout
     assert result.stderr == ""
     payload = json.loads(result.stdout)
-    assert payload["command"] == "fix-plan"
+    assert payload["command"] == "fix plan"
     assert payload["passed"] is True
     assert payload["status"] == "planned"
     assert payload["base"] == "HEAD"
@@ -215,13 +215,13 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-plan", "--verbose"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "plan", "--verbose"])
 
 
 def test_print_plan_no_candidates(verbose: None, capsys: pytest.CaptureFixture[str]) -> None:
     fix_plan_mod._print_plan(_plan(), "HEAD", "unblock", ".lintfix/plan.json")
     out = capsys.readouterr().out
-    assert "[fix-plan]" in out
+    assert "[fix plan]" in out
     assert "0 candidate(s)" in out
     assert ".lintfix/plan.json" in out
 
@@ -271,7 +271,7 @@ def test_print_plan_default_mode_reports_plan_status(
     fix_plan_mod._print_plan(plan, "HEAD", "unblock", ".lintfix/plan.json")
 
     out = capsys.readouterr().out
-    assert "[fix-plan]" in out
+    assert "[fix plan]" in out
     assert ".lintfix/plan.json" in out
     assert "1 candidate(s)" in out
 
@@ -297,7 +297,7 @@ def test_print_plan_status_row_arguments_are_exact(
 
     assert rows == [
         (
-            "fix-plan",
+            "fix plan",
             ".lintfix/plan.json",
             "ok",
             "0 candidate(s), base=BASE, budget=budget-name",
@@ -371,7 +371,7 @@ def test_render_plan_json_passes_exact_payload_args(
         plan_rel: str,
     ) -> dict[str, object]:
         calls.append((observed_plan, base, budget_name, plan_rel))
-        return {"command": "fix-plan", "plan_path": plan_rel}
+        return {"command": "fix plan", "plan_path": plan_rel}
 
     def fail_print_plan(*_args: object, **_kwargs: object) -> None:
         pytest.fail("_print_plan should not run in JSON mode")
@@ -387,7 +387,7 @@ def test_render_plan_json_passes_exact_payload_args(
     fix_plan_mod._render_plan(plan, "BASE", "budget-name", ".lintfix/plan.json")
 
     assert calls == [(plan, "BASE", "budget-name", ".lintfix/plan.json")]
-    assert printed == [{"command": "fix-plan", "plan_path": ".lintfix/plan.json"}]
+    assert printed == [{"command": "fix plan", "plan_path": ".lintfix/plan.json"}]
 
 
 def test_render_plan_human_passes_exact_print_args(
@@ -430,7 +430,7 @@ def test_fix_plan_payload_reports_exact_machine_contract() -> None:
         "budget-name",
         ".lintfix/plan.json",
     ) == {
-        "command": "fix-plan",
+        "command": "fix plan",
         "passed": True,
         "status": "planned",
         "base": "BASE",
@@ -467,7 +467,7 @@ def test_cmd_fix_plan_json_in_process_writes_plan(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-plan", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "plan", "--json"])
     monkeypatch.setattr(
         plan_module,
         "build_plan",
@@ -477,7 +477,7 @@ def test_cmd_fix_plan_json_in_process_writes_plan(
     fix_plan_mod.cmd_fix_plan(base="HEAD", budget="unblock")
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "fix-plan"
+    assert payload["command"] == "fix plan"
     assert payload["passed"] is True
     assert payload["candidate_count"] == 1
     assert (project / ".lintfix" / "plan.json").is_file()
@@ -488,7 +488,7 @@ def test_cmd_fix_plan_discovery_error_json_exits(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["interlocks", "fix-plan", "--json"])
+    monkeypatch.setattr(sys, "argv", ["interlocks", "fix", "plan", "--json"])
     monkeypatch.setattr(
         plan_module,
         "build_plan",
@@ -507,7 +507,7 @@ def test_cmd_fix_plan_discovery_error_json_exits(
 
     assert exc.value.code == 2
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "fix-plan"
+    assert payload["command"] == "fix plan"
     assert payload["passed"] is False
     assert payload["status"] == "discovery-failed"
     assert payload["stderr_excerpt"] == "ruff boom"
@@ -520,7 +520,7 @@ def test_fix_plan_error_payload_preserves_returncode_and_excerpt() -> None:
     )
 
     assert fix_plan_mod._fix_plan_error_payload(error) == {
-        "command": "fix-plan",
+        "command": "fix plan",
         "passed": False,
         "status": "discovery-failed",
         "returncode": 7,
@@ -530,7 +530,7 @@ def test_fix_plan_error_payload_preserves_returncode_and_excerpt() -> None:
 
 def test_fix_plan_error_payload_defaults_without_error_attrs() -> None:
     assert fix_plan_mod._fix_plan_error_payload(object()) == {
-        "command": "fix-plan",
+        "command": "fix plan",
         "passed": False,
         "status": "discovery-failed",
         "returncode": 1,
@@ -544,7 +544,7 @@ def test_fix_plan_error_payload_defaults_non_int_returncode() -> None:
         stderr = "ruff failed"
 
     assert fix_plan_mod._fix_plan_error_payload(Error()) == {
-        "command": "fix-plan",
+        "command": "fix plan",
         "passed": False,
         "status": "discovery-failed",
         "returncode": 1,

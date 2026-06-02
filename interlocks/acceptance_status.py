@@ -100,7 +100,7 @@ def remediation_message(
     behavior_result: BehaviorCoverageValidationResult | None = None,
 ) -> str:
     """Actionable message reused by acceptance command + stage enforcement."""
-    scaffold_hint = "run `interlocks init-acceptance` to scaffold one"
+    scaffold_hint = "run `interlocks init --acceptance` to scaffold one"
     match status:
         case AcceptanceStatus.MISSING_FEATURES_DIR:
             return f"acceptance: features directory not found — {scaffold_hint}"
