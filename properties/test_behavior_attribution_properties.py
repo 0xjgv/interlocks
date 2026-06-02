@@ -167,6 +167,14 @@ def test_attribution_next_actions_are_empty_only_for_clean_ok(
         assert "interlocks behavior-attribution" in actions[0]
 
 
+@given(status=st.text(max_size=30))
+def test_attribution_next_actions_prioritize_floor_failure(status: str) -> None:
+    actions = behavior_attribution_task._attribution_next_actions(status, floor_failure=True)
+
+    assert len(actions) == 1
+    assert "scenario coverage" in actions[0]
+
+
 @given(
     rows=st.lists(
         st.tuples(st.integers(min_value=-10, max_value=10), st.booleans()),

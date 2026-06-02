@@ -54,6 +54,20 @@ def test_next_actions_without_declared_dependency_omits_declared_dependency(
     assert next_actions == (("Run `interlocks acceptance`.",) if declared else actions)
 
 
+@given(actions=st.lists(st.text(max_size=30), max_size=8).map(tuple))
+def test_next_actions_without_declared_dependency_preserves_actions_when_missing(
+    actions: tuple[str, ...],
+) -> None:
+    result = next_actions_without_declared_dependency(
+        {},
+        dependency="pytest-bdd",
+        dependency_action="Add pytest-bdd.",
+        actions=actions,
+    )
+
+    assert result is actions
+
+
 @given(
     existing=st.booleans(),
     text=st.text(alphabet=st.characters(blacklist_characters="\r\n"), max_size=80),

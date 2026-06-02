@@ -170,3 +170,24 @@ def test_fix_replay_payload_reports_rule_count_and_frontier(
     assert result["replay_path"] == ".lintfix/replay.json"
     assert result["rules_count"] == len(rules)
     assert result["pareto_frontier"] == _pareto_frontier(rules)
+
+
+@given(
+    rows=st.lists(
+        st.one_of(
+            st.fixed_dictionaries({
+                "rule": _RULE,
+                "on_pareto_frontier": st.booleans(),
+            }),
+            st.text(max_size=20),
+            st.none(),
+        ),
+        max_size=20,
+    )
+)
+def test_pareto_frontier_ignores_non_rows_and_falsy_markers(rows: list[object]) -> None:
+    frontier = _pareto_frontier(rows)
+
+    assert frontier == sorted(
+        str(row["rule"]) for row in rows if isinstance(row, dict) and row.get("on_pareto_frontier")
+    )

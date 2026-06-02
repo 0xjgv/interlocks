@@ -95,6 +95,18 @@ def test_actionable_gap_rows_exclude_inert_placeholders(values: list[CheckRow]) 
     ]
 
 
+@given(label=_LABELS, target=st.text(max_size=20))
+def test_actionable_gap_rows_treat_only_warn_rows_as_gaps(label: str, target: str) -> None:
+    rows = [
+        CheckRow(label, target, "ok detail", "ok"),
+        CheckRow(label, target, "fail detail", "fail"),
+        CheckRow(label, target, "warn detail", "warn"),
+        CheckRow(label, target, _INERT_DETAIL, "warn"),
+    ]
+
+    assert _actionable_gap_rows(rows) == [rows[2]]
+
+
 @given(values=rows(), label=st.text(max_size=30))
 def test_is_fail_matches_fail_row_lookup(values: list[CheckRow], label: str) -> None:
     by_label = {row.label: row for row in values}

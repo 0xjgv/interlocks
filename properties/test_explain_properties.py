@@ -33,6 +33,15 @@ def test_explain_payload_for_single_command_uses_resolved_doc(
     assert "when_to_use" in payload
 
 
+@given(want_all=st.booleans())
+def test_explain_payload_without_positionals_uses_index_or_all_mode(want_all: bool) -> None:
+    payload = explain._explain_payload(want_all=want_all, positional=[])
+
+    assert payload["command"] == "explain"
+    assert payload["mode"] == ("all" if want_all else "index")
+    assert payload["groups"] == explain._explain_groups_payload(full=want_all)
+
+
 @given(full=st.booleans())
 def test_explain_groups_payload_lists_every_registered_command_once(full: bool) -> None:
     payload = explain._explain_groups_payload(full=full)
@@ -48,6 +57,14 @@ def test_explain_groups_payload_lists_every_registered_command_once(full: bool) 
     assert {command[key] for command in commands} == set(COMMAND_DOCS_BY_NAME)
     assert len(commands) == len(COMMAND_DOCS_BY_NAME)
     assert all(("when_to_use" in command) is full for command in commands)
+
+
+@given(full=st.booleans())
+def test_explain_groups_payload_has_no_empty_groups(full: bool) -> None:
+    payload = explain._explain_groups_payload(full=full)
+
+    assert payload
+    assert all(group["commands"] for group in payload)
 
 
 @given(task_name=_DOC_NAME, full=st.booleans())

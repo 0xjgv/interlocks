@@ -56,6 +56,21 @@ def test_clean_payload_includes_removed_sample_and_empty_gate_state(
     assert payload["removed"] == removed[:50]
 
 
+@given(
+    removed=st.lists(st.text(min_size=1, max_size=20), min_size=51, max_size=80),
+    elapsed=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_infinity=False),
+)
+def test_clean_payload_reports_omitted_removed_count(
+    removed: list[str],
+    elapsed: float,
+) -> None:
+    reset_results()
+
+    payload = _clean_payload(removed, elapsed)
+
+    assert payload["omitted_removed"] == len(removed) - 50
+
+
 @given(relpath=st.from_regex(r"\.?/?[A-Za-z0-9_.-]{1,20}", fullmatch=True))
 def test_artifact_label_strips_leading_dot_slash(relpath: str) -> None:
     label = _artifact_label(Path(), Path(relpath))

@@ -142,6 +142,15 @@ def test_is_progress_line_matches_mutmut_progress_tokens(line: str) -> None:
     assert mutation._is_progress_line(line) is expected
 
 
+@given(done=_NONNEG, total=st.integers(min_value=1, max_value=10_000))
+def test_is_progress_line_accepts_mutmut_fraction_with_either_status_token(
+    done: int,
+    total: int,
+) -> None:
+    assert mutation._is_progress_line(f"{done}/{total} 🎉 0") is True
+    assert mutation._is_progress_line(f"{done}/{total} 🫥 0") is True
+
+
 @given(line=st.text(max_size=80))
 def test_is_keep_line_matches_done_or_rate_lines(line: str) -> None:
     stripped = line.strip().lower()
@@ -193,6 +202,12 @@ def test_completion_pct_is_bounded_when_total_is_known(checked: int, total: int 
         assert pct == min(checked / total * 100, 100.0)
 
 
+@given(checked=st.integers(min_value=0, max_value=100_000))
+def test_completion_pct_is_none_without_positive_total(checked: int) -> None:
+    assert mutation._completion_pct(checked, None) is None
+    assert mutation._completion_pct(checked, 0) is None
+
+
 @given(
     elapsed=st.floats(min_value=0.0, max_value=10_000.0, allow_nan=False, allow_infinity=False),
     checked=st.integers(min_value=0, max_value=100_000),
@@ -207,6 +222,11 @@ def test_estimated_full_runtime_only_when_more_mutants_remain(
         assert estimate is None
     else:
         assert estimate == elapsed * total / checked
+
+
+@given(elapsed=st.floats(min_value=0.0, max_value=10_000.0, allow_nan=False, allow_infinity=False))
+def test_estimated_full_runtime_is_none_before_first_checked_mutant(elapsed: float) -> None:
+    assert mutation._estimated_full_runtime(elapsed, 0, 1) is None
 
 
 @given(
