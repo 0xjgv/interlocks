@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -157,6 +158,18 @@ def test_format_action_includes_closure_when_present(category: str, action: str)
     assert "custom rationale" in formatted
 
 
+@given(category=_CATEGORY, action=_ACTION)
+def test_format_action_without_closure_returns_plain_action(category: str, action: str) -> None:
+    item = EvaluationItem(
+        category=category,
+        score=1,
+        detail="detail",
+        next_action=action,
+    )
+
+    assert _format_action(item) == f"[{category}] {action}"
+
+
 @given(
     elapsed=st.floats(allow_nan=False, allow_infinity=False, min_value=0, max_value=10_000),
     created_at=st.floats(allow_nan=False, allow_infinity=False, min_value=0, max_value=10_000),
@@ -257,24 +270,84 @@ def test_ci_item_score_stays_in_range(workflow: str) -> None:
     assert item.category == "ci"
 
 
+@given(workflow_state=st.sampled_from(["none", "other", "action", "local"]))
+def test_ci_item_scores_workflow_presence_and_specificity(workflow_state: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        if workflow_state != "none":
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            workflow = {
+                "other": "name: ci\n",
+                "action": "uses: 0xjgv/interlocks@v1\n",
+                "local": "run: uv run interlocks ci\n",
+            }[workflow_state]
+            (workflows / "ci.yml").write_text(workflow, encoding="utf-8")
+
+        item = _ci_item(_cfg(root))
+
+    assert item.category == "ci"
+    assert item.detail == "workflow calls interlocks ci"
+    if workflow_state == "local":
+        assert item.score == 3
+        assert item.next_action is None
+    elif workflow_state == "action":
+        assert item.score == 2
+        assert item.next_action == (
+            "Make workflow command explicitly reproducible as `interlocks ci`."
+        )
+    elif workflow_state == "other":
+        assert item.score == 1
+        assert item.next_action == "Add `interlocks ci` to a GitHub Actions workflow."
+    else:
+        assert item.score == 0
+        assert item.next_action == "Add .github/workflows CI that runs `interlocks ci`."
+
+
 @given(detail=_DETAIL)
 def test_acceptance_item_without_feature_files_requests_scaffold(detail: str) -> None:
     with TemporaryDirectory() as raw_root:
         cfg = _cfg(Path(raw_root))
-        original_features = evaluate_mod._feature_files
-        original_detail = evaluate_mod._acceptance_detail
-        evaluate_mod._feature_files = lambda _cfg: []  # type: ignore[assignment]
-        evaluate_mod._acceptance_detail = lambda _cfg: detail  # type: ignore[assignment]
-        try:
+        with (
+            patch.object(evaluate_mod, "_feature_files", lambda _cfg: []),
+            patch.object(evaluate_mod, "_acceptance_detail", lambda _cfg: detail),
+        ):
             item = _acceptance_item(cfg)
-        finally:
-            evaluate_mod._feature_files = original_features
-            evaluate_mod._acceptance_detail = original_detail
 
     assert item.category == "acceptance"
     assert item.score == 0
     assert item.detail == detail
     assert item.next_action == "Run `interlocks init-acceptance` to scaffold feature files."
+
+
+@given(detail=_DETAIL)
+def test_acceptance_item_with_feature_file_but_no_scenarios_requests_scenario(
+    detail: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = _cfg(root)
+        feature = root / "tests" / "features" / "generated.feature"
+        feature.parent.mkdir(parents=True)
+        feature.write_text("Feature: generated\n", encoding="utf-8")
+        with (
+            patch.object(evaluate_mod, "_feature_files", lambda _cfg: [feature]),
+            patch.object(evaluate_mod, "_acceptance_detail", lambda _cfg: detail),
+            patch.object(evaluate_mod, "parse_feature_behaviors", lambda _files: object()),
+            patch.object(
+                evaluate_mod,
+                "traceable_totals_for_parsed_features",
+                lambda _parsed: (0, 0),
+            ),
+        ):
+            item = _acceptance_item(cfg)
+
+    assert item.category == "acceptance"
+    assert item.score == 1
+    assert item.detail == detail
+    assert item.next_action == (
+        f"Add at least one Scenario under {cfg.features_dir_arg or 'features/'}."
+    )
 
 
 @given(
@@ -297,17 +370,15 @@ def test_coverage_item_scores_threshold_branch_and_ci_state(
             test_invoker="python",
             coverage_min=coverage_min,
         )
-        original_branch = evaluate_mod._coverage_branch_enabled
-        original_ci = evaluate_mod._ci_source_contains
-        evaluate_mod._coverage_branch_enabled = lambda _cfg: branch  # type: ignore[assignment]
-        evaluate_mod._ci_source_contains = lambda needle: (
-            ci_wired if needle == "task_coverage(" else False
-        )  # type: ignore[assignment]
-        try:
+        with (
+            patch.object(evaluate_mod, "_coverage_branch_enabled", lambda _cfg: branch),
+            patch.object(
+                evaluate_mod,
+                "_ci_source_contains",
+                lambda needle: ci_wired if needle == "task_coverage(" else False,
+            ),
+        ):
             item = _coverage_item(cfg)
-        finally:
-            evaluate_mod._coverage_branch_enabled = original_branch
-            evaluate_mod._ci_source_contains = original_ci
 
     threshold_positive = coverage_min > 0
     threshold_strong = coverage_min >= 80
@@ -326,6 +397,40 @@ def test_coverage_item_scores_threshold_branch_and_ci_state(
     else:
         assert item.score == 2
         assert item.next_action == "Wire task_coverage() into `interlocks ci`."
+
+
+@given(
+    coverage_min=st.integers(min_value=0, max_value=100),
+    branch=st.booleans(),
+    ci_wired=st.booleans(),
+)
+def test_coverage_item_keeps_category_and_detail_stable(
+    coverage_min: int,
+    branch: bool,
+    ci_wired: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        cfg = InterlockConfig(
+            project_root=Path(raw_root),
+            src_dir=Path(raw_root) / "src",
+            test_dir=Path(raw_root) / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            coverage_min=coverage_min,
+        )
+        with (
+            patch.object(evaluate_mod, "_coverage_branch_enabled", lambda _cfg: branch),
+            patch.object(
+                evaluate_mod,
+                "_ci_source_contains",
+                lambda needle: ci_wired if needle == "task_coverage(" else False,
+            ),
+        ):
+            item = _coverage_item(cfg)
+
+    assert item.category == "coverage"
+    assert item.detail == "branch coverage + threshold in CI"
+    assert 0 <= item.score <= item.max_score
 
 
 @given(
@@ -355,15 +460,11 @@ def test_mutation_item_scores_config_ci_and_enforcement(
             enforce_mutation=enforce_mutation,
             mutation_min_score=min_score,
         )
-        original = evaluate_mod._has_mutmut_config
-        original_completed = evaluate_mod._latest_mutation_completed
-        evaluate_mod._has_mutmut_config = lambda _cfg: configured  # type: ignore[assignment]
-        evaluate_mod._latest_mutation_completed = lambda _cfg: None  # type: ignore[assignment]
-        try:
+        with (
+            patch.object(evaluate_mod, "_has_mutmut_config", lambda _cfg: configured),
+            patch.object(evaluate_mod, "_latest_mutation_completed", lambda _cfg: None),
+        ):
             item = _mutation_item(cfg)
-        finally:
-            evaluate_mod._has_mutmut_config = original
-            evaluate_mod._latest_mutation_completed = original_completed
 
     ci_enabled = run_mutation_in_ci or mutation_mode != "off"
     enforced = enforce_mutation and min_score > 0
@@ -396,15 +497,11 @@ def test_mutation_item_partial_evidence_reduces_score(completed: bool | None) ->
             enforce_mutation=True,
             mutation_min_score=80.0,
         )
-        original = evaluate_mod._has_mutmut_config
-        original_completed = evaluate_mod._latest_mutation_completed
-        evaluate_mod._has_mutmut_config = lambda _cfg: True  # type: ignore[assignment]
-        evaluate_mod._latest_mutation_completed = lambda _cfg: completed  # type: ignore[assignment]
-        try:
+        with (
+            patch.object(evaluate_mod, "_has_mutmut_config", lambda _cfg: True),
+            patch.object(evaluate_mod, "_latest_mutation_completed", lambda _cfg: completed),
+        ):
             item = _mutation_item(cfg)
-        finally:
-            evaluate_mod._has_mutmut_config = original
-            evaluate_mod._latest_mutation_completed = original_completed
 
     if completed is False:
         assert item.score == 2
@@ -442,6 +539,54 @@ def test_mutation_rerun_action_only_suggests_changed_only_for_no_results(
     assert f"--max-runtime={max_runtime}" in action
     assert ("--changed-only" in action) is no_results
     assert ("--since=HEAD" in action) is no_results
+
+
+@given(
+    min_score=st.floats(min_value=0.0, max_value=100.0, allow_nan=False),
+    max_runtime=st.integers(min_value=0, max_value=10_000),
+)
+def test_mutation_rerun_action_partial_evidence_uses_full_rerun_command(
+    min_score: float,
+    max_runtime: int,
+) -> None:
+    cfg = InterlockConfig(
+        project_root=Path.cwd(),
+        src_dir=Path("src"),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+        mutation_min_score=min_score,
+        mutation_max_runtime=max_runtime,
+    )
+
+    assert _mutation_rerun_action(cfg, no_results=False) == (
+        f"Rerun `interlocks mutation --min-score={min_score:.0f} --max-runtime={max_runtime}`."
+    )
+
+
+@given(
+    min_score=st.floats(min_value=0.0, max_value=100.0, allow_nan=False),
+    max_runtime=st.integers(min_value=0, max_value=10_000),
+)
+def test_mutation_rerun_action_no_results_names_bounded_local_pass(
+    min_score: float,
+    max_runtime: int,
+) -> None:
+    cfg = InterlockConfig(
+        project_root=Path.cwd(),
+        src_dir=Path("src"),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+        mutation_min_score=min_score,
+        mutation_max_runtime=max_runtime,
+    )
+
+    action = _mutation_rerun_action(cfg, no_results=True)
+
+    assert f"--min-score={min_score:.0f}" in action
+    assert f"--max-runtime={max_runtime}" in action
+    assert "`interlocks mutation --changed-only --since=HEAD`" in action
 
 
 @given(completed=st.one_of(st.none(), st.booleans(), st.integers(), st.text(max_size=20)))
@@ -485,6 +630,35 @@ def test_latest_mutation_completed_treats_stale_evidence_as_incomplete() -> None
         assert _latest_mutation_completed(cfg) is False
 
 
+def _dependency_rules_item_for(
+    has_config: bool,
+    default_available: bool,
+    strong_contract: bool,
+    ci_source_contains: bool,
+) -> EvaluationItem:
+    with TemporaryDirectory() as raw_root:
+        cfg = _cfg(Path(raw_root))
+        with (
+            patch.object(evaluate_mod, "has_project_config", lambda *_args, **_kwargs: has_config),
+            patch.object(
+                evaluate_mod,
+                "_default_arch_contract_available",
+                lambda _cfg: default_available,
+            ),
+            patch.object(
+                evaluate_mod,
+                "_importlinter_contracts",
+                lambda _cfg: [{"type": "forbidden" if strong_contract else "unknown"}],
+            ),
+            patch.object(
+                evaluate_mod,
+                "_ci_source_contains",
+                lambda needle: ci_source_contains if needle == "task_arch(" else False,
+            ),
+        ):
+            return _dependency_rules_item(cfg)
+
+
 @given(
     has_config=st.booleans(),
     default_available=st.booleans(),
@@ -497,27 +671,12 @@ def test_dependency_rules_item_scores_contracts_and_ci_wiring(
     strong_contract: bool,
     ci_source_contains: bool,
 ) -> None:
-    with TemporaryDirectory() as raw_root:
-        cfg = _cfg(Path(raw_root))
-        original_has_project = evaluate_mod.has_project_config
-        original_default = evaluate_mod._default_arch_contract_available
-        original_contracts = evaluate_mod._importlinter_contracts
-        original_ci = evaluate_mod._ci_source_contains
-        evaluate_mod.has_project_config = lambda *_args, **_kwargs: has_config  # type: ignore[assignment]
-        evaluate_mod._default_arch_contract_available = lambda _cfg: default_available  # type: ignore[assignment]
-        evaluate_mod._importlinter_contracts = lambda _cfg: [  # type: ignore[assignment]
-            {"type": "forbidden" if strong_contract else "unknown"}
-        ]
-        evaluate_mod._ci_source_contains = lambda needle: (  # type: ignore[assignment]
-            ci_source_contains if needle == "task_arch(" else False
-        )
-        try:
-            item = _dependency_rules_item(cfg)
-        finally:
-            evaluate_mod.has_project_config = original_has_project
-            evaluate_mod._default_arch_contract_available = original_default
-            evaluate_mod._importlinter_contracts = original_contracts
-            evaluate_mod._ci_source_contains = original_ci
+    item = _dependency_rules_item_for(
+        has_config,
+        default_available,
+        strong_contract,
+        ci_source_contains,
+    )
 
     ci_wired = ci_source_contains and (has_config or default_available)
     if strong_contract and ci_wired:
@@ -531,6 +690,36 @@ def test_dependency_rules_item_scores_contracts_and_ci_wiring(
     else:
         assert item.score == 2
         assert item.next_action == "Wire task_arch() into `interlocks ci`."
+
+
+@given(
+    has_config=st.booleans(),
+    default_available=st.booleans(),
+    strong_contract=st.booleans(),
+    ci_source_contains=st.booleans(),
+)
+def test_dependency_rules_item_keeps_detail_and_ci_owned_actions(
+    has_config: bool,
+    default_available: bool,
+    strong_contract: bool,
+    ci_source_contains: bool,
+) -> None:
+    item = _dependency_rules_item_for(
+        has_config,
+        default_available,
+        strong_contract,
+        ci_source_contains,
+    )
+
+    assert item.category == "deps"
+    assert item.detail == "import-linter contracts in CI"
+    assert 0 <= item.score <= item.max_score
+    if item.next_action is None:
+        assert item.closure is None
+    else:
+        assert item.closure is not None
+        assert item.closure.command == "interlocks ci"
+        assert item.closure.kind == "stage"
 
 
 @given(parts=_PATH_PARTS)
@@ -563,14 +752,79 @@ def test_properties_item_scaffold_action_uses_configured_dir(
     )
 
 
-@given(
-    budget=st.integers(min_value=0, max_value=120),
-    evidence_state=st.sampled_from(["missing", "stale", "failed", "skipped", "slow", "ok"]),
-)
-def test_pr_speed_item_scores_budget_and_ci_evidence_state(
-    budget: int,
-    evidence_state: str,
+@given(parts=_PATH_PARTS)
+def test_properties_item_without_property_files_requests_init(
+    parts: tuple[str, ...],
 ) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        properties_dir = root.joinpath(*parts)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            properties_dir=properties_dir,
+        )
+
+        item = _properties_item(cfg)
+
+    assert item.category == "properties"
+    assert item.score == 0
+    assert item.next_action == (
+        "Run `interlocks init-properties` and replace the example with domain invariants."
+    )
+
+
+@given(parts=_PATH_PARTS, ci_wired=st.booleans())
+def test_properties_item_scores_domain_properties_by_ci_wiring(
+    parts: tuple[str, ...],
+    ci_wired: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        properties_dir = root.joinpath(*parts)
+        properties_dir.mkdir(parents=True)
+        (properties_dir / "test_domain_properties.py").write_text(
+            "def test_domain() -> None:\n    assert True\n",
+            encoding="utf-8",
+        )
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "src",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            properties_dir=properties_dir,
+        )
+        with patch.object(
+            evaluate_mod,
+            "_ci_source_contains",
+            lambda needle: ci_wired if needle == "task_properties(" else False,
+        ):
+            item = _properties_item(cfg)
+
+    assert item.category == "properties"
+    if ci_wired:
+        assert item.score == 3
+        assert item.next_action is None
+    else:
+        assert item.score == 1
+        assert item.next_action == "Wire task_properties() into `interlocks ci`."
+
+
+_PR_SPEED_EVIDENCE_STATES = st.sampled_from([
+    "missing",
+    "stale",
+    "failed",
+    "skipped",
+    "slow",
+    "ok",
+])
+
+
+def _pr_speed_item_for(budget: int, evidence_state: str) -> EvaluationItem:
     max_age = 24
     evidence = (
         None
@@ -594,20 +848,24 @@ def test_pr_speed_item_scores_budget_and_ci_evidence_state(
             pr_ci_evidence_max_age_hours=max_age,
             ci_evidence_path=root / ".interlocks" / "ci.json",
         )
-        original_read = evaluate_mod._read_ci_evidence
-        original_age = evaluate_mod._evidence_age_hours
-        original_input_stale = evaluate_mod._ci_evidence_inputs_are_stale
-        evaluate_mod._read_ci_evidence = lambda _cfg: evidence  # type: ignore[assignment]
-        evaluate_mod._ci_evidence_inputs_are_stale = lambda _cfg: False  # type: ignore[assignment]
-        evaluate_mod._evidence_age_hours = lambda _evidence: (
-            max_age + 1 if evidence_state == "stale" else 0
-        )  # type: ignore[assignment]
-        try:
-            item = _pr_speed_item(cfg)
-        finally:
-            evaluate_mod._read_ci_evidence = original_read
-            evaluate_mod._evidence_age_hours = original_age
-            evaluate_mod._ci_evidence_inputs_are_stale = original_input_stale
+        with (
+            patch.object(evaluate_mod, "_read_ci_evidence", lambda _cfg: evidence),
+            patch.object(evaluate_mod, "_ci_evidence_inputs_are_stale", lambda _cfg: False),
+            patch.object(
+                evaluate_mod,
+                "_evidence_age_hours",
+                lambda _evidence: max_age + 1 if evidence_state == "stale" else 0,
+            ),
+        ):
+            return _pr_speed_item(cfg)
+
+
+@given(budget=st.integers(min_value=0, max_value=120), evidence_state=_PR_SPEED_EVIDENCE_STATES)
+def test_pr_speed_item_scores_budget_and_ci_evidence_state(
+    budget: int,
+    evidence_state: str,
+) -> None:
+    item = _pr_speed_item_for(budget, evidence_state)
 
     if budget <= 0:
         assert item.score == 0
@@ -640,6 +898,24 @@ def test_pr_speed_item_scores_budget_and_ci_evidence_state(
         assert item.next_action is None
 
 
+@given(budget=st.integers(min_value=0, max_value=120), evidence_state=_PR_SPEED_EVIDENCE_STATES)
+def test_pr_speed_item_keeps_detail_and_ci_owned_actions(
+    budget: int,
+    evidence_state: str,
+) -> None:
+    item = _pr_speed_item_for(budget, evidence_state)
+
+    assert item.category == "pr-speed"
+    assert item.detail == "CI runtime budget + timing evidence"
+    assert 0 <= item.score <= item.max_score
+    if item.next_action is None:
+        assert item.closure is None
+    else:
+        assert item.closure is not None
+        assert item.closure.command == "interlocks ci"
+        assert item.closure.kind == "stage"
+
+
 def _pr_speed_evidence_action_for(
     refresh_action: str | None,
     *,
@@ -654,14 +930,12 @@ def _pr_speed_evidence_action_for(
         test_invoker="python",
     )
     evidence = CIEvidence(1.0, 1.0, passed=passed, skipped=skipped)
-    original_refresh = evaluate_mod._ci_evidence_refresh_action
-    evaluate_mod._ci_evidence_refresh_action = (  # type: ignore[assignment]
-        lambda _cfg, _evidence: refresh_action
-    )
-    try:
+    with patch.object(
+        evaluate_mod,
+        "_ci_evidence_refresh_action",
+        lambda _cfg, _evidence: refresh_action,
+    ):
         return _pr_speed_evidence_action(cfg, evidence, "detail")
-    finally:
-        evaluate_mod._ci_evidence_refresh_action = original_refresh
 
 
 @given(
@@ -736,6 +1010,23 @@ def test_tool_section_returns_named_tool_table_only(
     assert _tool_section(pyproject, name) == (tool.get(name) if isinstance(tool, dict) else None)
 
 
+@given(
+    pyproject=st.dictionaries(st.text(max_size=20), _JSON_SCALAR, max_size=8),
+    invalid_tool=_JSON_SCALAR,
+    name=st.text(min_size=1, max_size=20),
+)
+def test_tool_section_requires_tool_table(
+    pyproject: dict[str, object],
+    invalid_tool: object,
+    name: str,
+) -> None:
+    pyproject.pop("tool", None)
+    assert _tool_section(pyproject, name) is None
+
+    pyproject["tool"] = invalid_tool
+    assert _tool_section(pyproject, name) is None
+
+
 @given(value=st.one_of(_JSON_SCALAR, st.text(max_size=20)))
 def test_contract_type_lowercases_string_type_only(value: object) -> None:
     contract = {"type": value}
@@ -743,18 +1034,19 @@ def test_contract_type_lowercases_string_type_only(value: object) -> None:
     assert _contract_type(contract) == (value.lower() if isinstance(value, str) else "")
 
 
-@given(
-    has_complexity_thresholds=st.booleans(),
-    has_crap_threshold=st.booleans(),
-    enforce_crap=st.booleans(),
-    ci_wired=st.booleans(),
-)
-def test_complexity_score_action_follows_threshold_enforcement_and_ci_state(
+@given(contract=st.dictionaries(st.text(max_size=20), _JSON_SCALAR, max_size=8))
+def test_contract_type_is_empty_without_string_type(contract: dict[str, object]) -> None:
+    contract.pop("type", None)
+
+    assert _contract_type(contract) == ""
+
+
+def _complexity_score_action_for(
     has_complexity_thresholds: bool,
     has_crap_threshold: bool,
     enforce_crap: bool,
     ci_wired: bool,
-) -> None:
+) -> tuple[int, str | None]:
     with TemporaryDirectory() as raw_root:
         root = Path(raw_root)
         cfg = InterlockConfig(
@@ -769,12 +1061,28 @@ def test_complexity_score_action_follows_threshold_enforcement_and_ci_state(
             crap_max=1.0 if has_crap_threshold else 0.0,
             enforce_crap=enforce_crap,
         )
-        original = evaluate_mod._ci_complexity_wired
-        evaluate_mod._ci_complexity_wired = lambda: ci_wired  # type: ignore[assignment]
-        try:
-            score, action = _complexity_score_action(cfg)
-        finally:
-            evaluate_mod._ci_complexity_wired = original
+        with patch.object(evaluate_mod, "_ci_complexity_wired", lambda: ci_wired):
+            return _complexity_score_action(cfg)
+
+
+@given(
+    has_complexity_thresholds=st.booleans(),
+    has_crap_threshold=st.booleans(),
+    enforce_crap=st.booleans(),
+    ci_wired=st.booleans(),
+)
+def test_complexity_score_action_follows_threshold_enforcement_and_ci_state(
+    has_complexity_thresholds: bool,
+    has_crap_threshold: bool,
+    enforce_crap: bool,
+    ci_wired: bool,
+) -> None:
+    score, action = _complexity_score_action_for(
+        has_complexity_thresholds,
+        has_crap_threshold,
+        enforce_crap,
+        ci_wired,
+    )
 
     thresholds_ready = has_complexity_thresholds and has_crap_threshold
     partial = has_complexity_thresholds or has_crap_threshold
@@ -791,26 +1099,61 @@ def test_complexity_score_action_follows_threshold_enforcement_and_ci_state(
         assert action == "Wire task_complexity() and cmd_crap() into `interlocks ci`."
 
 
+@given(
+    has_complexity_thresholds=st.booleans(),
+    has_crap_threshold=st.booleans(),
+    enforce_crap=st.booleans(),
+    ci_wired=st.booleans(),
+)
+def test_complexity_score_action_keeps_score_and_action_aligned(
+    has_complexity_thresholds: bool,
+    has_crap_threshold: bool,
+    enforce_crap: bool,
+    ci_wired: bool,
+) -> None:
+    score, action = _complexity_score_action_for(
+        has_complexity_thresholds,
+        has_crap_threshold,
+        enforce_crap,
+        ci_wired,
+    )
+
+    assert 0 <= score <= 3
+    assert (action is None) is (score == 3)
+    if action is not None:
+        assert action.endswith(".")
+
+
+def _security_item_for(
+    audit_exposed: bool,
+    audit_in_ci: bool,
+    deps_in_ci: bool,
+) -> EvaluationItem:
+    with (
+        patch.object(
+            evaluate_mod,
+            "_cli_source_contains",
+            lambda needle: audit_exposed if needle == '"audit"' else False,
+        ),
+        patch.object(
+            evaluate_mod,
+            "_ci_source_contains",
+            lambda needle: {
+                "task_audit(": audit_in_ci,
+                "task_deps(": deps_in_ci,
+            }.get(needle, False),
+        ),
+    ):
+        return _security_item()
+
+
 @given(audit_exposed=st.booleans(), audit_in_ci=st.booleans(), deps_in_ci=st.booleans())
 def test_security_item_scores_audit_and_dependency_ci_wiring(
     audit_exposed: bool,
     audit_in_ci: bool,
     deps_in_ci: bool,
 ) -> None:
-    original_cli = evaluate_mod._cli_source_contains
-    original_ci = evaluate_mod._ci_source_contains
-    evaluate_mod._cli_source_contains = lambda needle: (
-        audit_exposed if needle == '"audit"' else False
-    )  # type: ignore[assignment]
-    evaluate_mod._ci_source_contains = lambda needle: {  # type: ignore[assignment]
-        "task_audit(": audit_in_ci,
-        "task_deps(": deps_in_ci,
-    }.get(needle, False)
-    try:
-        item = _security_item()
-    finally:
-        evaluate_mod._cli_source_contains = original_cli
-        evaluate_mod._ci_source_contains = original_ci
+    item = _security_item_for(audit_exposed, audit_in_ci, deps_in_ci)
 
     assert item.category == "security"
     if audit_exposed and audit_in_ci and deps_in_ci:
@@ -825,3 +1168,22 @@ def test_security_item_scores_audit_and_dependency_ci_wiring(
     else:
         assert item.score == 2
         assert item.next_action == "Wire task_deps() into `interlocks ci`."
+
+
+@given(audit_exposed=st.booleans(), audit_in_ci=st.booleans(), deps_in_ci=st.booleans())
+def test_security_item_keeps_detail_and_ci_owned_actions(
+    audit_exposed: bool,
+    audit_in_ci: bool,
+    deps_in_ci: bool,
+) -> None:
+    item = _security_item_for(audit_exposed, audit_in_ci, deps_in_ci)
+
+    assert item.category == "security"
+    assert item.detail == "audit + dep hygiene in CI"
+    assert 0 <= item.score <= item.max_score
+    if item.next_action is None:
+        assert item.closure is None
+    else:
+        assert item.closure is not None
+        assert item.closure.command == "interlocks ci"
+        assert item.closure.kind == "stage"

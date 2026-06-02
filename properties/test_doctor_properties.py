@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from hypothesis import given
 from hypothesis import strategies as st
@@ -89,6 +90,23 @@ def test_gap_lines_match_warn_rows_in_order(values: list[CheckRow]) -> None:
 
 
 @given(rows())
+def test_gap_lines_count_matches_actionable_gap_rows(values: list[CheckRow]) -> None:
+    assert len(_gap_lines(values)) == len(_actionable_gap_rows(values))
+
+
+@given(rows())
+def test_gap_lines_do_not_include_targets_or_inert_details(values: list[CheckRow]) -> None:
+    lines = _gap_lines(values)
+
+    for row in values:
+        if row.state == "warn" and row.detail != _INERT_DETAIL:
+            assert f"{row.label}: {row.detail}" in lines
+        else:
+            assert f"{row.label}: {row.detail}" not in lines
+        assert all(row.target not in line for line in lines)
+
+
+@given(rows())
 def test_actionable_gap_rows_exclude_inert_placeholders(values: list[CheckRow]) -> None:
     assert _actionable_gap_rows(values) == [
         row for row in values if row.state == "warn" and row.detail != _INERT_DETAIL
@@ -113,6 +131,17 @@ def test_is_fail_matches_fail_row_lookup(values: list[CheckRow], label: str) -> 
     row = by_label.get(label)
 
     assert _is_fail(by_label, label) is (row is not None and row.state == "fail")
+
+
+@given(label=st.text(min_size=1, max_size=30), state=_STATES)
+def test_is_fail_requires_exact_label_and_fail_state(label: str, state: str) -> None:
+    by_label = {
+        label: CheckRow(label, "target", "detail", state),
+        f"{label}-other": CheckRow(f"{label}-other", "target", "detail", "fail"),
+    }
+
+    assert _is_fail(by_label, label) is (state == "fail")
+    assert _is_fail(by_label, f"{label}-missing") is False
 
 
 @given(state=_STATES, inert=st.booleans())
@@ -167,6 +196,38 @@ def test_acceptance_row_reflects_disabled_scaffolded_or_missing_state(
 
 
 @given(
+    runner=st.one_of(st.none(), st.sampled_from(["off", "pytest-bdd"])),
+    has_feature=st.booleans(),
+    configured_features_dir=st.booleans(),
+)
+def test_acceptance_row_target_uses_configured_or_default_feature_dir(
+    runner: str | None,
+    has_feature: bool,
+    configured_features_dir: bool,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        features = root / "custom" / "features"
+        features.mkdir(parents=True)
+        if has_feature:
+            (features / "generated.feature").write_text("Feature: generated\n", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "pkg",
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            features_dir=features if configured_features_dir else None,
+            acceptance_runner=runner,  # type: ignore[arg-type]
+        )
+
+        row = _acceptance_row(cfg)
+
+    expected_target = "custom/features" if configured_features_dir else "tests/features/"
+    assert row.target == ("(disabled)" if runner == "off" else expected_target)
+
+
+@given(
     preset=st.one_of(st.none(), st.text(max_size=20)),
     runner=st.sampled_from(["pytest", "unittest"]),
     invoker=st.sampled_from(["python", "uv"]),
@@ -198,6 +259,43 @@ def test_cfg_rows_include_core_and_derived_configuration(
     assert "run_properties_in_check" in rows
 
 
+@given(
+    preset=st.one_of(st.none(), st.text(max_size=20)),
+    runner=st.sampled_from(["pytest", "unittest"]),
+    invoker=st.sampled_from(["python", "uv"]),
+)
+def test_cfg_rows_preserve_display_order_and_unique_keys(
+    preset: str | None,
+    runner: str,
+    invoker: str,
+) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=root / "pkg",
+            test_dir=root / "tests",
+            test_runner=runner,
+            test_invoker=invoker,
+            preset=preset,
+        )
+
+        rows = _cfg_rows(cfg)
+
+    keys = [key for key, _value in rows]
+    assert keys[:8] == [
+        "preset",
+        "src_dir",
+        "test_dir",
+        "test_runner",
+        "test_invoker",
+        "features_dir",
+        "properties_dir",
+        "acceptance_runner",
+    ]
+    assert len(keys) == len(set(keys))
+
+
 @given(count=st.integers(min_value=0, max_value=5))
 def test_crash_report_cache_row_reports_cached_json_count(count: int) -> None:
     base_mtime = 1_700_000_000
@@ -225,6 +323,19 @@ def test_crash_report_cache_row_reports_cached_json_count(count: int) -> None:
     else:
         assert row.detail.startswith(f"{count} cached")
         assert "last seen:" in row.detail
+
+
+@given(error=st.text(min_size=1, max_size=80))
+def test_crash_report_cache_row_warns_when_cache_is_unreadable(error: str) -> None:
+    with patch("interlocks.tasks.doctor._crash_cache_dir", side_effect=OSError(error)):
+        row = _crash_report_cache_row()
+
+    assert row == CheckRow(
+        "crash reports",
+        "~/.cache/interlocks/crashes/",
+        "cache unreadable",
+        "warn",
+    )
 
 
 @given(rows())
