@@ -71,6 +71,13 @@ def test_json_object_loader_round_trips_objects(payload: dict[str, object]) -> N
     assert _loads_dict(json.dumps(payload)) == payload
 
 
+@given(
+    payload=st.one_of(st.none(), st.booleans(), st.integers(), st.text(), st.lists(_JSON_VALUE))
+)
+def test_json_object_loader_rejects_valid_non_object_json(payload: object) -> None:
+    assert _loads_dict(json.dumps(payload)) is None
+
+
 @given(st.text())
 def test_subprocess_event_parser_never_raises(line: str) -> None:
     event = _parse_subprocess_event(line)
@@ -124,6 +131,11 @@ def test_decode_scenario_key_round_trips_encoded_keys(
     encoded = _encode_scenario_key((Path(feature_path), scenario_line))
 
     assert _decode_scenario_key(encoded) == (Path(feature_path), scenario_line)
+
+
+@given(raw=st.text().filter(lambda value: not value.strip().startswith("{")))
+def test_decode_scenario_key_rejects_non_object_json(raw: str) -> None:
+    assert _decode_scenario_key(raw) is None
 
 
 @given(

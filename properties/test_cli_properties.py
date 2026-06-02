@@ -434,6 +434,11 @@ def test_validate_task_flags_accepts_declared_and_global_flags(flags: list[str])
     _validate_task_flags("check", ["check", *flags])
 
 
+@given(task_name=_TASK_NAME)
+def test_validate_task_flags_accepts_no_flags(task_name: str) -> None:
+    _validate_task_flags(task_name, [task_name])
+
+
 @given(flag=_FLAG.filter(lambda value: value not in _KNOWN_CHECK_FLAG_VALUES))
 def test_validate_task_flags_reports_first_unknown_flag(flag: str) -> None:
     calls: list[tuple[str, str]] = []

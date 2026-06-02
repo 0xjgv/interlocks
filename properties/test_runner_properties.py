@@ -343,6 +343,19 @@ def test_subcommand_args_returns_empty_when_command_absent(name: str, argv: list
 
 
 @given(
+    name=st.from_regex(r"[a-z][a-z0-9-]{0,20}", fullmatch=True),
+    tail=st.lists(_ARGV_TOKEN, max_size=8),
+)
+def test_subcommand_args_uses_first_named_command(name: str, tail: list[str]) -> None:
+    old_argv = sys.argv
+    try:
+        sys.argv = ["interlocks", name, "--quiet", name, *tail]
+        assert subcommand_args(name) == [name, *tail]
+    finally:
+        sys.argv = old_argv
+
+
+@given(
     command=st.text(min_size=1, max_size=20),
     passed=st.booleans(),
     elapsed=st.floats(min_value=0, max_value=10_000, allow_nan=False),

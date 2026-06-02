@@ -313,6 +313,31 @@ def test_measure_line_dispatches_post_image_file_headers(path: str) -> None:
     assert state.files == [path]
 
 
+@given(path=_PATHS, line=st.integers(min_value=1, max_value=100))
+def test_measure_line_counts_added_body_line_without_advancing_old_line(
+    path: str,
+    line: int,
+) -> None:
+    state = _MeasureState(files=[path], current_path=path, old_line=line)
+
+    _measure_line(state, "+value = 1", {})
+
+    assert state.total == 1
+    assert state.outside == 1
+    assert state.old_line == line
+
+
+@given(path=_PATHS)
+def test_record_changed_line_counts_missing_current_path_as_outside(path: str) -> None:
+    state = _MeasureState(files=[path], current_path=None, old_line=1)
+
+    _record_changed_line(state, "value = 1", {}, deleted=False)
+
+    assert state.total == 1
+    assert state.inside == 0
+    assert state.outside == 1
+
+
 @given(
     prefix=st.sampled_from(["+", "-", " "]),
     body=st.sampled_from(["# comment", "if condition:", "value = 1"]),

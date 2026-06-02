@@ -328,3 +328,11 @@ def test_render_body_formats_each_frame_with_allowlisted_formatter(
     assert "## Frames" in body
     for frame in frames:
         assert _format_frame(frame) in body
+
+
+def test_render_body_without_frames_keeps_empty_fenced_section() -> None:
+    body = _render_body({})
+
+    assert "## Crash report" in body
+    assert "## Frames" in body
+    assert body.endswith("```\n```")

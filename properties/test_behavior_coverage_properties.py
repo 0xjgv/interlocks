@@ -274,6 +274,15 @@ def test_format_behavior_coverage_failure_mentions_each_gap(behavior_id: str) ->
     assert f"uncovered behavior ID: {behavior_id}" in message
 
 
+def test_format_behavior_coverage_failure_without_gaps_is_header_only() -> None:
+    result = validate_behavior_coverage((), ())
+
+    assert (
+        format_behavior_coverage_failure(result)
+        == "acceptance: behavior coverage incomplete — add or update Gherkin behavior markers"
+    )
+
+
 @given(ids=st.lists(_ID, min_size=1, max_size=8, unique=True))
 def test_format_behavior_coverage_failure_emits_one_line_per_gap(ids: list[str]) -> None:
     stale = tuple(

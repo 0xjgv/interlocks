@@ -327,6 +327,16 @@ def test_iter_declared_deps_yields_only_string_items(items: list[object]) -> Non
     ]
 
 
+@given(deps=st.lists(_DEP, max_size=8), tool=st.text(max_size=20))
+def test_iter_declared_deps_ignores_malformed_tool_table(
+    deps: list[str],
+    tool: str,
+) -> None:
+    pyproject = {"project": {"dependencies": deps}, "tool": tool}
+
+    assert list(_iter_declared_deps(pyproject)) == deps
+
+
 @given(deps=st.lists(_DEP, max_size=12))
 def test_deps_mention_matches_declared_dependency_words(deps: list[str]) -> None:
     pyproject = {"project": {"dependencies": deps}}
@@ -363,6 +373,10 @@ def test_normalize_dependency_name_collapses_pep503_separators(name: str) -> Non
     assert "_" not in normalized
     assert "." not in normalized
     assert _normalize_dependency_name(normalized) == normalized
+
+
+def test_normalize_dependency_name_collapses_separator_runs_exactly() -> None:
+    assert _normalize_dependency_name("My_Pkg.Name--Extra") == "my-pkg-name-extra"
 
 
 @given(

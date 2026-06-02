@@ -84,6 +84,16 @@ def test_merged_floor_cannot_regress_against_inputs(
         assert is_strictly_better(merged, base) or _same_metric_values(merged, base)
 
 
+@given(floors(), floors())
+def test_merge_higher_takes_metadata_from_right_when_present(
+    left: BaselineFloor, right: BaselineFloor
+) -> None:
+    merged = merge_higher(left, right)
+
+    assert merged.updated_at == (right.updated_at or left.updated_at)
+    assert merged.advanced_from_sha == (right.advanced_from_sha or left.advanced_from_sha)
+
+
 def _same_metric_values(left: BaselineFloor, right: BaselineFloor) -> bool:
     return all(getattr(left, field) == getattr(right, field) for field, _ in METRICS)
 

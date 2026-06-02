@@ -230,6 +230,25 @@ def test_try_extend_rejects_conflicts_and_extends_fitting_candidates(
         assert extended.cost == candidate.cost
 
 
+@given(candidate=_CANDIDATE, base_value=st.integers(min_value=0, max_value=100))
+def test_try_extend_preserves_existing_plan_totals(
+    candidate: Candidate,
+    base_value: int,
+) -> None:
+    base = _Plan(
+        selected=frozenset({99}),
+        value=base_value,
+        cost=CostVector(0, 0, 0, 0),
+        files=frozenset(),
+    )
+    extended = _try_extend(base, 0, candidate, _budget_for_all((candidate,)))
+
+    assert extended is not None
+    assert extended.selected == frozenset({99, 0})
+    assert extended.value == base_value + candidate.value
+    assert extended.cost == candidate.cost
+
+
 @given(
     dimension=st.sampled_from(("outside_diff", "changed_lines", "files", "risk")),
     outside=st.integers(min_value=1, max_value=20),

@@ -298,6 +298,11 @@ def test_function_coverage_matches_executable_line_hit_ratio(
     assert function_coverage(hits, start, end) == pytest.approx(expected)
 
 
+@given(start=st.integers(min_value=1, max_value=100), width=st.integers(min_value=0, max_value=20))
+def test_function_coverage_without_executable_lines_is_zero(start: int, width: int) -> None:
+    assert function_coverage({}, start, start + width) == 0.0
+
+
 @given(
     ccn=st.integers(min_value=1, max_value=50),
     hits=st.lists(st.integers(min_value=0, max_value=1), min_size=1, max_size=25),

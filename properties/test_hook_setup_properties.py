@@ -109,6 +109,44 @@ def test_keep_existing_hook_drops_exact_duplicate_command(new_command: str) -> N
     assert _keep_existing_hook({"type": "command", "command": new_command}, new_command) is False
 
 
+@given(new_command=_TEXT, old_command=_POST_EDIT_COMMANDS)
+def test_keep_existing_hook_drops_prior_post_edit_commands(
+    new_command: str,
+    old_command: str,
+) -> None:
+    assert _keep_existing_hook({"type": "command", "command": old_command}, new_command) is False
+
+
+def test_ensure_stop_hook_removes_prior_post_edit_commands() -> None:
+    settings: dict[str, object] = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": "uv run interlocks post-edit"},
+                        {"type": "command", "command": "echo keep"},
+                    ]
+                }
+            ]
+        }
+    }
+
+    _ensure_stop_hook(settings, "uv run interlocks check")
+
+    hooks = settings["hooks"]
+    assert isinstance(hooks, dict)
+    stop = hooks["Stop"]
+    assert isinstance(stop, list)
+    assert stop == [
+        {
+            "hooks": [
+                {"type": "command", "command": "echo keep"},
+                {"type": "command", "command": "uv run interlocks check"},
+            ]
+        }
+    ]
+
+
 @given(settings=_SETTINGS, command=_COMMAND)
 def test_ensure_stop_hook_normalizes_to_one_stop_command(
     settings: dict[str, object], command: str

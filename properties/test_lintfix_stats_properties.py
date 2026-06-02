@@ -136,6 +136,10 @@ def test_aggregate_preserves_generated_rule_counts(
     assert stats.revert_signal == sum(1 for row in rows if row[4])
 
 
+def test_pareto_frontier_empty_input_is_empty() -> None:
+    assert _pareto_frontier(()) == frozenset()
+
+
 @given(
     rows=st.lists(
         st.tuples(_MODES, _LINES, _LINES, st.booleans(), st.booleans()),

@@ -77,7 +77,10 @@ def test_next_actions_without_declared_dependency_preserves_actions_when_missing
 
 @given(
     existing=st.booleans(),
-    text=st.text(alphabet=st.characters(blacklist_characters="\r\n"), max_size=80),
+    text=st.text(
+        alphabet=st.characters(blacklist_characters="\r\n", blacklist_categories=("Cs",)),
+        max_size=80,
+    ),
 )
 def test_ensure_text_file_preserves_existing_content(existing: bool, text: str) -> None:
     with TemporaryDirectory() as raw_root:

@@ -704,6 +704,13 @@ def test_attribution_formatter_helpers_name_their_failure_modes(behavior_id: str
     assert informational.summary in "\n".join(_format_informational((informational,)))
 
 
+def test_attribution_formatter_helpers_keep_empty_section_headers() -> None:
+    assert tuple(_format_mis_attributed(())) == ("  mis-attributed:",)
+    assert tuple(_format_unresolved(())) == ("  unresolved behavior symbols:",)
+    assert tuple(_format_gaps(())) == ("  instrumentation gaps:",)
+    assert tuple(_format_informational(())) == ("  informational symbol-less behaviors:",)
+
+
 @given(
     feature_path=st.text(min_size=1, max_size=50),
     scenario_line=st.integers(min_value=1, max_value=1_000_000),
