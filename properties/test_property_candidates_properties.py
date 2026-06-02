@@ -234,6 +234,40 @@ def test_add_name_signal_records_first_matching_property_word(name: str) -> None
     assert signals.reasons == ["name suggests invariant (parse)"]
 
 
+@given(
+    name=_IDENT.filter(
+        lambda value: all(
+            word not in value
+            for word in (
+                "classify",
+                "coerce",
+                "compute",
+                "detect",
+                "filter",
+                "format",
+                "merge",
+                "normalize",
+                "parse",
+                "pick",
+                "read",
+                "relpath",
+                "resolve",
+                "rewrite",
+                "split",
+                "validate",
+            )
+        )
+    )
+)
+def test_add_name_signal_ignores_names_without_property_words(name: str) -> None:
+    signals = _CandidateSignals()
+
+    _add_name_signal(signals, name)
+
+    assert signals.score == 0
+    assert signals.reasons == []
+
+
 @given(strategies=st.dictionaries(_IDENT, st.sampled_from(["st.text()", "tmp_path-derived Path"])))
 def test_add_strategy_signals_scores_typed_inputs_and_path_caution(
     strategies: dict[str, str],
@@ -258,6 +292,27 @@ def test_node_side_effect_cautions_classifies_call_nodes(method: str) -> None:
     assert any(f"path.{method}" in caution for caution in cautions)
 
 
+@given(kind=st.sampled_from(["raise", "global", "with"]))
+def test_node_side_effect_cautions_classifies_non_call_boundaries(kind: str) -> None:
+    source = {
+        "raise": "def f() -> None:\n    raise RuntimeError('boom')\n",
+        "global": "def f() -> None:\n    global configured\n",
+        "with": "def f() -> None:\n    with resource:\n        pass\n",
+    }[kind]
+    node = _function(source).body[0]
+
+    cautions = _node_side_effect_cautions(node)
+
+    assert (
+        cautions
+        == {
+            "raise": ["raises exceptions"],
+            "global": ["mutates global state"],
+            "with": ["context manager / resource boundary"],
+        }[kind]
+    )
+
+
 @given(name=st.sampled_from(["capture", "path.write_text", "plain_call"]))
 def test_known_side_effect_call_matches_short_or_full_names(name: str) -> None:
     short_name = name.rsplit(".", maxsplit=1)[-1]
@@ -265,6 +320,13 @@ def test_known_side_effect_call_matches_short_or_full_names(name: str) -> None:
     result = _known_side_effect_call(name, short_name)
 
     assert result is (name != "plain_call")
+
+
+@given(name=_IDENT)
+def test_known_side_effect_call_ignores_prefixed_unknown_names(name: str) -> None:
+    short_name = f"safe_{name}"
+
+    assert _known_side_effect_call(f"module.{short_name}", short_name) is False
 
 
 @given(name=_IDENT)
@@ -276,6 +338,23 @@ def test_candidate_score_is_never_negative(name: str) -> None:
     )
 
     assert _candidate_from_function(node, "pkg/mod.py").score >= 0
+
+
+@given(name=_IDENT)
+def test_candidate_from_function_preserves_explicit_qualname(name: str) -> None:
+    node = _function(
+        f"def parse_{name}(raw: str) -> int:\n    if raw:\n        return len(raw)\n    return 0\n"
+    )
+
+    candidate = _candidate_from_function(
+        node,
+        "pkg/mod.py",
+        qualname=f"Parser.parse_{name}",
+    )
+
+    assert candidate.name == f"parse_{name}"
+    assert candidate.qualname == f"Parser.parse_{name}"
+    assert candidate.path == "pkg/mod.py"
 
 
 @given(names=st.lists(_IDENT, min_size=1, max_size=8, unique=True))
@@ -349,6 +428,19 @@ def test_strategies_for_args_extracts_supported_non_receiver_annotations(
     assert strategies == {name: strategy for name, _annotation, strategy in rows}
     assert "self" not in strategies
     assert "cls" not in strategies
+
+
+def test_strategies_for_args_reads_positional_only_and_keyword_only_annotations() -> None:
+    node = _function(
+        "def parse_args(raw: str, /, *, count: int, enabled: bool = False) -> None:\n"
+        "    return None\n"
+    )
+
+    assert _strategies_for_args(node) == {
+        "raw": "st.text()",
+        "count": "st.integers()",
+        "enabled": "st.booleans()",
+    }
 
 
 @given(
@@ -450,6 +542,42 @@ def test_property_candidates_json_preserves_counts_and_scope(
     assert "next_actions" not in payload
 
 
+@given(candidate_count=st.integers(min_value=1, max_value=8))
+def test_candidate_state_has_no_next_actions_when_candidates_are_available(
+    candidate_count: int,
+) -> None:
+    candidates = [
+        PropertyCandidate(
+            path=f"pkg/mod_{index}.py",
+            name=f"parse_{index}",
+            line=index + 1,
+            score=10,
+            reasons=("typed generated inputs",),
+            cautions=(),
+            strategies={},
+        )
+        for index in range(candidate_count)
+    ]
+    state = _PropertyCandidatesState(
+        cfg=InterlockConfig(
+            project_root=Path(),
+            src_dir=Path("pkg"),
+            test_dir=Path("tests"),
+            test_runner="pytest",
+            test_invoker="python",
+        ),
+        scope_ref=None,
+        include_referenced=True,
+        all_candidates=candidates,
+        candidates=candidates,
+        shown=candidates,
+        max_property_refs=0,
+    )
+
+    assert state.next_actions == ()
+    assert "next_actions" not in _property_candidates_json(state)
+
+
 @given(ref_counts=st.lists(st.integers(min_value=0, max_value=8), max_size=10))
 def test_filter_by_max_property_refs_keeps_only_shallow_references(
     ref_counts: list[int],
@@ -487,6 +615,16 @@ def test_max_property_refs_parses_uncovered_shortcut_and_value(
     try:
         sys.argv = argv
         assert _max_property_refs() == (0 if uncovered else max_refs)
+    finally:
+        sys.argv = old_argv
+
+
+@given(argv_tail=st.lists(st.sampled_from(["--json", "--changed", "--limit=0"]), max_size=3))
+def test_max_property_refs_defaults_to_none_without_ref_filters(argv_tail: list[str]) -> None:
+    old_argv = sys.argv
+    try:
+        sys.argv = ["interlocks", "property-candidates", *argv_tail]
+        assert _max_property_refs() is None
     finally:
         sys.argv = old_argv
 
@@ -665,6 +803,23 @@ def test_property_candidates_error_payload_keeps_limit_contract(message: str) ->
 
 
 @given(
+    message=st.sampled_from([
+        "property-candidates: --max-refs must be an integer",
+        "property-candidates: --max-refs must be >= 0",
+    ])
+)
+def test_property_candidates_error_payload_keeps_max_refs_contract(message: str) -> None:
+    payload = _property_candidates_error_payload(message)
+
+    assert payload["command"] == "property-candidates"
+    assert payload["error"] == message
+    assert payload["usage"] == _property_candidates_usage()
+    assert "--max-refs=N" in str(payload["usage"])
+    assert payload["expected_max_refs"] == "integer >= 0"
+    assert "expected_limit" not in payload
+
+
+@given(
     strategies=st.dictionaries(_IDENT, st.text(max_size=20), max_size=5),
     cautions=st.lists(st.text(max_size=20), max_size=5),
     property_refs=st.integers(min_value=0, max_value=100),
@@ -688,6 +843,16 @@ def test_property_candidate_detail_lines_match_optional_fields(
     if property_refs:
         assert refs_line is not None
         assert str(property_refs) in refs_line
+
+
+@given(cautions=st.lists(st.text(min_size=1, max_size=20), min_size=1, max_size=5))
+def test_caution_line_caps_display_at_two_cautions(cautions: list[str]) -> None:
+    assert _caution_line(tuple(cautions)) == "      caution: " + ", ".join(cautions[:2])
+
+
+@given(property_refs=st.integers(min_value=1, max_value=100))
+def test_property_refs_line_reports_positive_reference_count(property_refs: int) -> None:
+    assert _property_refs_line(property_refs) == f"      properties: {property_refs} reference(s)"
 
 
 @given(
@@ -807,6 +972,21 @@ def test_property_reference_counts_expand_local_property_helpers(
     assert counts.precise["pkg/generated.py", name] == calls
 
 
+@given(name=_IDENT.filter(lambda value: value not in {"_helper", "test_generated"}))
+def test_local_helper_reference_map_ignores_private_helpers_without_references(name: str) -> None:
+    tree = ast.parse(f"def _helper() -> None:\n    {name} = 1\n")
+    assert isinstance(tree, ast.Module)
+    cfg = InterlockConfig(
+        project_root=Path(),
+        src_dir=Path("pkg"),
+        test_dir=Path("tests"),
+        test_runner="pytest",
+        test_invoker="python",
+    )
+
+    assert _local_helper_reference_map(cfg, _ReferenceAliases({}, {}, {}), tree, frozenset()) == {}
+
+
 @given(name=_IDENT.filter(lambda value: value not in {"_call_generated", "call_generated"}))
 def test_local_helper_reference_map_tracks_private_helpers_only(name: str) -> None:
     with TemporaryDirectory() as raw_root:
@@ -921,6 +1101,30 @@ def test_reference_for_module_parts_returns_none_without_matching_module(
         )
 
         assert _reference_for_module_parts(cfg, parts) is None
+
+
+@given(alias=_IDENT)
+def test_scope_reference_aliases_let_local_imports_override_module_aliases(alias: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "one.py").write_text("def parse() -> None:\n    return None\n", encoding="utf-8")
+        (pkg / "two.py").write_text("def parse() -> None:\n    return None\n", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        scope = _function(f"def test_scope() -> None:\n    from pkg.two import parse as {alias}\n")
+        module_aliases = _ReferenceAliases({}, {alias: ("pkg/one.py", "parse")}, {})
+
+        aliases = _scope_reference_aliases(cfg, module_aliases, scope)
+
+    assert aliases.objects[alias] == ("pkg/two.py", "parse")
+    assert module_aliases.objects[alias] == ("pkg/one.py", "parse")
 
 
 @given(name=_IDENT, method=_IDENT)
@@ -1048,6 +1252,31 @@ def test_reference_resolution_distinguishes_module_and_class_symbols(
 
 
 @given(name=_IDENT)
+def test_property_references_from_tree_counts_top_level_resolved_calls(name: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "generated.py").write_text(
+            f"def {name}() -> None:\n    return None\n",
+            encoding="utf-8",
+        )
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+        tree = ast.parse(f"from pkg.generated import {name}\n{name}()\n")
+
+        refs = _property_references_from_tree(cfg, tree)
+
+    assert refs == [("pkg/generated.py", name)]
+
+
+@given(name=_IDENT)
 def test_property_attribute_symbols_track_property_like_decorators(name: str) -> None:
     with TemporaryDirectory() as raw_root:
         root = Path(raw_root)
@@ -1115,6 +1344,17 @@ def test_has_property_decorator_matches_property_like_names(decorator: str) -> N
 
 
 @given(
+    decorator=_IDENT.filter(
+        lambda value: value not in {"property", "cached_property", "functools"}
+    )
+)
+def test_has_property_decorator_ignores_unrelated_decorator_names(decorator: str) -> None:
+    node = _function(f"@{decorator}\ndef value(self) -> int:\n    return 1\n")
+
+    assert _has_property_decorator(node) is False
+
+
+@given(
     local=_IDENT,
     first=_IDENT,
     second=_IDENT,
@@ -1164,6 +1404,25 @@ def test_iter_source_files_skips_init_and_pycache_sources(names: list[str]) -> N
         sources = _iter_source_files(cfg)
 
     assert sources == sorted(expected)
+
+
+@given(name=_IDENT)
+def test_iter_source_files_accepts_single_python_file_source(name: str) -> None:
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        source = root / f"{name}.py"
+        source.write_text("x = 1\n", encoding="utf-8")
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=source,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+        )
+
+        sources = _iter_source_files(cfg)
+
+    assert sources == [source]
 
 
 @given(module=st.text(max_size=80))
@@ -1234,3 +1493,45 @@ def test_property_candidates_ranks_generated_parse_functions(names: list[str]) -
 
     assert {candidate.name for candidate in candidates} == {f"parse_{name}" for name in names}
     assert all(candidate.property_refs == 0 for candidate in candidates)
+
+
+@given(names=st.lists(_IDENT, min_size=2, max_size=8, unique_by=str.lower))
+def test_property_candidates_can_filter_referenced_candidates(names: list[str]) -> None:
+    referenced = set(names[::2])
+    with TemporaryDirectory() as raw_root:
+        root = Path(raw_root)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        source = "\n\n".join(
+            f"def parse_{name}(raw: str) -> int:\n"
+            "    if raw:\n"
+            "        return len(raw)\n"
+            "    return 0\n"
+            for name in names
+        )
+        (pkg / "generated.py").write_text(source, encoding="utf-8")
+        properties = root / "properties"
+        properties.mkdir()
+        imports = ", ".join(f"parse_{name}" for name in sorted(referenced))
+        calls = "\n".join(f"    parse_{name}('x')" for name in sorted(referenced))
+        (properties / "test_generated_properties.py").write_text(
+            f"from pkg.generated import {imports}\n\ndef test_generated() -> None:\n{calls}\n",
+            encoding="utf-8",
+        )
+        cfg = InterlockConfig(
+            project_root=root,
+            src_dir=pkg,
+            test_dir=root / "tests",
+            test_runner="pytest",
+            test_invoker="python",
+            properties_dir=properties,
+        )
+
+        all_candidates = property_candidates(cfg)
+        uncovered = property_candidates(cfg, include_referenced=False)
+
+    assert {candidate.name for candidate in all_candidates} == {f"parse_{name}" for name in names}
+    assert {candidate.name for candidate in uncovered} == {
+        f"parse_{name}" for name in names if name not in referenced
+    }

@@ -98,11 +98,8 @@ def test_gap_lines_count_matches_actionable_gap_rows(values: list[CheckRow]) -> 
 def test_gap_lines_do_not_include_targets_or_inert_details(values: list[CheckRow]) -> None:
     lines = _gap_lines(values)
 
+    assert lines == [f"{row.label}: {row.detail}" for row in _actionable_gap_rows(values)]
     for row in values:
-        if row.state == "warn" and row.detail != _INERT_DETAIL:
-            assert f"{row.label}: {row.detail}" in lines
-        else:
-            assert f"{row.label}: {row.detail}" not in lines
         assert all(row.target not in line for line in lines)
 
 

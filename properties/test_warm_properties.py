@@ -73,6 +73,30 @@ def test_warm_payload_preserves_outcome_shape(
         assert "output_excerpt" not in payload
 
 
+@given(
+    mode=st.sampled_from(["tools.txt", "uvx-probes"]),
+    passed=st.booleans(),
+)
+def test_warm_payload_next_action_tracks_passed_state(mode: str, passed: bool) -> None:
+    payload = _warm_payload(
+        _WarmOutcome(
+            mode=mode,
+            passed=passed,
+            cached_tools=(),
+            failed_tools=(),
+        )
+    )
+
+    if passed:
+        assert payload["next_actions"] == [
+            "Run gates with `UV_OFFLINE=1` when you need offline execution."
+        ]
+    else:
+        assert payload["next_actions"] == [
+            "Fix the reported tool-cache failure, then rerun `interlocks warm --json`."
+        ]
+
+
 def test_warm_missing_uv_payload_marks_all_tools_failed() -> None:
     payload = _warm_missing_uv_payload()
 
@@ -116,3 +140,10 @@ def test_warm_progress_command_is_bounded(command: str) -> None:
     assert len(progress_command) <= _WARM_PROGRESS_COMMAND_MAX
     if len(command) <= _WARM_PROGRESS_COMMAND_MAX:
         assert progress_command == command
+
+
+@given(command=st.text(min_size=_WARM_PROGRESS_COMMAND_MAX + 1, max_size=200))
+def test_warm_progress_command_truncates_long_commands_with_ellipsis(command: str) -> None:
+    assert _warm_progress_command(command) == (
+        f"{command[: _WARM_PROGRESS_COMMAND_MAX - 1]}\u2026"
+    )

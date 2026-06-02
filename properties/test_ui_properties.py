@@ -143,6 +143,19 @@ def test_color_wrapper_honors_color_mode(code: str, text: str, use_color: bool) 
     assert rendered == (f"{code}{text}{ui._RESET}" if use_color else text)
 
 
+@given(code=_TEXT, text=_TEXT)
+def test_color_wrapper_appends_reset_only_when_color_is_enabled(code: str, text: str) -> None:
+    with patch.object(ui, "use_color", return_value=True):
+        colored = ui._c(code, text)
+    with patch.object(ui, "use_color", return_value=False):
+        plain = ui._c(code, text)
+
+    assert colored.startswith(code)
+    assert colored.endswith(ui._RESET)
+    assert plain == text
+    assert not plain.endswith(ui._RESET) or text.endswith(ui._RESET)
+
+
 @given(action=_TEXT, indent=_TEXT)
 def test_next_action_line_lowercases_first_character(action: str, indent: str) -> None:
     assert ui.next_action_line(action, indent=indent) == (

@@ -122,6 +122,14 @@ def test_inspect_tree_returns_top_level_and_class_test_functions(names: list[str
     }
 
 
+@given(names=st.lists(_IDENT, max_size=8, unique=True))
+def test_inspect_tree_ignores_non_test_functions(names: list[str]) -> None:
+    helpers = "\n".join(f"def helper_{name}():\n    assert False\n" for name in names)
+    tree = ast.parse(f"{helpers}\nclass Helper:\n    def helper(self):\n        assert False\n")
+
+    assert stats._inspect_tree(tree, "tests/test_generated.py") == []
+
+
 @given(
     loc=st.integers(min_value=1, max_value=30),
     assert_count=st.integers(min_value=0, max_value=8),
@@ -188,6 +196,26 @@ def test_is_pytest_assert_with_matches_supported_pytest_context_managers(
 
     assert stats._is_pytest_assert_with(node) is (
         context_name in {"raises", "warns", "deprecated_call"}
+    )
+
+
+@given(
+    contexts=st.lists(
+        st.sampled_from(["raises", "warns", "deprecated_call", "not_asserting"]),
+        min_size=1,
+        max_size=6,
+    )
+)
+def test_is_pytest_assert_with_accepts_any_supported_pytest_context(
+    contexts: list[str],
+) -> None:
+    items = ", ".join(f"pytest.{context}()" for context in contexts)
+    tree = ast.parse(f"with {items}:\n    pass\n")
+    node = tree.body[0]
+    assert isinstance(node, ast.With)
+
+    assert stats._is_pytest_assert_with(node) is (
+        bool({"raises", "warns", "deprecated_call"} & set(contexts))
     )
 
 
@@ -314,6 +342,13 @@ def test_format_suspicious_reports_zero_or_trivial_assert_detail(
     assert ("assert(s) (trivial)" in rendered) is (assert_count != 0)
 
 
+@given(file=_PATH, name=_IDENT, loc=st.integers(min_value=1, max_value=500))
+def test_format_suspicious_has_exact_zero_assert_shape(file: str, name: str, loc: int) -> None:
+    inspection = TestInspection(file=file, name=name, loc=loc, assert_count=0, trivial_asserts=0)
+
+    assert stats._format_suspicious(inspection) == f"    {file}::{name}  {loc} LOC, 0 asserts"
+
+
 @given(
     suspicious_count=_NONNEGATIVE_COUNTS,
     crap_count=_NONNEGATIVE_COUNTS,
@@ -394,6 +429,11 @@ def test_count_sentence_reports_only_present_counts(count: int, label: str) -> N
     sentence = stats._count_sentence(count, label)
 
     assert sentence == (f"{count} {label}" if count else "")
+
+
+@given(label=st.text(min_size=1, max_size=40))
+def test_count_sentence_omits_zero_counts(label: str) -> None:
+    assert stats._count_sentence(0, label) == ""
 
 
 @given(coverage=st.one_of(st.none(), _PERCENT_FLOAT), coverage_min=_PERCENT_FLOAT)
@@ -526,6 +566,25 @@ def test_trust_json_preserves_report_shape(
     assert "refresh" not in action_kinds
 
 
+@given(score=_PERCENT_FLOAT)
+def test_trust_json_omits_remediation_lists_for_clean_report(score: float) -> None:
+    report = stats.TrustReport(
+        score=score,
+        prev_score=None,
+        crap_rows=[],
+        suspicious=[],
+        mutation=None,
+        coverage_pct=None,
+        crap_max=30.0,
+    )
+
+    payload = stats._trust_json(report)
+
+    assert payload["next_actions"] == []
+    assert payload["crap_offenders"] == []
+    assert payload["suspicious_tests"] == []
+
+
 @given(
     suspicious=st.lists(
         st.tuples(_PATH, _IDENT, st.integers(min_value=1, max_value=100), _NONNEGATIVE_COUNTS),
@@ -607,6 +666,19 @@ def test_trust_action_caps_targets_without_losing_count(
         assert action["omitted_targets"] == len(targets) - limit
     else:
         assert "omitted_targets" not in action
+
+
+@given(targets=st.lists(_IDENT, max_size=40), kind=_IDENT, message=st.text(max_size=120))
+def test_trust_action_copies_target_slice(
+    targets: list[str],
+    kind: str,
+    message: str,
+) -> None:
+    expected = targets[: stats.TRUST_ACTION_TARGET_LIMIT]
+    action = stats._trust_action(kind, message, targets)
+    targets.append("mutated-after-action")
+
+    assert action["targets"] == expected
 
 
 @given(
@@ -713,6 +785,13 @@ def test_mutation_retry_command_includes_runtime_only_when_positive(
 
     assert command.startswith(f"interlocks mutation --min-score={floor:.0f}")
     assert (f"--max-runtime={max_runtime}" in command) is (max_runtime > 0)
+
+
+@given(floor=_PERCENT_FLOAT)
+def test_mutation_retry_command_without_runtime_is_exact(floor: float) -> None:
+    assert stats._mutation_retry_command(floor, 0) == (
+        f"interlocks mutation --min-score={floor:.0f}"
+    )
 
 
 @given(
