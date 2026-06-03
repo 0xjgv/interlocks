@@ -69,6 +69,7 @@ def cmd_ci() -> None:
     ui.section("CI Checks")
     # DISABLED + OPTIONAL_MISSING → skip silently (preserve current CI behavior)
     exit_code = 0
+    run_summary_path = None
     try:
         run_tasks(_parallel_tasks(cfg, skip_policy))
         # CRAP/mutation read coverage.xml produced by task_coverage — keep sequential.
@@ -88,7 +89,7 @@ def cmd_ci() -> None:
             context=context,
             skipped=_skipped_labels(),
         )
-        run_summary.flush(cfg)
+        run_summary_path = run_summary.flush(cfg)
         ui.stage_footer(elapsed)
         print_stage_verdict("ci", elapsed)
         if ui.is_json():
@@ -98,6 +99,7 @@ def cmd_ci() -> None:
                     passed=exit_code == 0,
                     elapsed=elapsed,
                     evidence_path=str(cfg.ci_evidence_path),
+                    run_summary_path=str(run_summary_path),
                 )
             )
 

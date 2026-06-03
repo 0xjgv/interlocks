@@ -7,6 +7,7 @@ import re
 import sys
 import textwrap
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -18,11 +19,13 @@ from interlocks.runner import (
     generate_coverage_xml,
     print_stage_verdict,
     record_result,
+    record_skip,
     reset_results,
     results_snapshot,
     run,
     run_task_json,
     run_tasks,
+    stage_json,
     uv_run_with,
     uvx_tool,
 )
@@ -54,15 +57,86 @@ def _row_has(out: str, label: str, status: str) -> bool:
 
 def test_preflight_error_payload_has_exact_json_contract() -> None:
     payload = _preflight_error_payload("check", "missing pyproject")
+    agent = cast("dict[str, object]", payload["agent"])
+    actions = cast("list[dict[str, object]]", agent["required_actions"])
 
-    assert payload == {
-        "command": "check",
-        "passed": False,
-        "error": "missing pyproject",
-        "next_action": (
-            "Run `interlocks init` for a new project, or invoke from a Python project root."
+    assert payload["command"] == "check"
+    assert payload["schema_version"] == 1
+    assert payload["passed"] is False
+    assert payload["error"] == "missing pyproject"
+    assert payload["next_action"] == (
+        "Run `interlocks init` for a new project, or invoke from a Python project root."
+    )
+    assert agent["state"] == "blocked"
+    assert actions[0]["command"] == "interlocks init --json"
+    assert actions[0]["mutates"] is True
+
+
+def test_stage_json_agent_contract_directs_failed_gate() -> None:
+    reset_results()
+    record_result("typecheck", status="fail", elapsed=0.2, detail="exit 1: basedpyright")
+
+    payload = stage_json(
+        "check",
+        passed=False,
+        elapsed=1.0,
+        run_summary_path="/repo/.interlocks/run-summary.json",
+    )
+
+    assert payload["schema_version"] == 1
+    gates = cast("list[dict[str, object]]", payload["gates"])
+    assert gates[0]["failure_category"] == "typecheck_failure"
+    assert payload["artifacts"] == [
+        {"kind": "run-summary", "path": "/repo/.interlocks/run-summary.json"}
+    ]
+    agent = cast("dict[str, object]", payload["agent"])
+    assert agent["state"] == "blocked"
+    assert agent["summary"] == "1 gate(s) failed: typecheck"
+    assert agent["required_actions"] == [
+        {
+            "kind": "rerun-failing-gate",
+            "gate": "typecheck",
+            "reason": "typecheck failed",
+            "mutates": False,
+            "approval_required": False,
+            "failure_category": "typecheck_failure",
+            "command": "interlocks gate typecheck --json",
+        }
+    ]
+    assert agent["artifacts"] == payload["artifacts"]
+    boundaries = cast("list[dict[str, object]]", agent["policy_boundaries"])
+    assert any(boundary["approval_required"] for boundary in boundaries)
+
+
+def test_stage_json_agent_contract_directs_skipped_follow_up() -> None:
+    reset_results()
+    record_result("lint", status="ok", elapsed=0.1, detail=None)
+    record_skip(
+        "properties",
+        "skipped under --changed",
+        next_action=(
+            "Run `interlocks gate properties --profile=check` for generated-input coverage."
         ),
-    }
+    )
+
+    payload = stage_json("check", passed=True, elapsed=1.0)
+
+    agent = cast("dict[str, object]", payload["agent"])
+    assert agent["state"] == "attention"
+    assert agent["required_actions"] == []
+    assert agent["recommended_actions"] == [
+        {
+            "kind": "run-skipped-gate",
+            "reason": "skipped under --changed",
+            "message": (
+                "Run `interlocks gate properties --profile=check` for generated-input coverage."
+            ),
+            "mutates": False,
+            "approval_required": False,
+            "command": "interlocks gate properties --profile=check --json",
+            "gate": "properties",
+        }
+    ]
 
 
 def test_run_tasks_all_pass_streams_ok_and_no_exit(capsys: pytest.CaptureFixture[str]) -> None:

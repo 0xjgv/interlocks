@@ -77,12 +77,13 @@ def cmd_check() -> None:
     _print_scope(scope_ref, scoped_files)
     maybe_print_skip_banner(skip_policy)
 
+    run_summary_path: Path | None = None
     try:
         _run_check_sections(cfg, scope_ref, scoped_files, skip_policy)
     finally:
         print_suppressions_report()
-        run_summary.flush(cfg)
-        _print_footer(time.monotonic() - start)
+        run_summary_path = run_summary.flush(cfg)
+        _print_footer(time.monotonic() - start, run_summary_path=run_summary_path)
 
 
 def _run_check_sections(
@@ -112,7 +113,7 @@ def _exit_if_changed_scope_empty(
     ui.section("Quality Checks")
     if ui.is_verbose() and not ui.is_json():
         print(f"  scope=changed vs {scope_ref} — no Python files changed; nothing to check")
-    _print_footer(time.monotonic() - start)
+    _print_footer(time.monotonic() - start, run_summary_path=None)
     return True
 
 
@@ -272,12 +273,19 @@ def _run_budgeted_mutation(*, base: str, skip_policy: SkipPolicy) -> None:
     run_budgeted_mutation(base=base, emit_legacy_rows=True, skip_policy=skip_policy)
 
 
-def _print_footer(elapsed: float) -> None:
+def _print_footer(elapsed: float, *, run_summary_path: Path | None) -> None:
     """Always emit the one-line verdict; verbose adds the chrome footer."""
     ui.stage_footer(elapsed)
     print_stage_verdict("check", elapsed)
     if ui.is_json():
-        ui.print_json(stage_json("check", passed=_check_passed(), elapsed=elapsed))
+        ui.print_json(
+            stage_json(
+                "check",
+                passed=_check_passed(),
+                elapsed=elapsed,
+                run_summary_path=str(run_summary_path) if run_summary_path is not None else None,
+            )
+        )
 
 
 def _check_passed() -> bool:

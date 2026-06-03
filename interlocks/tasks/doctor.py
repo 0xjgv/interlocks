@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from interlocks import ui
+from interlocks.agent_contract import SCHEMA_VERSION, doctor_agent_contract
 from interlocks.config import (
     CREATE_PROJECT_ENV_HINT,
     InterlockConfigError,
@@ -127,8 +128,14 @@ def _build_doctor_report() -> _DoctorReport:
 def _render_doctor_json(report: _DoctorReport) -> None:
     """Emit the doctor report as a single machine-readable JSON object."""
     status, _summary = _readiness(report.is_blocked, report.gap_count)
+    next_steps = _next_steps(
+        report.rows,
+        report.is_blocked,
+        blockers=(*report.failures, *report.blockers),
+    )
     ui.print_json({
         "command": "doctor",
+        "schema_version": SCHEMA_VERSION,
         "status": status,
         "blockers": [{"message": m} for m in (*report.failures, *report.blockers)],
         "warnings": [{"message": m} for m in _warning_lines(report)],
@@ -137,14 +144,12 @@ def _render_doctor_json(report: _DoctorReport) -> None:
             {"name": r.label, "target": r.target, "detail": r.detail, "state": r.state}
             for r in report.rows
         ],
-        "next_steps": [
-            {"message": step}
-            for step in _next_steps(
-                report.rows,
-                report.is_blocked,
-                blockers=(*report.failures, *report.blockers),
-            )
-        ],
+        "next_steps": [{"message": step} for step in next_steps],
+        "agent": doctor_agent_contract(
+            status=status,
+            is_blocked=report.is_blocked,
+            next_steps=next_steps,
+        ),
     })
 
 

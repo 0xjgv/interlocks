@@ -8,12 +8,13 @@ import string
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from hypothesis import given
 from hypothesis import strategies as st
 
 from interlocks import runner as runner_mod
+from interlocks.agent_contract import SCHEMA_VERSION, failure_category
 from interlocks.defaults.tools import UV_INDEX_FLAG
 from interlocks.runner import (
     RESET,
@@ -393,15 +394,20 @@ def test_stage_json_uses_plain_json_shapes(
     }
     if detail is not None:
         expected_gate["detail"] = detail
+    if status != "ok":
+        expected_gate["failure_category"] = failure_category(label)
     expected_skip = {"name": "skipped-gate", "reason": skip_reason}
     if skip_action is not None:
         expected_skip["next_action"] = skip_action
     assert payload["command"] == command
+    assert payload["schema_version"] == SCHEMA_VERSION
     assert payload["passed"] is passed
     assert payload["elapsed_seconds"] == round(elapsed, 3)
     assert payload["gates"] == [expected_gate]
     assert payload["skipped"] == [expected_skip]
     assert ("evidence_path" in payload) is (evidence_path is not None)
+    assert ("artifacts" in payload) is (evidence_path is not None)
+    assert isinstance(payload["agent"], dict)
 
 
 @given(command=st.text(max_size=30), passed=st.booleans(), elapsed=st.floats(allow_nan=False))
@@ -414,13 +420,14 @@ def test_stage_json_handles_empty_gate_accumulators(
 
     payload = stage_json(command, passed=passed, elapsed=elapsed)
 
-    assert payload == {
-        "command": command,
-        "passed": passed,
-        "elapsed_seconds": round(elapsed, 3),
-        "gates": [],
-        "skipped": [],
-    }
+    assert payload["command"] == command
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["passed"] is passed
+    assert payload["elapsed_seconds"] == round(elapsed, 3)
+    assert payload["gates"] == []
+    assert payload["skipped"] == []
+    agent = cast("dict[str, object]", payload["agent"])
+    assert agent["state"] == ("passed" if passed else "blocked")
 
 
 @given(
@@ -440,6 +447,8 @@ def test_stage_json_omits_evidence_path_only_for_none(
 
     assert "evidence_path" not in without_evidence
     assert not with_empty_evidence["evidence_path"]
+    assert "artifacts" not in without_evidence
+    assert with_empty_evidence["artifacts"] == [{"kind": "ci-evidence", "path": ""}]
 
 
 @given(command=st.text(min_size=1, max_size=30), error=st.text(min_size=1, max_size=120))
@@ -447,8 +456,10 @@ def test_preflight_error_payload_keeps_json_error_contract(command: str, error: 
     payload = _preflight_error_payload(command, error)
 
     assert payload["command"] == command
+    assert payload["schema_version"] == SCHEMA_VERSION
     assert payload["passed"] is False
     assert payload["error"] == error
+    assert isinstance(payload["agent"], dict)
     assert (
         payload["next_action"]
         == "Run `interlocks init` for a new project, or invoke from a Python project root."

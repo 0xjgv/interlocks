@@ -119,13 +119,14 @@ Operate as an agent:
 
 ```bash
 interlocks doctor --json
-interlocks config --json
 interlocks check --json
 ```
 
 `interlocks {ci,check,evaluate,trust,doctor,config} --json` emits one
-machine-readable JSON object on stdout. Exit codes are unchanged, and
-`--json` dominates `--verbose`.
+machine-readable JSON object on stdout. Stage-like payloads include
+`schema_version`, `gates`, `skipped`, `artifacts`, and an `agent` block with
+`required_actions`, `recommended_actions`, and policy boundaries that require
+owner approval. Exit codes are unchanged, and `--json` dominates `--verbose`.
 
 ## Validation Flow
 
@@ -149,11 +150,11 @@ Agents should treat interlocks as the repository quality contract:
 
 - Inspect `interlocks doctor --json` and `interlocks config --json` before
   changing policy or routing around a gate.
-- Run `interlocks check` after edits; use `--json` when programmatic parsing is
-  needed.
+- Run `interlocks check --json` after edits and follow
+  `agent.required_actions` before handing work back.
 - Never bypass installed hooks or remove interlocks config to make a PR green.
-- When `check` or `ci` fails, run the failing gate directly instead of masking
-  the failure.
+- When `check` or `ci` fails, use the structured rerun commands in the `agent`
+  block instead of guessing from prose.
 - Prefer project-owned tool config for policy changes and narrow native ignores
   for local exceptions.
 

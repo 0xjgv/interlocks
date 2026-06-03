@@ -9,21 +9,22 @@ Agents should use the same commands humans use:
 
 ```bash
 interlocks doctor --json
-interlocks config --json
 interlocks check --json
 ```
 
 `interlocks {ci,check,evaluate,trust,doctor,config} --json` emits a single
 machine-readable JSON object on stdout. Human chrome is suppressed, exit codes
-are unchanged, and `--json` dominates `--verbose`.
+are unchanged, and `--json` dominates `--verbose`. Stage-like payloads include
+an `agent` block with structured `required_actions`, `recommended_actions`,
+artifact paths, and policy boundaries.
 
 Agent rules:
 
 - Inspect `doctor` before assuming paths, runners, presets, or integrations.
 - Inspect `config` before changing thresholds or tool policy.
-- Run `interlocks check` after code edits before handing work back.
-- Use individual gates to debug failures; do not skip or remove failing gates
-  without making the policy change explicit.
+- Run `interlocks check --json` after code edits before handing work back.
+- Follow `agent.required_actions` to debug failures; do not skip or remove
+  failing gates without making the policy change explicit.
 - Never bypass installed git hooks, Claude Code hooks, or setup-generated agent
   docs to make a pull request green.
 - Prefer native tool ignores for narrow code-level exceptions. Use presets and

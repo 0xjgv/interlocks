@@ -16,6 +16,12 @@ from pathlib import Path
 from typing import IO, NoReturn
 
 from interlocks import ui
+from interlocks.agent_contract import (
+    SCHEMA_VERSION,
+    failure_category,
+    preflight_agent_contract,
+    stage_agent_contract,
+)
 from interlocks.config import (
     InterlockUserError,
     coverage_invoker_prefix,
@@ -150,6 +156,7 @@ def stage_json(
     passed: bool,
     elapsed: float,
     evidence_path: str | None = None,
+    run_summary_path: str | None = None,
 ) -> dict[str, object]:
     """Build the `ci`/`check` `--json` object from the stage accumulators.
 
@@ -158,16 +165,42 @@ def stage_json(
     structured skip list. `evidence_path` is included only when given (`ci`
     passes it, `check` does not).
     """
+    gate_entries = [_gate_json_entry(result) for result in results_snapshot()]
+    skipped = skips_snapshot()
+    artifacts = _stage_artifacts(evidence_path=evidence_path, run_summary_path=run_summary_path)
     obj: dict[str, object] = {
         "command": command,
+        "schema_version": SCHEMA_VERSION,
         "passed": passed,
         "elapsed_seconds": round(elapsed, 3),
-        "gates": [_gate_json_entry(result) for result in results_snapshot()],
-        "skipped": skips_snapshot(),
+        "gates": gate_entries,
+        "skipped": skipped,
     }
     if evidence_path is not None:
         obj["evidence_path"] = evidence_path
+    if artifacts:
+        obj["artifacts"] = artifacts
+    obj["agent"] = stage_agent_contract(
+        command,
+        passed=passed,
+        gates=gate_entries,
+        skipped=skipped,
+        artifacts=artifacts,
+    )
     return obj
+
+
+def _stage_artifacts(
+    *,
+    evidence_path: str | None,
+    run_summary_path: str | None,
+) -> list[dict[str, str]]:
+    artifacts: list[dict[str, str]] = []
+    if evidence_path is not None:
+        artifacts.append({"kind": "ci-evidence", "path": evidence_path})
+    if run_summary_path is not None:
+        artifacts.append({"kind": "run-summary", "path": run_summary_path})
+    return artifacts
 
 
 def run_task_json(command: str, task: Task, extra: dict[str, object] | None = None) -> None:
@@ -193,6 +226,8 @@ def _gate_json_entry(result: GateResult) -> dict[str, object]:
     }
     if result.detail is not None:
         entry["detail"] = result.detail
+    if result.status != "ok":
+        entry["failure_category"] = failure_category(result.label)
     return entry
 
 
@@ -375,9 +410,11 @@ def _preflight_error_payload(command: str, error: str) -> dict[str, object]:
     next_action = "Run `interlocks init` for a new project, or invoke from a Python project root."
     return {
         "command": command,
+        "schema_version": SCHEMA_VERSION,
         "passed": False,
         "error": error,
         "next_action": next_action,
+        "agent": preflight_agent_contract(command, error, next_action),
     }
 
 

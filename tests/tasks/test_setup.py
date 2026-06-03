@@ -301,7 +301,8 @@ def test_setup_installs_hooks_agent_docs_and_skill(
     assert installed.read_bytes() == defaults_path("skill/SKILL.md").read_bytes()
     installed_text = installed.read_text(encoding="utf-8")
     assert "unblock" in installed_text
-    assert "properties run in `check`" in installed_text
+    assert "acceptance and properties run in `check`" in installed_text
+    assert "agent.required_actions" in installed_text
     assert "il gate properties --profile=check" in installed_text
 
 

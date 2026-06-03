@@ -301,7 +301,11 @@ interlocks trust --json
 interlocks evaluate --json
 ```
 
-`--json` suppresses human chrome and dominates `--verbose`. Use `--verbose` for
+`--json` suppresses human chrome and dominates `--verbose`. Stage-like JSON
+payloads include `schema_version`, `gates`, `skipped`, `artifacts`, and an
+`agent` block. Agents should run commands from `agent.required_actions` before
+handing work back, treat `agent.recommended_actions` as follow-up evidence, and
+ask the owner before crossing any listed policy boundary. Use `--verbose` for
 more human output. `--quiet` has been removed because minimal output is the
 default.
 

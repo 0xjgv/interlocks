@@ -126,6 +126,7 @@ def test_check_json_is_parseable(tmp_project: Path) -> None:
 
     payload = json.loads(result.stdout)
     assert payload["command"] == "check"
+    assert payload["schema_version"] == 1
     assert isinstance(payload["passed"], bool)
     assert isinstance(payload["elapsed_seconds"], (int, float))
     assert isinstance(payload["gates"], list)
@@ -134,6 +135,9 @@ def test_check_json_is_parseable(tmp_project: Path) -> None:
         assert "label" not in gate  # `name` is the sole stable identifier
     assert isinstance(payload["skipped"], list)
     assert "evidence_path" not in payload
+    assert payload["agent"]["state"] in {"passed", "attention"}
+    assert payload["agent"]["required_actions"] == []
+    assert any(artifact["kind"] == "run-summary" for artifact in payload["artifacts"])
 
 
 def test_check_json_exit_code_matches_human_mode(tmp_project: Path) -> None:

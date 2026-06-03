@@ -205,6 +205,7 @@ def test_ci_json_is_parseable(tmp_project: Path) -> None:
 
     payload = json.loads(result.stdout)
     assert payload["command"] == "ci"
+    assert payload["schema_version"] == 1
     assert isinstance(payload["passed"], bool)
     assert isinstance(payload["elapsed_seconds"], (int, float))
     assert isinstance(payload["gates"], list)
@@ -213,6 +214,10 @@ def test_ci_json_is_parseable(tmp_project: Path) -> None:
         assert "label" not in gate  # `name` is the sole stable identifier
     assert isinstance(payload["skipped"], list)
     assert payload["evidence_path"].endswith("ci.json")
+    assert payload["agent"]["state"] == "passed"
+    assert payload["agent"]["required_actions"] == []
+    artifact_kinds = {artifact["kind"] for artifact in payload["artifacts"]}
+    assert {"ci-evidence", "run-summary"} <= artifact_kinds
 
 
 def test_ci_json_exit_code_matches_human_mode(tmp_project: Path) -> None:

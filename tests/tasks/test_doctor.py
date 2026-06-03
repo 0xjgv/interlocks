@@ -116,12 +116,16 @@ def test_doctor_json_is_parseable(tmp_path: Path) -> None:
     assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
     payload = json.loads(result.stdout)
     assert payload["command"] == "doctor"
+    assert payload["schema_version"] == 1
     assert payload["status"] == "blocked"
     assert isinstance(payload["blockers"], list)
     assert payload["warnings"] == []
     assert payload["next_steps"] == [
         {"message": "Run `interlocks init` to scaffold a project, then rerun `interlocks doctor`."}
     ]
+    assert payload["agent"]["state"] == "blocked"
+    assert payload["agent"]["required_actions"][0]["command"] == "interlocks init --json"
+    assert payload["agent"]["required_actions"][0]["mutates"] is True
     assert payload["detected"]["src_dir"] is None
     assert payload["detected"]["test_dir"] is None
     assert payload["setup_checklist"] == [
@@ -158,7 +162,10 @@ def test_doctor_json_well_formed_project(
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "doctor"
+    assert payload["schema_version"] == 1
     assert payload["status"].startswith("ready")
+    assert payload["agent"]["state"] == "attention"
+    assert isinstance(payload["agent"]["recommended_actions"], list)
     assert payload["detected"]["pyproject_path"] is not None
     assert payload["detected"]["src_dir"] == "probe"
     assert payload["detected"]["test_dir"] == "tests"
