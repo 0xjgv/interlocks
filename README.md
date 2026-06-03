@@ -157,6 +157,7 @@ Agents should treat interlocks as the repository quality contract:
 - Prefer project-owned tool config for policy changes and narrow native ignores
   for local exceptions.
 
+The practical CLI guide lives in [`docs/cli-howto.md`](docs/cli-howto.md).
 More agent and CI guidance lives in
 [`docs/agent-workflows.md`](docs/agent-workflows.md).
 
@@ -192,11 +193,12 @@ Use adoption presets:
 
 ```toml
 [tool.interlocks]
-preset = "baseline"  # "baseline" | "strict" | "legacy"
+preset = "baseline"  # "baseline" | "strict" | "legacy" | "progressive"
 ```
 
 `baseline` lowers first-adoption friction, `strict` strengthens mature
-repositories, and `legacy` supports ratcheting existing repositories. The
+repositories, `legacy` supports ratcheting existing repositories, and
+`progressive` ratchets floors through `.interlocks/baseline.json`. The
 unsupported `agent-safe` preset is rejected by `doctor` instead of resolving
 agent-specific defaults.
 
@@ -233,8 +235,9 @@ The budgeted lint/format flow is documented in
 | Static quality scorecard | `interlocks evaluate` |
 | Cleanup | `interlocks clean` |
 
-Full command, config, acceptance, bundled-default, crash-reporting, and release
-reference: [`docs/reference.md`](docs/reference.md). Agent and CI workflows:
+CLI HOWTO: [`docs/cli-howto.md`](docs/cli-howto.md). Full command, config,
+acceptance, bundled-default, crash-reporting, and release reference:
+[`docs/reference.md`](docs/reference.md). Agent and CI workflows:
 [`docs/agent-workflows.md`](docs/agent-workflows.md).
 
 ## Engineering Principles

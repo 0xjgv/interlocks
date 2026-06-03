@@ -1,7 +1,8 @@
 # interlocks Reference
 
 This is the detailed command, configuration, and behavior reference. Start with
-the [README](../README.md) when you want the fast adoption path.
+the [README](../README.md) for the fast adoption path, or the
+[CLI HOWTO](cli-howto.md) when you need to choose the right command.
 
 ## Before Interlocks
 
@@ -19,7 +20,7 @@ choosing a preset.
 
 ```toml
 [tool.interlocks]
-preset = "baseline"  # "baseline" | "strict" | "legacy"
+preset = "baseline"  # "baseline" | "strict" | "legacy" | "progressive"
 ```
 
 - `baseline` lowers first-adoption friction: advisory CRAP, relaxed thresholds,
@@ -29,6 +30,8 @@ preset = "baseline"  # "baseline" | "strict" | "legacy"
   required Gherkin coverage.
 - `legacy` is for ratcheting existing repositories: permissive thresholds,
   advisory gates, mutation off in CI.
+- `progressive` is for automatic ratcheting: permissive starting thresholds
+  plus `.interlocks/baseline.json` floors that advance after green main merges.
 
 `agent-safe` is intentionally unsupported. If configured, `interlocks doctor`
 reports it as an unsupported preset instead of resolving agent-specific
