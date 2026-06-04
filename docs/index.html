@@ -963,10 +963,14 @@
             </div>
           </div>
           <div class="also-works" aria-label="Also works">
-            <span class="chip">then: uvx --from interlocks il check</span>
-            <span class="chip">adopt: interlocks setup</span>
-            <span class="chip">package: interlocks</span>
+            <span class="chip">install: uv tool install interlocks</span>
+            <span class="chip">offline: interlocks warm</span>
+            <span class="chip">zero runtime deps</span>
           </div>
+          <p class="lede">Dispatches every gate through <code>uvx</code> or
+            <code>uv run --with</code> at pinned versions, so the tool environment
+            stays isolated from your project resolver.
+            <code>pipx install interlocks</code> is also supported.</p>
         </div>
 
         <aside class="doctor-card" aria-labelledby="doctor-title">
@@ -1088,6 +1092,44 @@
 
     <div class="section-divider" aria-hidden="true"></div>
 
+    <h2 class="section-title">Operate as an agent</h2>
+    <p class="section-intro">Every workflow command emits machine-readable JSON.
+      <code>interlocks {check,ci,evaluate,trust,doctor,config} --json</code> writes
+      one JSON object to stdout. Exit codes are unchanged, and <code>--json</code>
+      dominates <code>--verbose</code>.</p>
+    <article class="shell-card" aria-labelledby="agent-json-title">
+      <div class="shell-header">
+        <p class="shell-title" id="agent-json-title">interlocks check --json</p>
+        <div class="shell-meta">
+          <span class="status-pill info">--json</span>
+          <span class="status-pill ok">stdout</span>
+        </div>
+      </div>
+      <pre class="shell-body"><span class="shell-row"><span class="prompt">$</span> interlocks check --json</span>
+<span class="shell-row">{</span>
+<span class="shell-row">  <span class="shell-muted">"command"</span>: "check",</span>
+<span class="shell-row">  <span class="shell-muted">"schema_version"</span>: 1,</span>
+<span class="shell-row">  <span class="shell-muted">"passed"</span>: <span class="shell-ok">true</span>,</span>
+<span class="shell-row">  <span class="shell-muted">"gates"</span>: [</span>
+<span class="shell-row">    { "name": "typecheck", "status": "<span class="shell-ok">ok</span>" },</span>
+<span class="shell-row">    { "name": "test", "status": "<span class="shell-ok">ok</span>", "detail": "184 passed" }</span>
+<span class="shell-row">  ],</span>
+<span class="shell-row">  <span class="shell-muted">"skipped"</span>: [</span>
+<span class="shell-row">    { "name": "mutation", "reason": "nightly only" }</span>
+<span class="shell-row">  ],</span>
+<span class="shell-row">  <span class="shell-muted">"artifacts"</span>: [".interlocks/run-summary.json"],</span>
+<span class="shell-row">  <span class="shell-muted">"agent"</span>: {</span>
+<span class="shell-row">    "state": "<span class="shell-ok">attention</span>",</span>
+<span class="shell-row">    "required_actions": [],</span>
+<span class="shell-row">    "recommended_actions": [</span>
+<span class="shell-row">      { "command": "interlocks gate properties --profile=check", "reason": "harden new code" }</span>
+<span class="shell-row">    ]</span>
+<span class="shell-row">  }</span>
+<span class="shell-row">}</span></pre>
+    </article>
+
+    <div class="section-divider" aria-hidden="true"></div>
+
     <h2 class="section-title" id="stages">Quality loop</h2>
     <p class="section-intro">Evaluate first with <code>doctor</code>, then
       <code>check</code>.
@@ -1106,6 +1148,8 @@
           <li>fix + format</li>
           <li>typecheck + test in parallel</li>
           <li>deps, cached CRAP, suppressions report</li>
+          <li><code>--changed</code> scopes file-level gates to the diff; test,
+            acceptance, and properties skip with a banner</li>
         </ul>
       </article>
       <article class="pipeline-card">
@@ -1190,6 +1234,13 @@
             <td><span class="status-pill ok">BLOCKING</span></td>
           </tr>
           <tr>
+            <td><code>fix-* (plan/rule/replay/annotate/metrics/optimize)</code></td>
+            <td class="purpose">Rule-scoped lint-fix planning, replay, annotation,
+              metrics, and optimization.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">UTILITY</span></td>
+          </tr>
+          <tr>
             <td><code>format</code></td>
             <td class="purpose">Format code with ruff.</td>
             <td><span class="pill-stack"><span class="status-pill info">LOCAL</span><span
@@ -1237,6 +1288,13 @@
             <td><span class="pill-stack"><span
                   class="status-pill info">NIGHTLY</span><span
                   class="status-pill info">CI</span></span></td>
+            <td><span class="status-pill warn">ADVISORY</span></td>
+          </tr>
+          <tr>
+            <td><code>properties</code></td>
+            <td class="purpose">Generated-input property tests via Hypothesis.</td>
+            <td><span class="pill-stack"><span class="status-pill info">CI</span><span
+                  class="status-pill info">NIGHTLY</span></span></td>
             <td><span class="status-pill warn">ADVISORY</span></td>
           </tr>
           <tr>
@@ -1289,6 +1347,12 @@
             <td><span class="status-pill">REPORT</span></td>
           </tr>
           <tr>
+            <td><code>property-candidates</code></td>
+            <td class="purpose">Rank functions for property-test hardening.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">REPORT</span></td>
+          </tr>
+          <tr>
             <td><code>doctor</code></td>
             <td class="purpose">Diagnose paths, tools, venv, hooks, config.</td>
             <td><span class="status-pill info">LOCAL</span></td>
@@ -1309,6 +1373,13 @@
           <tr>
             <td><code>presets</code></td>
             <td class="purpose">Show or set baseline, strict, legacy, progressive preset.</td>
+            <td><span class="status-pill info">LOCAL</span></td>
+            <td><span class="status-pill">UTILITY</span></td>
+          </tr>
+          <tr>
+            <td><code>warm</code></td>
+            <td class="purpose">Pre-fetch bundled tool wheels into ~/.cache/uv for
+              offline runs.</td>
             <td><span class="status-pill info">LOCAL</span></td>
             <td><span class="status-pill">UTILITY</span></td>
           </tr>
@@ -1371,7 +1442,7 @@
           evidence.</p>
         <div class="opinion-grid">
           <article class="practice-panel" aria-labelledby="opus-review-title">
-            <h3 id="opus-review-title">Claude Code Opus 4.7</h3>
+            <h3 id="opus-review-title">Claude Code Opus 4.8</h3>
             <p>I can write PRs fast. I still need gates that do not negotiate: lint,
               types, tests, coverage, mutation, deps, architecture, and audit in one loop.
             </p>
